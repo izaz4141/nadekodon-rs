@@ -24,17 +24,78 @@ pub struct BigBool {
 #[derive(Serialize, SignalPiece)]
 pub struct SmallBool(pub bool);
 
+#[derive(Serialize, RustSignal)]
+pub struct SampleNumberOutput {
+  pub current_number: i32,
+}
+
+#[derive(Deserialize, DartSignal)]
+pub struct QueryUrl {
+    pub url: String,
+}
+#[derive(Serialize, RustSignal)]
+pub struct UrlQueryOutput {
+    pub url: String,
+    pub name: String,
+    pub total_size: Option<u64>,
+    pub accept_ranges: bool,
+    pub content_type: Option<String>,
+    pub is_webpage: bool,
+    pub error: bool,
+}
+
 #[derive(Deserialize, DartSignal)]
 pub struct DoDownload {
     pub url: String,
-    pub path: String,
+    pub dest: String,
 }
 
-#[derive(Serialize, RustSignal, Clone)]
-pub struct DownloadProgress {
-    pub id: String,        // download ID
-    pub downloaded: u64,   // total downloaded bytes so far
-    pub total: Option<u64>, // total size if known, None if unknown
-    pub speed: u64,        // bytes/sec, computed over short window
-    pub finished: bool,    // true when download completes
+#[derive(Deserialize, DartSignal)]
+pub struct GetDownloadList {}
+
+#[derive(Serialize, RustSignal)]
+pub struct DownloadList {
+    pub list: Vec<DownloadGlance>
+}
+#[derive(Serialize, SignalPiece)]
+pub struct DownloadGlance {
+    pub id: String,
+    pub name: String,
+    pub total_size: Option<u64>,
+    pub downloaded: u64,
+    pub speed: f64,
+    pub state: String,
+}
+
+#[derive(Deserialize, DartSignal)]
+pub struct GetDownloadDetails {
+    pub id: String
+}
+
+#[derive(Serialize, RustSignal)]
+pub struct DownloadDetails {
+    pub id: String,
+    pub name: String,
+    pub url: String,
+    pub dest: String,
+    pub total_size: Option<u64>,
+    pub downloaded: u64,
+    pub speed: f64,
+    pub threads: u8,
+    pub state: String,
+}
+
+#[derive(Deserialize, DartSignal)]
+pub struct PauseDownload {
+    pub id: String
+}
+
+#[derive(Deserialize, DartSignal)]
+pub struct ResumeDownload {
+    pub id: String
+}
+
+#[derive(Deserialize, DartSignal)]
+pub struct CancelDownload {
+    pub id: String
 }

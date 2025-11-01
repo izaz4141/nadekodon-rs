@@ -1,6 +1,8 @@
 // lib/ui/widgets/settings/download_folder_tile.dart
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+
+import '../../../theme/app_theme.dart';
 import '../../../utils/settings.dart';
 
 class DownloadFolderTile extends StatelessWidget {
@@ -11,16 +13,24 @@ class DownloadFolderTile extends StatelessWidget {
     return ValueListenableBuilder<String>(
       valueListenable: SettingsManager.downloadFolder,
       builder: (context, value, _) {
+        final textTheme = Theme.of(context).textTheme;
         return ListTile(
-          title: const Text("Download Folder"),
-          subtitle: Text(
-            value.isEmpty ? "Not selected" : value,
-            style: TextStyle(color: Colors.grey),
+          title: Text(
+            "Download Folder", 
+            style: textTheme.bodyMedium,
           ),
-          trailing: SizedBox(
-            width: 72,
-            child: IconButton(
+          subtitle: Text(
+            value.isEmpty ? "No Folder Selected" : value,
+            style: textTheme.bodySmall?.copyWith(color: Colors.grey),
+          ),
+          trailing: 
+            IconButton(
+              padding: EdgeInsets.symmetric(
+                horizontal: AppTheme.spaceXL * AppTheme.spaceScale(context),
+                vertical: AppTheme.spaceSM * AppTheme.spaceScale(context),
+              ),
               icon: const Icon(Icons.folder_open),
+              iconSize: AppTheme.iconMD * AppTheme.spaceScale(context),
               onPressed: () async {
                 String? selectedDirectory = await FilePicker.platform
                     .getDirectoryPath();
@@ -29,7 +39,6 @@ class DownloadFolderTile extends StatelessWidget {
                 }
               },
             ),
-          ),
         );
       },
     );

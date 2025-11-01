@@ -1,13 +1,43 @@
+// lib/ui/pages/download_page.dart
 import 'package:flutter/material.dart';
 
-enum DownloadStatus { running, paused, done, failed }
+import '../../theme/app_theme.dart';
+import '../widgets/dialog/add_download.dart';
+import 'package:nadekodon/utils/helper.dart';
+
+import 'package:rinf/rinf.dart';
+import 'package:nadekodon/src/bindings/bindings.dart';
+
+enum DownloadStatus { queued, running, paused, completed, cancelled, failed }
+
+DownloadStatus parseDownloadStatus(String state) {
+  final s = state.toLowerCase();
+  if (s.contains('error')) return DownloadStatus.failed;
+  switch (s) {
+    case 'queued':
+      return DownloadStatus.queued;
+    case 'running':
+      return DownloadStatus.running;
+    case 'paused':
+      return DownloadStatus.paused;
+    case 'completed':
+      return DownloadStatus.completed;
+    case 'cancelled':
+      return DownloadStatus.cancelled;
+    case 'error':
+      return DownloadStatus.failed;
+    default:
+      return DownloadStatus.failed;
+  }
+}
 
 class DownloadItem {
   final String id;
   final String name;
-  final int downloaded; // bytes downloaded so far
-  final int? total;     // null if unknown
+  final int downloaded;
+  final int? total;
   final DownloadStatus status;
+  final double speed;
 
   const DownloadItem({
     required this.id,
@@ -15,6 +45,7 @@ class DownloadItem {
     required this.downloaded,
     required this.total,
     required this.status,
+    required this.speed,
   });
 
   double get progress =>
@@ -24,58 +55,127 @@ class DownloadItem {
 class DownloadPage extends StatelessWidget {
   const DownloadPage({super.key});
 
+  static const activeStatuses = {
+    DownloadStatus.queued,
+    DownloadStatus.running,
+    DownloadStatus.paused,
+  };
+
+  static const completedStatuses = {
+    DownloadStatus.completed,
+    DownloadStatus.cancelled,
+    DownloadStatus.failed,
+  };
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
 
-    // Fake list of downloads (replace later with your Rust signal data)
-    final downloads = [
-      DownloadItem(
-        id: "1",
-        name: "Ubuntu ISO",
-        downloaded: 400 * 1024 * 1024,
-        total: 1024 * 1024 * 1024,
-        status: DownloadStatus.running,
-      ),
-      DownloadItem(
-        id: "2",
-        name: "Music Album.zip",
-        downloaded: 250 * 1024 * 1024,
-        total: 250 * 1024 * 1024,
-        status: DownloadStatus.done,
-      ),
-      DownloadItem(
-        id: "3",
-        name: "Large Video.mp4",
-        downloaded: 150 * 1024 * 1024,
-        total: 800 * 1024 * 1024,
-        status: DownloadStatus.paused,
-      ),
-      DownloadItem(
-        id: "4",
-        name: "Book.pdf",
-        downloaded: 10 * 1024 * 1024,
-        total: 50 * 1024 * 1024,
-        status: DownloadStatus.failed,
-      ),
-    ];
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text("Downloads", style: textTheme.titleLarge),
+          bottom: TabBar(
+            labelStyle: textTheme.bodyMedium?.copyWith(
+              color: colors.primary,
+            ),
+            unselectedLabelStyle: textTheme.bodyMedium,
+            splashBorderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusLG)),
+            tabs: [
+              Tab(text: "Active"),
+              Tab(text: "Completed"),
+            ],
+          ),
+        ),
+        body: StreamBuilder(
+          stream: DownloadList.rustSignalStream,
+          builder: (context, snapshot) {
+            final signalPack = snapshot.data;
+            if (signalPack == null) {
+              return TabBarView(
+                children: [
+                  const Center(child: CircularProgressIndicator()),
+                  const Center(child: CircularProgressIndicator()),
+                ]
+              );
+            }
+            final downloadListOutput = signalPack.message;
+            final downloads = downloadListOutput.list;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Downloads"),
+            final downloadItems = downloads.map<DownloadItem>((d) {
+              final status = parseDownloadStatus(d.state);
+              return DownloadItem(
+                id: d.id,
+                name: d.name,
+                downloaded: d.downloaded.toInt(),
+                total: d.totalSize?.toInt(),
+                status: status,
+                speed:d.speed,
+              );
+            }).toList();
+
+            final activeDownloads = downloadItems
+                .where((d) => activeStatuses.contains(d.status))
+                .toList();
+            final completedDownloads = downloadItems
+                .where((d) => completedStatuses.contains(d.status))
+                .toList();
+
+            return TabBarView(
+              children: [
+                _buildDownloadList(
+                    context, activeDownloads, "No active downloads"),
+                _buildDownloadList(
+                    context, completedDownloads, "No completed downloads"),
+              ],
+            );
+          },
+        ),
+        floatingActionButton: Padding(
+          padding: const EdgeInsets.all(AppTheme.spaceMD),
+          child: FloatingActionButton(
+            onPressed: () => showAddDownloadDialog(context),
+            tooltip: 'Add download',
+            child: const Icon(Icons.add),
+          ),
+        ),
+        floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       ),
-      body: ListView.builder(
-        itemCount: downloads.length,
-        itemBuilder: (context, index) {
-          return DownloadTile(
-            item: downloads[index],
-            onPauseResume: () {
-              // TODO: Send pause/resume signal to Rust
-              debugPrint("Toggled ${downloads[index].id}");
-            },
-          );
-        },
-      ),
+    );
+  }
+
+  Widget _buildDownloadList(
+      BuildContext context, List<DownloadItem> items, String emptyMessage) {
+    if (items.isEmpty) {
+      return Center(
+        child: Text(emptyMessage,
+            style: Theme.of(context).textTheme.bodyMedium),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: AppTheme.spaceSM),
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        return DownloadTile(
+          item: items[index],
+          onPauseResume: () {
+            if (items[index].status == DownloadStatus.running ||
+                items[index].status == DownloadStatus.queued) {
+                PauseDownload(id: items[index].id).sendSignalToRust();
+            } else {
+                ResumeDownload(id: items[index].id).sendSignalToRust();
+            }
+          },
+          onCancel: () {
+            if ( activeStatuses.contains(items[index].status)) {
+              CancelDownload(id: items[index].id).sendSignalToRust();
+            }
+          }
+        );
+      },
     );
   }
 }
@@ -83,22 +183,28 @@ class DownloadPage extends StatelessWidget {
 class DownloadTile extends StatelessWidget {
   final DownloadItem item;
   final VoidCallback onPauseResume;
+  final VoidCallback onCancel;
 
   const DownloadTile({
     super.key,
     required this.item,
     required this.onPauseResume,
+    required this.onCancel,
   });
 
   Color _progressColor(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     switch (item.status) {
+      case DownloadStatus.queued:
+        return Colors.blueGrey;
       case DownloadStatus.running:
         return colors.primary;
       case DownloadStatus.paused:
         return colors.secondary;
-      case DownloadStatus.done:
+      case DownloadStatus.completed:
         return Colors.green;
+      case DownloadStatus.cancelled:
+        return Colors.blueGrey;
       case DownloadStatus.failed:
         return Colors.red;
     }
@@ -107,12 +213,18 @@ class DownloadTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
 
     return Card(
-      margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.symmetric(
+        vertical: AppTheme.spaceXS,
+        horizontal: AppTheme.spaceMD,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(AppTheme.spaceSM),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -122,61 +234,78 @@ class DownloadTile extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(item.name,
-                      style: Theme.of(context).textTheme.titleMedium),
+                      style: textTheme.bodyMedium),
                 ),
                 Text(
                   item.status.name.toUpperCase(),
-                  style: TextStyle(
+                  style: textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: _progressColor(context),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            // Progress bar
+            const SizedBox(height: AppTheme.spaceSM),
             LinearProgressIndicator(
               value: item.progress,
               backgroundColor: colors.surfaceVariant,
               color: _progressColor(context),
-              minHeight: 8,
-              borderRadius: BorderRadius.circular(8),
+              minHeight: AppTheme.spaceSM * AppTheme.spaceScale(context),
+              borderRadius: BorderRadius.circular(AppTheme.radiusSM * AppTheme.radiusScale(context)),
             ),
-            const SizedBox(height: 8),
-            // Downloaded / Total + Pause/Resume button
+            const SizedBox(height: AppTheme.spaceSM),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  item.total != null
-                      ? "${_formatBytes(item.downloaded)} / ${_formatBytes(item.total!)}"
-                      : "${_formatBytes(item.downloaded)}",
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                IconButton(
-                  icon: Icon(
-                    item.status == DownloadStatus.running
-                        ? Icons.pause
-                        : Icons.play_arrow,
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      item.total != null
+                          ? "${formatBytes(item.downloaded)} / ${formatBytes(item.total!)}"
+                          : formatBytes(item.downloaded),
+                      style: textTheme.bodySmall,
+                    ),
                   ),
-                  onPressed: onPauseResume,
+                ),
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.center,
+                    child: Text(
+                      "${formatBytes(item.speed.toInt())}/s",
+                      style: textTheme.bodySmall,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.stop),
+                          iconSize: AppTheme.iconMD * AppTheme.iconScale(context),
+                          onPressed: onCancel,
+                        ),
+                        IconButton(
+                          icon: Icon(
+                            (item.status == DownloadStatus.running ||
+                                    item.status == DownloadStatus.queued)
+                                ? Icons.pause
+                                : Icons.play_arrow,
+                          ),
+                          iconSize: AppTheme.iconMD * AppTheme.iconScale(context),
+                          onPressed: onPauseResume,
+                        ),
+                      ]
+                    )
+                  ),
                 ),
               ],
-            )
+            ),
           ],
         ),
       ),
     );
-  }
-
-  String _formatBytes(int bytes) {
-    const suffixes = ["B", "KB", "MB", "GB"];
-    double size = bytes.toDouble();
-    int i = 0;
-    while (size >= 1024 && i < suffixes.length - 1) {
-      size /= 1024;
-      i++;
-    }
-    return "${size.toStringAsFixed(1)} ${suffixes[i]}";
   }
 }

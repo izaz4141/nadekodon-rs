@@ -1,5 +1,7 @@
 // lib/ui/widgets/settings/actions_bar.dart
 import 'package:flutter/material.dart';
+
+import '../../../theme/app_theme.dart';
 import '../../../utils/settings.dart';
 import '../app_snackbar.dart';
 
@@ -10,14 +12,17 @@ class SettingsActionsBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     return Positioned(
-      left: 16,
-      right: 16,
-      bottom: 16,
+      left: AppTheme.spaceLG,
+      right: AppTheme.spaceLG,
+      bottom: AppTheme.spaceXXL,
       child: Container(
         decoration: BoxDecoration(
           color: Theme.of(context).scaffoldBackgroundColor,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(AppTheme.radiusMD * AppTheme.radiusScale(context)),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withAlpha(25),
@@ -26,7 +31,9 @@ class SettingsActionsBar extends StatelessWidget {
             ),
           ],
         ),
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+        padding: EdgeInsets.symmetric(
+          vertical: AppTheme.spaceMD * AppTheme.spaceScale(context), 
+          horizontal: AppTheme.spaceLG * AppTheme.spaceScale(context)),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -43,15 +50,19 @@ class SettingsActionsBar extends StatelessWidget {
                   icon: Icons.restart_alt,
                 );
               },
-              icon: const Icon(Icons.restart_alt, size: 20),
-              label: const Text('Reset'),
+              icon: Icon(Icons.restart_alt, 
+                size: AppTheme.iconMD * AppTheme.iconScale(context)),
+              label: Text('Reset',
+                style: textTheme.bodyMedium?.copyWith(
+                  color: colors.primary)
+              ),
               style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 14,
+                padding: EdgeInsets.symmetric(
+                  horizontal: AppTheme.spaceLG * AppTheme.spaceScale(context) ,
+                  vertical: AppTheme.spaceMD * AppTheme.spaceScale(context),
                 ),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMD * AppTheme.radiusScale(context)),
                 ),
               ),
             ),
@@ -63,15 +74,19 @@ class SettingsActionsBar extends StatelessWidget {
                   type: SnackType.success,
                 );
               },
-              icon: const Icon(Icons.save_rounded, size: 20),
-              label: const Text('Save'),
+              icon: Icon(Icons.save_rounded, 
+                size: AppTheme.iconMD * AppTheme.iconScale(context)),
+              label: Text('Save', 
+                style: textTheme.bodyMedium?.copyWith(
+                    color: colors.onPrimary)
+              ),
               style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 14,
+                padding: EdgeInsets.symmetric(
+                  horizontal: AppTheme.spaceLG * AppTheme.spaceScale(context) ,
+                  vertical: AppTheme.spaceMD * AppTheme.spaceScale(context),
                 ),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMD * AppTheme.radiusScale(context)),
                 ),
                 backgroundColor: colors.primary,
                 foregroundColor: colors.onPrimary,

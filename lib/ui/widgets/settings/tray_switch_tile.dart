@@ -1,5 +1,7 @@
 // lib/ui/widgets/settings/speed_limit_spinbox.dart
 import 'package:flutter/material.dart';
+
+import '../../../theme/app_theme.dart';
 import '../../../utils/settings.dart';
 
 class TraySwitchTile extends StatelessWidget {
@@ -10,16 +12,23 @@ class TraySwitchTile extends StatelessWidget {
     return ValueListenableBuilder<bool>(
       valueListenable: SettingsManager.retreatToTray,
       builder: (context, value, _) {
-        return SwitchListTile(
-          title: const Text("Close to system tray"),
-          subtitle: const Text(
+        final textTheme = Theme.of(context).textTheme;
+        return ListTile(
+          title: Text("Close to system tray", style: textTheme.bodyMedium),
+          subtitle: Text(
             "Minimize to system tray instead of exiting the application",
-            style: TextStyle(color: Colors.grey),
+            style: textTheme.bodySmall?.copyWith(color: Colors.grey),
           ),
-          value: value,
-          onChanged: (newValue) {
-            SettingsManager.retreatToTray.value = newValue;
-          },
+          trailing: Transform.scale(
+            scale: AppTheme.iconScale(context),
+            alignment: Alignment.centerRight,
+            child: Switch(
+              value: value,
+              onChanged: (newValue) {
+                SettingsManager.retreatToTray.value = newValue;
+              },
+            ),
+          ),
         );
       },
     );

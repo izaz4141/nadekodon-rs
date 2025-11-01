@@ -29,15 +29,14 @@ class HomePage extends StatelessWidget {
               Expanded(child: _PageContent()),
             ],
           ),
-          Positioned(
-            top: 0,
-            right: 0,
-            child: Material(
-              type: MaterialType.transparency,
-              child: WindowControls(),
-            ),
-          ),
-
+          // Positioned(
+          //   top: 0,
+          //   right: 0,
+          //   child: Material(
+          //     type: MaterialType.transparency,
+          //     child: WindowControls(),
+          //   ),
+          // ),
         ],
       ),
     );
@@ -59,7 +58,7 @@ class _PageContent extends StatelessWidget {
           case 2:
             return const SettingsPage();
           default:
-            return const Center(child: Text("Downloads Page!"));
+            return const DownloadPage();
         }
       },
     );

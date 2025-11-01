@@ -1,5 +1,7 @@
 // lib/ui/widgets/settings/download_thread_spinbox.dart
 import 'package:flutter/material.dart';
+
+import '../../../theme/app_theme.dart';
 import '../../../utils/settings.dart';
 import '../spin_box.dart';
 

@@ -16,14 +16,17 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await SettingsManager.init();
+
   await initializeRust(assignRustSignal);
 
   if (!Platform.isAndroid) {
     await windowManager.ensureInitialized();
     await windowManager.setPreventClose(true);
     const windowOptions = WindowOptions(
+      center: true,
+      skipTaskbar: false,
       titleBarStyle: TitleBarStyle.hidden,
-      windowButtonVisibility: false,
+      // windowButtonVisibility: false,
     );
 
     if (SettingsManager.retreatToTray.value) {

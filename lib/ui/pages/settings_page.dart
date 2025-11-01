@@ -1,5 +1,7 @@
 // lib/ui/pages/settings_page.dart
 import 'package:flutter/material.dart';
+
+import '../../theme/app_theme.dart';
 import '../widgets/settings/download_folder_tile.dart';
 import '../widgets/settings/server_port_spinbox.dart';
 import '../widgets/settings/speed_limit_spinbox.dart';
@@ -14,18 +16,18 @@ class SettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Text('Settings'),
-        ),
+        title: Text('Settings', style: textTheme.titleLarge),
       ),
       body: Stack(
         children: [
           Padding(
-            padding: EdgeInsets.all(16.0),
+            padding: const EdgeInsets.symmetric(
+              vertical: AppTheme.spaceSM,
+            ),
             child: ListView(
               children: [
                 DownloadFolderTile(),

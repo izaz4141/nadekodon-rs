@@ -1,4 +1,4 @@
-package com.example.nadekodon
+package id.glicole.nadekodon
 
 import io.flutter.embedding.android.FlutterActivity
 

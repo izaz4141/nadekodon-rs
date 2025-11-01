@@ -22,7 +22,9 @@ class SettingsManager {
     if (await _file.exists()) {
       final data = jsonDecode(await _file.readAsString());
       _applyFromJson(data);
+      debugPrint('${dir.path}/config.json');
     } else {
+      debugPrint("Initial Config");
       await _save(); // save defaults if no file
     }
 

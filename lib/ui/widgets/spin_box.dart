@@ -1,6 +1,8 @@
 // lib/ui/widgets/spin_box.dart
 import 'package:flutter/material.dart';
 
+import '../../theme/app_theme.dart';
+
 class SpinBox extends StatefulWidget {
   const SpinBox({
     super.key,
@@ -10,7 +12,7 @@ class SpinBox extends StatefulWidget {
     required this.min,
     required this.max,
     this.step = 1,
-    this.width = 80,
+    this.width = AppTheme.spaceXXL * 2.5,
   });
 
   final String title;
@@ -95,29 +97,44 @@ class _SpinBoxState extends State<SpinBox> {
 
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+
     return ListTile(
-      title: Text(widget.title),
-      subtitle: Text(widget.subtitle, style: TextStyle(color: Colors.grey),),
+      title: Text(
+        widget.title, 
+        style: textTheme.bodyMedium
+      ),
+      subtitle: Text(
+        widget.subtitle, 
+        style: textTheme.bodySmall?.copyWith(color: Colors.grey),
+      ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            padding: EdgeInsets.symmetric(
+              horizontal: AppTheme.spaceSM * AppTheme.spaceScale(context),
+            ),
             child: IconButton(
               icon: const Icon(Icons.remove),
+              iconSize: AppTheme.iconMD * AppTheme.iconScale(context),
               onPressed: _decrement,
             ),
           ),
           SizedBox(
-            width: widget.width,
+            width: widget.width * AppTheme.spaceScale(context),
             child: TextField(
               controller: _controller,
               focusNode: _focusNode,
               keyboardType: TextInputType.number,
               textAlign: TextAlign.center,
-              decoration: const InputDecoration(
+              style: textTheme.bodyMedium,
+              decoration: InputDecoration(
                 border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: AppTheme.spaceSM * AppTheme.spaceScale(context),
+                  vertical: AppTheme.spaceSM * AppTheme.spaceScale(context),
+                ),
                 isDense: true,
               ),
               onChanged: (value) {
@@ -134,9 +151,12 @@ class _SpinBoxState extends State<SpinBox> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            padding: EdgeInsets.symmetric(
+              horizontal: AppTheme.spaceSM * AppTheme.spaceScale(context),
+            ),
             child: IconButton(
               icon: const Icon(Icons.add),
+              iconSize: AppTheme.iconMD * AppTheme.spaceScale(context),
               onPressed: _increment,
             ),
           ),
