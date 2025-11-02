@@ -23,8 +23,6 @@ Future<void> showAddDownloadDialog(BuildContext context) async {
       bool showQueryInfo = false;
       bool queryFinished = false;
 
-
-
       return StatefulBuilder( 
         builder: (context, setState) {
           void handleSubmit() {
@@ -110,7 +108,7 @@ Future<void> showAddDownloadDialog(BuildContext context) async {
                               : "No directory selected",
                           style: textTheme.bodySmall?.copyWith(
                             color: (selectedDir == null || selectedDir!.isEmpty)
-                                ? Colors.grey
+                                ? colors.onSurfaceVariant
                                 : colors.onSurface,
                           ),
                           overflow: TextOverflow.ellipsis,

@@ -13,7 +13,7 @@ class DownloadThreadBox extends StatelessWidget {
     return SpinBox(
       title: "Download Thread",
       subtitle: "Number of thread per download",
-      valueListenable: SettingsManager.downloadThread,
+      valueListenable: SettingsManager.downloadThreads,
       min: 1,
       max: 16,
     );

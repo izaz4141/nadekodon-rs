@@ -1,93 +1,63 @@
 use anyhow::Result;
 use futures::StreamExt;
 use futures::future::join_all;
+use indexmap::IndexMap;
 use reqwest::header::{ACCEPT_RANGES, CONTENT_LENGTH, RANGE};
 use std::{
-    collections::{HashMap, HashSet},
-    fs::File,
-    path::PathBuf,
-    sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
-        Arc,
-    },
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    collections::HashSet, iter::Cloned, path::PathBuf, sync::{
+        Arc, atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering}
+    }, time::{Duration, SystemTime, UNIX_EPOCH}
 };
 use tokio::{
     fs::File as TokioFile,
     io::{AsyncSeekExt, AsyncWriteExt, SeekFrom},
-    sync::{mpsc, Mutex, Notify, Semaphore},
+    sync::{mpsc, Mutex, Notify, Semaphore, RwLock},
     task::JoinHandle,
-    time::{timeout, interval},
+    time::{timeout, interval, Interval, Instant, sleep_until},
 };
 use uuid::Uuid;
-use rinf::{debug_print};
+use bytes::Bytes;
+use rinf::{RustSignal, debug_print};
 
-use crate::utils;
+use crate::utils::{
+    types::{
+        HeadData, DownloadState, DownloadInfo,
+        WorkerEvent, DMSettings,
+    },
+    helper::calc_speed,
+};
+use crate::signals::{DownloadGlance, DownloadList};
 
-const READ_TIMEOUT_SECS: u64 = 15;
-const MAX_READ_TIMEOUTS: u8 = 3;
-const SEGMENT_GET_RETRIES: u8 = 3;
 const HISTORY_SAMPLE_INTERVAL_SECS: u64 = 1;
 const MAX_HISTORY: usize = 15;
 
-struct HeadData {
-    total_size: Option<u64>,
-    accept_ranges: bool,
-}
-
-#[derive(Clone, Debug)]
-pub enum DownloadState {
-    Queued,
-    Running,
-    Paused,
-    Completed,
-    Cancelled,
-    Error(String),
-}
-
-#[derive(Clone, Debug)]
-pub struct DownloadInfo {
-    pub id: Uuid,
-    pub url: String,
-    pub dest: PathBuf,
-    pub total_size: Option<u64>,
-    pub downloaded: u64,                 // public snapshot value (read from worker's AtomicU64 when queried)
-    pub threads: u8,
-    pub state: DownloadState,
-    // history is a list of (timestamp_millis, downloaded_bytes) samples
-    pub history: Vec<(u128, u64)>,
-}
-
 #[derive(Debug)]
-pub enum WorkerEvent {
-    Completed(Uuid),
-    Error(Uuid, String),
-    Cancelled(Uuid),
-}
-
 pub struct DownloadWorker {
-    // metadata and mutable state (except downloaded/history which are stored separately)
-    info: Mutex<DownloadInfo>, // used for url, dest, total_size, threads, state; downloaded/history are filled on info()
+    info: Mutex<DownloadInfo>,
     client: reqwest::Client,
+    settings: Arc<RwLock<DMSettings>>,
     paused: AtomicBool,
+    started: AtomicBool,
     cancel: AtomicBool,
-    max_speed:AtomicU64,
+    threads: u64,
+    speed_limit:AtomicU64,
     notify_resume: Notify,
     downloaded: AtomicU64,
-    history: Mutex<Vec<(u128, u64)>>,
+    history: RwLock<Vec<(u128, u64)>>,
     handles: Mutex<Vec<JoinHandle<anyhow::Result<()>>>>,
     pub event_tx: mpsc::Sender<WorkerEvent>,
 }
 
 impl DownloadWorker {
-    pub fn new(
+    pub async fn new(
         id: Uuid,
+        client: reqwest::Client,
+        settings: Arc<RwLock<DMSettings>>,
         url: String,
         dest: PathBuf,
-        threads: u8,
-        max_speed: u64,
         event_tx: mpsc::Sender<WorkerEvent>,
     ) -> Arc<Self> {
+        let speed_limit = settings.read().await.speed_limit;
         Arc::new(Self {
             info: Mutex::new(DownloadInfo {
                 id,
@@ -95,35 +65,36 @@ impl DownloadWorker {
                 dest,
                 total_size: None,
                 downloaded: 0,
-                threads,
                 state: DownloadState::Queued,
                 history: Vec::new(),
             }),
-            client: utils::url::build_browser_client(),
+            client: client,
+            threads: settings.clone().read().await.download_threads as u64,
+            settings: settings,
             paused: AtomicBool::new(false),
+            started: AtomicBool::new(false),
             cancel: AtomicBool::new(false),
-            max_speed: AtomicU64::new(max_speed),
+            speed_limit: AtomicU64::new(speed_limit),
             notify_resume: Notify::new(),
             downloaded: AtomicU64::new(0),
-            history: Mutex::new(Vec::new()),
+            history: RwLock::new(Vec::new()),
             handles: Mutex::new(Vec::new()),
             event_tx,
         })
     }
 
     pub async fn start(self: &Arc<Self>) -> Result<()> {
-        debug_print!("start() called");
-
         if self.check_and_resume().await? {
-            return Ok(()); // resumed
+            return Ok(());
         }
+        self.started.store(true, Ordering::SeqCst);
 
-        let (url, dest, threads) = self.extract_info().await;
+        let threads = self.threads;
+        let (url, dest) = self.extract_info().await;
         let head_data = self.fetch_head(&url).await?;
         self.update_total_size(head_data.total_size).await;
 
         if !head_data.accept_ranges || head_data.total_size.is_none() || threads <= 1 {
-            debug_print!("Falling back to single-thread mode");
             self.spawn_single_thread(&url, &dest).await;
             return Ok(());
         }
@@ -133,21 +104,22 @@ impl DownloadWorker {
         self.spawn_segments(&url, &dest, size, threads).await?;
         self.spawn_sampler_and_monitor().await?;
 
-        debug_print!("start() exiting normally");
         Ok(())
     }
 
-    // ───────────────────────────────
-    // STEP 1: Resume or init
-    // ───────────────────────────────
     async fn check_and_resume(self: &Arc<Self>) -> Result<bool> {
-        let was_paused = self.paused.load(std::sync::atomic::Ordering::SeqCst);
-        if was_paused {
-            debug_print!("Resuming paused worker...");
+        let was_paused = self.paused.load(Ordering::SeqCst);
+        let has_started = self.started.load(Ordering::SeqCst);
+
+        if was_paused && has_started {
+            // This is a resume of an in-progress download
             let worker = Arc::clone(self);
-            worker.resume().await?;
+            worker.resume().await?; // This sets paused to false
             return Ok(true);
         }
+
+        // This is a fresh start (either brand new or from a queued-paused state)
+        self.paused.store(false, Ordering::SeqCst); // Explicitly reset the flag
 
         let mut info = self.info.lock().await;
         match info.state {
@@ -158,7 +130,6 @@ impl DownloadWorker {
             DownloadState::Running => Ok(true),
             _ => {
                 info.state = DownloadState::Running;
-                debug_print!("Set state to Running");
                 Ok(false)
             }
         }
@@ -166,10 +137,8 @@ impl DownloadWorker {
 
     async fn fetch_head(&self, url: &str) -> Result<HeadData> {
         let client = self.client.clone();
-        debug_print!("HEAD {}", url);
         let head = client.head(url).send().await?;
         let status = head.status();
-        debug_print!("HEAD status: {:?}", status);
 
         let total_size = head
             .headers()
@@ -184,8 +153,6 @@ impl DownloadWorker {
             .map(|s| s.to_ascii_lowercase().contains("bytes"))
             .unwrap_or(false);
 
-        debug_print!("total_size={:?}, accept_ranges={}", total_size, accept_ranges);
-
         Ok(HeadData {
             total_size,
             accept_ranges,
@@ -199,31 +166,20 @@ impl DownloadWorker {
         }
     }
 
-    // ───────────────────────────────
-    // STEP 3: Extract info
-    // ───────────────────────────────
-    async fn extract_info(&self) -> (String, std::path::PathBuf, u8) {
+    async fn extract_info(&self) -> (String, std::path::PathBuf) {
         let info = self.info.lock().await;
-        (info.url.clone(), info.dest.clone(), info.threads)
+        (info.url.clone(), info.dest.clone())
     }
 
-    // ───────────────────────────────
-    // STEP 4: File preparation
-    // ───────────────────────────────
     fn prepare_file(&self, dest: &std::path::Path, size: u64) -> Result<()> {
-        debug_print!("Creating file {:?} size {}", dest.display(), size);
-        let mut f = std::fs::File::create(dest)?;
+        let f = std::fs::File::create(dest)?;
         f.set_len(size)?;
         Ok(())
     }
 
-    // ───────────────────────────────
-    // STEP 5: Spawn segment workers
-    // ───────────────────────────────
-    async fn spawn_segments(self: &Arc<Self>, url: &str, dest: &std::path::Path, size: u64, threads: u8) -> Result<()> {
+    async fn spawn_segments(self: &Arc<Self>, url: &str, dest: &std::path::Path, size: u64, threads: u64) -> Result<()> {
         let client = self.client.clone();
-        let part_size = size / threads as u64;
-        debug_print!("Spawning {} segments (part_size={})", threads, part_size);
+        let part_size = size / threads;
 
         let mut handles = Vec::new();
 
@@ -247,36 +203,38 @@ impl DownloadWorker {
         Ok(())
     }
 
-    // ───────────────────────────────
-    // STEP 6: Segment download logic
-    // ───────────────────────────────
     async fn segment_download(
-        &self,
-        i: u8,
+        self: &Arc<Self>,
+        i: u64,
         client: &reqwest::Client,
         url: &str,
         dest: &std::path::Path,
         start: u64,
         end: u64,
     ) -> Result<()> {
+        let worker = Arc::clone(self);
 
         let mut segment_progress = 0u64;
-        for attempt in 1..=SEGMENT_GET_RETRIES {
-            debug_print!("Segment {} attempt {}", i, attempt);
+        let mut attempt = 1u8;
+        
+        let (download_timeout, download_retries) = {
+            let s = self.settings.read().await;
+            (s.download_timeout, s.download_retries)
+        };
 
-            if self.cancel.load(std::sync::atomic::Ordering::SeqCst) {
+        loop {
+            
+            while self.paused.load(std::sync::atomic::Ordering::SeqCst) {
+                self.notify_resume.notified().await;
+            }
+            if self.cancel.load(Ordering::SeqCst) {
                 debug_print!("Segment {} canceled early", i);
                 return Ok(());
             }
 
-            while self.paused.load(std::sync::atomic::Ordering::SeqCst) {
-                debug_print!("Segment {} paused before request", i);
-                self.notify_resume.notified().await;
-            }
 
             let current_start = start + segment_progress;
             if current_start > end {
-                debug_print!("Segment {} already complete", i);
                 return Ok(());
             }
 
@@ -288,6 +246,11 @@ impl DownloadWorker {
                 },
                 Err(e) => {
                     debug_print!("Segment {} request failed: {:?}", i, e);
+                    if attempt > download_retries {
+                        self.cancel().await?;
+                        return Err(anyhow::anyhow!("Segment {} request failed: {:?}", i, e))
+                    }
+                    attempt += 1;
                     continue;
                 }
             };
@@ -296,37 +259,77 @@ impl DownloadWorker {
             file.seek(SeekFrom::Start(current_start)).await?;
             let mut stream = resp.bytes_stream();
 
-            while let Ok(chunk_res) = timeout(Duration::from_secs(READ_TIMEOUT_SECS), stream.next()).await {
+            while let Ok(next_chunk) = timeout(
+                Duration::from_secs(download_timeout),
+                stream.next(),
+            ).await {
                 while self.paused.load(Ordering::SeqCst) {
                     self.notify_resume.notified().await;
                 }
+                
                 if self.cancel.load(Ordering::SeqCst) {
+                    debug_print!("Segment {} cancelled", i);
                     return Ok(());
                 }
-                match chunk_res {
+
+                let next_chunk = match next_chunk {
                     Some(Ok(chunk)) => {
-                        file.write_all(&chunk).await?;
-                        segment_progress += chunk.len() as u64;
-                        self.downloaded.fetch_add(chunk.len() as u64, std::sync::atomic::Ordering::SeqCst);
+                        if chunk.is_empty() {
+                            continue;
+                        }
+                        chunk
+                    }
+
+                    Some(Err(e)) => {
+                        debug_print!("Segment {}: stream error {:?}", i, e);
+                        if attempt > download_retries {
+                            self.cancel().await?;
+                            return Err(anyhow::anyhow!("Segment {} stream error: {}", i, e));
+                        }
+                        attempt += 1;
+                        continue;
+                    }
+
+                    None => {
                         if start + segment_progress > end {
                             break;
                         }
+                        if attempt > download_retries {
+                            self.cancel().await?;
+                            return Err(anyhow::anyhow!("Segment {}: stream ended unexpectedly", i));
+                        }
+                        attempt += 1;
+                        continue;
                     }
-                    _ => break,
+                };
+
+                if let Err(e) = file.write_all(&next_chunk).await {
+                    debug_print!("Segment {}: file write error {:?}", i, e);
+                    if attempt > download_retries {
+                        self.cancel().await?;
+                        return Err(anyhow::anyhow!("Segment {} file write failed: {}", i, e));
+                    }
+                    attempt += 1;
+                    continue;
                 }
+
+                let len = next_chunk.len() as u64;
+                segment_progress += len;
+                self.downloaded.fetch_add(len, Ordering::SeqCst);
+
+                if start + segment_progress > end {
+                    break;
+                }
+                worker.limit_speed().await;
             }
 
             if start + segment_progress >= end {
-                debug_print!("Segment {} completed fully", i);
                 return Ok(());
             }
         }
-        Err(anyhow::anyhow!("Segment {} failed after retries", i))
+        // Err(anyhow::anyhow!("Segment {} failed after retries", i))
     }
 
-    // ───────────────────────────────
-    // STEP 7: Sampler + Monitor
-    // ───────────────────────────────
     async fn spawn_sampler_and_monitor(self: &Arc<Self>) -> Result<()> {
         let stop_flag = Arc::new(Notify::new());
         let stop_clone = stop_flag.clone();
@@ -341,29 +344,26 @@ impl DownloadWorker {
         tokio::spawn(async move {
             let mut samp = interval(Duration::from_secs(HISTORY_SAMPLE_INTERVAL_SECS));
             loop {
-                if sampler_worker.paused.load(std::sync::atomic::Ordering::SeqCst) {
+                while sampler_worker.paused.load(Ordering::SeqCst) {
                     sampler_worker.notify_resume.notified().await;
                     continue;
                 }
-                if sampler_worker.cancel.load(std::sync::atomic::Ordering::SeqCst) {
-                    debug_print!("Sampler exiting (cancel)");
+                if sampler_worker.cancel.load(Ordering::SeqCst) {
                     break;
                 }
 
                 tokio::select! {
                     _ = samp.tick() => {
-                        let snapshot = sampler_worker.downloaded.load(std::sync::atomic::Ordering::SeqCst);
+                        let snapshot = sampler_worker.downloaded.load(Ordering::SeqCst);
                         let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
-                        let mut hist = sampler_worker.history.lock().await;
-                        hist.push((ts, snapshot));
-                        if hist.len() > MAX_HISTORY { 
-                            let remove = hist.len() - MAX_HISTORY; 
-                            hist.drain(0..remove);
+                        sampler_worker.history.write().await.push((ts, snapshot));
+                        let hist_len = sampler_worker.history.read().await.len();
+                        if hist_len > MAX_HISTORY { 
+                            let remove = hist_len - MAX_HISTORY; 
+                            sampler_worker.history.write().await.drain(0..remove);
                         }
-                        debug_print!("Sampler sampling history");
                     }
                     _ = stop_flag.notified() => {
-                        debug_print!("Sampler stopping on signal");
                         break;
                     }
                 }
@@ -379,38 +379,49 @@ impl DownloadWorker {
         };
 
         tokio::spawn(async move {
-            debug_print!("Monitor started with {} segments", handles.len());
             let results = join_all(handles).await;
-
+            stop_flag.notify_waiters();
+            
             for (i, res) in results.into_iter().enumerate() {
                 match res {
-                    Ok(Ok(())) => debug_print!("Monitor: segment {} OK", i),
+                    Ok(Ok(())) => {},
                     Ok(Err(e)) => {
                         debug_print!("Monitor: segment {} failed {:?}", i, e);
-                        stop_flag.notify_waiters();
                         return;
                     }
                     Err(e) => {
                         debug_print!("Monitor: join error {:?}", e);
-                        stop_flag.notify_waiters();
                         return;
                     }
                 }
             }
-
-            stop_flag.notify_waiters();
-            let mut info = monitor_worker.info.lock().await;
-            info.state = DownloadState::Completed;
-            let id = info.id;
-            let _ = monitor_worker.event_tx.send(WorkerEvent::Completed(id)).await;
+            if !monitor_worker.cancel.load(Ordering::SeqCst) {
+                let mut info = monitor_worker.info.lock().await;
+                info.state = DownloadState::Completed;
+                let id = info.id;
+                let _ = monitor_worker.event_tx.send(WorkerEvent::Completed(id)).await;
+            }
         });
 
         Ok(())
     }
 
-    // ───────────────────────────────
-    // SINGLE-THREAD FALLBACK
-    // ───────────────────────────────
+    async fn change_speed_limit(self: &Arc<Self>, limit: u64) {
+        self.speed_limit.store(limit, Ordering::SeqCst);
+    }
+
+    async fn limit_speed(self: &Arc<Self>) {
+        let limit = self.speed_limit.load(Ordering::SeqCst) as f64;
+        if limit > 0.0 {
+            let speed = calc_speed(self.history.read().await.to_vec());
+            let sleep_dur = (speed/limit) - 1.0;
+
+            if sleep_dur > 0.0 {
+                sleep_until(Instant::now() + Duration::from_secs_f64(sleep_dur)).await;
+            }
+        }
+    }
+
     async fn spawn_single_thread(self: &Arc<Self>, url: &str, dest: &std::path::Path) {
         let worker = Arc::clone(self);
         let url = url.to_string();
@@ -419,10 +430,14 @@ impl DownloadWorker {
         self.handles.lock().await.push(h);
     }
 
-    async fn single_thread_download(&self, url: &str, dest: &PathBuf) -> Result<()> {
+    async fn single_thread_download(self: &Arc<Self>, url: &str, dest: &PathBuf) -> Result<()> {
         let resp = self.client.get(url).send().await?;
         let mut stream = resp.bytes_stream();
         let mut f = TokioFile::create(dest).await?;
+
+        let stop_flag = Arc::new(Notify::new());
+        let stop_clone = stop_flag.clone();
+        self.spawn_sampler(stop_flag);
 
         while let Some(chunk_res) = stream.next().await {
             let chunk = chunk_res?;
@@ -436,29 +451,14 @@ impl DownloadWorker {
 
             f.write_all(&chunk).await?;
             let added = chunk.len() as u64;
-            let new_total = self.downloaded.fetch_add(added, Ordering::SeqCst) + added;
-
-            // append history sample
-            let ts = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis();
-            {
-                let mut hist = self.history.lock().await;
-                hist.push((ts, new_total));
-                let len = hist.len();
-                if len > MAX_HISTORY {
-                    let remove = len - MAX_HISTORY;
-                    // drain will remove the oldest `remove` entries
-                    hist.drain(0..remove);
-                }
-            }
+            self.downloaded.fetch_add(added, Ordering::SeqCst);
+            self.limit_speed().await;
         }
-
+        stop_clone.notify_waiters();
         let mut info = self.info.lock().await;
         info.state = DownloadState::Completed;
         info.downloaded = self.downloaded.load(Ordering::SeqCst);
-        let hist = self.history.lock().await;
+        let hist = self.history.read().await.to_vec();
         info.history = hist.clone();
         let _ = self.event_tx.send(WorkerEvent::Completed(info.id)).await;
         Ok(())
@@ -469,7 +469,7 @@ impl DownloadWorker {
         let mut info = self.info.lock().await;
         info.state = DownloadState::Paused;
         info.downloaded = self.downloaded.load(Ordering::SeqCst);
-        info.history = self.history.lock().await.clone();
+        info.history = self.history.read().await.clone();
         Ok(())
     }
 
@@ -494,112 +494,151 @@ impl DownloadWorker {
         self.paused.store(false, Ordering::SeqCst);
         self.notify_resume.notify_waiters();
         info.downloaded = self.downloaded.load(Ordering::SeqCst);
-        info.history = self.history.lock().await.clone();
+        info.history = self.history.read().await.clone();
         let id = info.id;
         let _ = self.event_tx.send(WorkerEvent::Cancelled(id)).await;
         Ok(())
     }
 
-    /// Build a public snapshot DownloadInfo combining the metadata (info mutex)
-    /// with the atomic downloaded counter and history.
     pub async fn snapshot_info(&self) -> DownloadInfo {
         let meta = self.info.lock().await;
-        let mut snapshot = meta.clone(); // clone url/dest/total_size/threads/state
-        // override downloaded and history with authoritative values
+        let mut snapshot = meta.clone();
         let d = self.downloaded.load(Ordering::SeqCst);
         snapshot.downloaded = d;
-        let hist = self.history.lock().await;
+        let hist = self.history.read().await;
         snapshot.history = hist.clone();
         snapshot
     }
-    /// Query public snapshot info for this worker.
-    /// This constructs a DownloadInfo snapshot using metadata + atomic downloaded + history.
     pub async fn info(&self) -> DownloadInfo {
         self.snapshot_info().await
     }
 }
 
+#[derive(Debug)]
 pub struct DownloadManager {
-    workers: Arc<Mutex<HashMap<Uuid, Arc<DownloadWorker>>>>,
+    client: reqwest::Client,
+    pub settings: Arc<RwLock<DMSettings>>,
+    workers: Arc<Mutex<IndexMap<Uuid, Arc<DownloadWorker>>>>,
     active: Arc<Mutex<HashSet<Uuid>>>,
-    semaphore: Arc<Semaphore>,
+    concurrency: Arc<AtomicU8>,
     sender: mpsc::Sender<WorkerEvent>,
 }
 
 impl DownloadManager {
-    pub fn new(max_concurrency: usize) -> Arc<Self> {
+    pub fn new(client: reqwest::Client, settings: DMSettings) -> Arc<Self> {
         let (tx, mut rx) = mpsc::channel::<WorkerEvent>(64);
         let mgr = Arc::new(Self {
-            workers: Arc::new(Mutex::new(HashMap::new())),
+            client,
+            settings: Arc::new(RwLock::new(settings)),
+            workers: Arc::new(Mutex::new(IndexMap::new())),
             active: Arc::new(Mutex::new(HashSet::new())),
-            semaphore: Arc::new(Semaphore::new(max_concurrency)),
+            concurrency: Arc::new(AtomicU8::new(0)),
             sender: tx.clone(),
         });
 
-        let mgr_clone = Arc::clone(&mgr);
+        let mgr1 = Arc::clone(&mgr);
+        let mgr2 = mgr1.clone();
+
+        // event loop
         tokio::spawn(async move {
             while let Some(event) = rx.recv().await {
-                mgr_clone.handle_event(event).await;
+                mgr1.handle_event(event).await;
             }
+        });
+
+        // updater
+        tokio::spawn(async move {
+            mgr2.updater().await;
         });
 
         mgr
     }
 
+    /// Called when a worker completes / cancels / errors
     async fn handle_event(self: &Arc<Self>, event: WorkerEvent) {
         match event {
-            WorkerEvent::Completed(id) => {
+            WorkerEvent::Completed(id)
+            | WorkerEvent::Cancelled(id)
+            | WorkerEvent::Error(id, _) => {
                 self.active.lock().await.remove(&id);
-                debug_print!("Worker {:?} completed", id);
-            }
-            WorkerEvent::Cancelled(id) => {
-                self.active.lock().await.remove(&id);
-                debug_print!("Worker {:?} cancelled", id);
-            }
-            WorkerEvent::Error(id, err) => {
-                self.active.lock().await.remove(&id);
-                debug_print!("Worker {:?} errored: {}", id, err);
+                {
+                    let conc = self.concurrency.load(Ordering::SeqCst).clone();
+                    if conc > 0 {
+                        self.concurrency.store(conc-1, Ordering::SeqCst);
+                    };
+                }
+
+                debug_print!("Worker {:?} finished event: {:?}", id, event);
             }
         }
         self.process_queue().await;
     }
 
     pub async fn process_queue(&self) {
-        let allowed = self.semaphore.available_permits();
-        if allowed == 0 {
+        let limit = self.settings.read().await.concurrency_limit.clone();
+        let active_count = self.concurrency.load(Ordering::SeqCst).clone();
+
+        if active_count == limit {
             return;
         }
+        if active_count > limit {
+            let to_pause_count = active_count - limit;
+            let workers_to_pause = {
+                let active = self.active.lock().await;
+                let workers = self.workers.lock().await;
+                active.iter()
+                    .take(to_pause_count as usize)
+                    .map(|id| (*id, workers.get(id).cloned()))
+                    .filter_map(|(id, w_opt)| w_opt.map(|w| (id, w)))
+                    .collect::<Vec<_>>()
+            };
 
-        let active_count = self.active.lock().await.len();
-        let remaining = allowed.saturating_sub(active_count);
-
-        if remaining == 0 {
-            return;
-        }
-
-        let workers = self.workers.lock().await;
-        let mut to_start = Vec::new();
-        for (id, w) in workers.iter() {
-            let info = w.info().await;
-            if matches!(info.state, DownloadState::Queued) {
-                to_start.push(*id);
+            for (id, worker) in workers_to_pause {
+                if worker.pause().await.is_ok() {
+                    worker.info.lock().await.state = DownloadState::Queued;
+                    if self.active.lock().await.remove(&id) {
+                        self.concurrency.fetch_sub(1, Ordering::SeqCst);
+                    }
+                }
             }
-            if to_start.len() >= remaining {
+            return;
+        }
+
+        let slots = limit - active_count;
+        let mut to_start = Vec::new();
+        let workers_map = self.workers.lock().await;
+        let queued_workers = workers_map.iter()
+            .map(|(id, w)| (*id, w.clone()))
+            .collect::<Vec<_>>();
+        drop(workers_map);
+
+        for (id, worker) in queued_workers {
+            if to_start.len() >= slots as usize {
+                break;
+            }
+            let info = worker.info().await;
+            if matches!(info.state, DownloadState::Queued) {
+                to_start.push(id);
+            }
+        }
+        
+        for id in to_start {
+            // It's possible another task already started a worker, so we check again.
+            let current_active = self.concurrency.load(Ordering::SeqCst);
+            if current_active < limit {
+                self.concurrency.fetch_add(1, Ordering::SeqCst);
+                let _ = self.start(id).await;
+            } else {
                 break;
             }
         }
-        drop(workers);
-
-        for id in to_start {
-            let _ = self.start(id).await;
-        }
     }
 
-    pub async fn add_download(&self, url: String, dest: PathBuf, threads: u8, max_speed: u64) -> Result<Uuid> {
+    pub async fn add_download(&self, url: String, dest: PathBuf) -> Result<Uuid> {
         let id = Uuid::new_v4();
         let worker = DownloadWorker::new(
-            id, url, dest, threads, max_speed, self.sender.clone()
-        );
+            id, self.client.clone(), self.settings.clone(), url, dest, self.sender.clone()
+        ).await;
         self.workers.lock().await.insert(id, worker);
         self.process_queue().await;
         Ok(id)
@@ -611,24 +650,15 @@ impl DownloadManager {
             Some(w) => w,
             None => return Err(anyhow::anyhow!("Worker not found")),
         };
-
-        let sem = self.semaphore.clone();
-        let permit = sem.acquire_owned().await.unwrap();
+        
         {
             self.active.lock().await.insert(id);
         }
-
+        
         let w = Arc::clone(&worker);
+        
         tokio::spawn(async move {
-            let _permit = permit; // keep permit alive while active
-            if let Err(e) = w.start().await {
-                let mut info = w.info.lock().await;
-                info.state = DownloadState::Error(format!("{:?}", e));
-                let _ = w
-                    .event_tx
-                    .send(WorkerEvent::Error(info.id, e.to_string()))
-                    .await;
-            }
+            let _ = w.start().await;
         });
         Ok(())
     }
@@ -638,7 +668,11 @@ impl DownloadManager {
         match w {
             Some(worker) => {
                 worker.pause().await?;
-                self.active.lock().await.remove(&id);
+                if self.active.lock().await.remove(&id) {
+                    if self.concurrency.load(Ordering::SeqCst) > 0 {
+                        self.concurrency.fetch_sub(1, Ordering::SeqCst);
+                    }
+                }
                 self.process_queue().await;
                 Ok(())
             }
@@ -654,12 +688,10 @@ impl DownloadManager {
                     let mut info = worker.info.lock().await;
                     match info.state {
                         DownloadState::Completed | DownloadState::Running => {
-                            debug_print!("Already completed or running, skipping");
                             return Ok(());
                         }
                         _ => {
                             info.state = DownloadState::Queued;
-                            debug_print!("Set state to Queued");
                         }
                     }
                 }
@@ -671,11 +703,15 @@ impl DownloadManager {
     }
 
     pub async fn cancel(&self, id: Uuid) -> Result<()> {
-        let w = { self.workers.lock().await.remove(&id) };
+        let w = { self.workers.lock().await.get(&id).cloned() };
         match w {
             Some(worker) => {
                 worker.cancel().await?;
                 self.active.lock().await.remove(&id);
+                let conc = self.concurrency.load(Ordering::SeqCst).clone();
+                if conc > 0 {
+                    self.concurrency.store(conc-1, Ordering::SeqCst);
+                };
                 self.process_queue().await;
                 Ok(())
             }
@@ -701,5 +737,125 @@ impl DownloadManager {
             out.push(w.info().await);
         }
         Ok(out)
+    }
+
+    pub async fn send_list(&self, mut interval: Interval) {
+        loop {
+            interval.tick().await;
+
+            match self.list_all().await {
+                Ok(list) => {
+                    let mut download_list = Vec::new();
+                    let list_ref = list.clone();
+                    for info in list {
+                        let state_str = match &info.state {
+                            DownloadState::Queued => "Queued".to_string(),
+                            DownloadState::Running => "Running".to_string(),
+                            DownloadState::Paused => "Paused".to_string(),
+                            DownloadState::Completed => "Completed".to_string(),
+                            DownloadState::Cancelled => "Cancelled".to_string(),
+                            DownloadState::Error(_) => "Error".to_string(),
+                        };
+                        let speed = calc_speed(info.history);
+                        let glance = DownloadGlance {
+                            id: info.id.to_string(),
+                            name: info.dest
+                                .file_name()
+                                .and_then(|s| s.to_str())
+                                .unwrap_or("")
+                                .to_string(),
+                            total_size: info.total_size,
+                            downloaded: info.downloaded,
+                            speed: speed,
+                            state: state_str.clone(),
+                        };
+                        download_list.push(glance);
+                    }
+                    DownloadList { list: download_list }.send_signal_to_dart();
+                }
+                Err(e) => {
+                    debug_print!("Failed to get download details: {:?}", e);
+                }
+            }
+        }
+    }
+
+    pub async fn recalculate_speed_limits(&self, mut interval: Interval) {
+        loop {
+            interval.tick().await;
+            let global_limit = self.settings.read().await.speed_limit;
+            if global_limit == 0 {
+                continue;
+            }
+
+            let worker_refs = {
+                let active = self.active.lock().await;
+                let workers = self.workers.lock().await;
+                active.iter()
+                    .filter_map(|id| workers.get(id).cloned())
+                    .collect::<Vec<_>>()
+            };
+
+            let histories = join_all(worker_refs.iter().map(|w| async {
+                w.history.read().await.clone()
+            })).await;
+
+            let mut worker_speeds = Vec::new();
+            let mut total_speed = 0u64;
+
+            for (i, w) in worker_refs.iter().enumerate() {
+                let s = calc_speed(histories[i].clone()) as u64;
+                total_speed += s;
+                worker_speeds.push((w.clone(), s));
+            }
+
+            if total_speed == 0 {
+                let even_limit = global_limit / worker_speeds.len().max(1) as u64;
+                for (w, _) in worker_speeds {
+                    w.change_speed_limit(even_limit).await;
+                }
+                continue;
+            }
+
+            for (w, speed) in worker_speeds {
+                let share = ((speed as f64 / total_speed as f64) * global_limit as f64) as u64;
+                w.change_speed_limit(share.max((global_limit as f64 * 0.05) as u64)).await;
+            }
+        }
+    }
+
+    pub async fn updater(self: &Arc<Self>) {
+        let mut interval1 = interval(Duration::from_secs(1));
+        let mut interval2 = interval(Duration::from_secs(1));
+        let mgr1 = self.clone();
+        let mgr2 = self.clone();
+
+        tokio::spawn( async move {
+            mgr1.send_list(interval1).await;
+        });
+
+        tokio::spawn( async move {
+            mgr2.recalculate_speed_limits(interval2).await;
+        });
+    }
+
+    pub async fn update_settings(&self, new: DMSettings) -> Result<()> {
+        let concurrency_changed;
+        {
+            let mut settings = self.settings.write().await;
+            concurrency_changed = settings.concurrency_limit != new.concurrency_limit;
+
+            settings.speed_limit = new.speed_limit;
+            settings.download_threads = new.download_threads;
+            settings.concurrency_limit = new.concurrency_limit;
+            settings.download_timeout = new.download_timeout;
+            settings.download_retries = new.download_retries;
+        }
+
+        if concurrency_changed {
+            self.process_queue().await;
+        }
+
+        Ok(())
     }
 }

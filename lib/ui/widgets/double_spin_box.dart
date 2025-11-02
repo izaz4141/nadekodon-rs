@@ -104,6 +104,7 @@ class _DoubleSpinBoxState extends State<DoubleSpinBox> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     
     return ListTile(
@@ -113,7 +114,7 @@ class _DoubleSpinBoxState extends State<DoubleSpinBox> {
       ),
       subtitle: Text(
         widget.subtitle, 
-        style: textTheme.bodySmall?.copyWith(color: Colors.grey),
+        style: textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,

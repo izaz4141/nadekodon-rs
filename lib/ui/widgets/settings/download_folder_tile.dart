@@ -13,6 +13,7 @@ class DownloadFolderTile extends StatelessWidget {
     return ValueListenableBuilder<String>(
       valueListenable: SettingsManager.downloadFolder,
       builder: (context, value, _) {
+        final colors = Theme.of(context).colorScheme;
         final textTheme = Theme.of(context).textTheme;
         return ListTile(
           title: Text(
@@ -21,7 +22,7 @@ class DownloadFolderTile extends StatelessWidget {
           ),
           subtitle: Text(
             value.isEmpty ? "No Folder Selected" : value,
-            style: textTheme.bodySmall?.copyWith(color: Colors.grey),
+            style: textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
           ),
           trailing: 
             IconButton(

@@ -5,7 +5,7 @@ use reqwest::{
     header
 };
 
-pub fn build_browser_client() -> Client {
+pub async fn build_browser_client() -> Client {
     let mut headers = header::HeaderMap::new();
 
     headers.insert(
@@ -30,7 +30,7 @@ pub fn build_browser_client() -> Client {
     Client::builder()
         .default_headers(headers)
         .redirect(reqwest::redirect::Policy::limited(10))
-        .connect_timeout(Duration::from_secs(60))
+        // .connect_timeout(Duration::from_secs(60))
         // .timeout(Duration::from_secs(300))
         .pool_idle_timeout(None)
         .tcp_keepalive(Duration::from_secs(60))
@@ -48,8 +48,7 @@ pub struct UrlInfo {
     pub content_type: Option<String>,
 }
 
-pub async fn get_url_info(url: &str) -> Result<UrlInfo> {
-    let client = build_browser_client();
+pub async fn get_url_info(client: Client, url: &str) -> Result<UrlInfo> {
     // Send HEAD request
     let response = client.head(url).send().await?;
 

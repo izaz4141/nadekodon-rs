@@ -6,7 +6,7 @@ import '../widgets/settings/download_folder_tile.dart';
 import '../widgets/settings/server_port_spinbox.dart';
 import '../widgets/settings/speed_limit_spinbox.dart';
 import '../widgets/settings/download_thread_spinbox.dart';
-import '../widgets/settings/max_download_spinbox.dart';
+import '../widgets/settings/concurrency_limit_spinbox.dart';
 import '../widgets/settings/tray_switch_tile.dart';
 import '../widgets/settings/actions_bar.dart';
 
@@ -34,9 +34,10 @@ class SettingsPage extends StatelessWidget {
                 PortSpinBox(),
                 SpeedLimitSpinBox(),
                 DownloadThreadBox(),
-                MaxDownloadBox(),
+                ConcurrencyLimitBox(),
                 Divider(),
                 TraySwitchTile(),
+                SizedBox(height: 420 * AppTheme.heightScale(context)),
               ],
             ),
           ),

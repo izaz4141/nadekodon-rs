@@ -3,15 +3,15 @@ import 'package:flutter/material.dart';
 import '../../../utils/settings.dart';
 import '../spin_box.dart';
 
-class MaxDownloadBox extends StatelessWidget {
-  const MaxDownloadBox({super.key});
+class ConcurrencyLimitBox extends StatelessWidget {
+  const ConcurrencyLimitBox({super.key});
 
   @override
   Widget build(BuildContext context) {
     return SpinBox(
-      title: "Maximum Download",
+      title: "Concurrency Limit",
       subtitle: "Maximum number of simultaneous download",
-      valueListenable: SettingsManager.maxDownload,
+      valueListenable: SettingsManager.concurrencyLimit,
       min: 1,
       max: 255,
     );

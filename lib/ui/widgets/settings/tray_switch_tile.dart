@@ -12,12 +12,13 @@ class TraySwitchTile extends StatelessWidget {
     return ValueListenableBuilder<bool>(
       valueListenable: SettingsManager.retreatToTray,
       builder: (context, value, _) {
+        final colors = Theme.of(context).colorScheme;
         final textTheme = Theme.of(context).textTheme;
         return ListTile(
           title: Text("Close to system tray", style: textTheme.bodyMedium),
           subtitle: Text(
             "Minimize to system tray instead of exiting the application",
-            style: textTheme.bodySmall?.copyWith(color: Colors.grey),
+            style: textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
           ),
           trailing: Transform.scale(
             scale: AppTheme.iconScale(context),

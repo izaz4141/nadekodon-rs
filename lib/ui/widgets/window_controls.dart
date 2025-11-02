@@ -11,17 +11,19 @@ class WindowControls extends StatelessWidget {
   }) {
     return InkWell(
       onTap: onPressed,
-      hoverColor: hoverColor ?? Colors.grey.withAlpha(70),
+      hoverColor: hoverColor?.withAlpha(70) ?? Colors.grey.withAlpha(70),
       child: SizedBox(
         width: kToolbarHeight,
         height: kToolbarHeight,
-        child: Icon(icon, color: Colors.grey),
+        child: Icon(icon, color: hoverColor),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    
     return Row(
       children: [
         _buildButton(

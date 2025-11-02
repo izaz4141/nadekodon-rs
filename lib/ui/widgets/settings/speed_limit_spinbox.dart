@@ -12,9 +12,9 @@ class SpeedLimitSpinBox extends StatelessWidget {
       title: "Speed Limit (MB/s)",
       subtitle: "Maximum download speed",
       valueListenable: SettingsManager.speedLimit,
-      min: 0.01,
+      min: 0.00,
       max: 999999,
-      step: 0.01,
+      step: 0.1,
       decimalPlaces: 2,
     );
   }

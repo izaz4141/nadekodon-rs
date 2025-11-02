@@ -97,6 +97,7 @@ class _SpinBoxState extends State<SpinBox> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
     return ListTile(
@@ -106,7 +107,7 @@ class _SpinBoxState extends State<SpinBox> {
       ),
       subtitle: Text(
         widget.subtitle, 
-        style: textTheme.bodySmall?.copyWith(color: Colors.grey),
+        style: textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,

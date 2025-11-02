@@ -1,14 +1,21 @@
-mod main;
+pub mod main;
 
 use std::{str::from_utf8, sync::Arc, time::Duration};
+use reqwest::Client;
 use uuid::Uuid;
-use tokio::time::interval;
 
-use main::{DownloadManager, DownloadWorker, DownloadState, DownloadInfo};
-use crate::utils;
+use main::{DownloadManager};
+use crate::utils::{
+    types::{
+        DMSettings, DownloadState
+    },
+    url::get_url_info,
+    helper::calc_speed,
+};
 
 use rinf::{DartSignal, RustSignal, debug_print};
 use crate::signals::{
+    UpdateSettings,
     QueryUrl, UrlQueryOutput, DoDownload, 
     GetDownloadList, DownloadList, DownloadGlance,
     GetDownloadDetails, DownloadDetails,
@@ -16,18 +23,25 @@ use crate::signals::{
 };
 
 /// Function to spawn the single global DownloadManager at startup
-pub async fn start_download_manager() -> Arc<DownloadManager> {
-    let manager = DownloadManager::new(3);
+pub async fn start_download_manager(client: Client) -> Arc<DownloadManager> {
+    let settings = DMSettings {
+        speed_limit: 0,
+        concurrency_limit: 3,
+        download_threads: 8,
+        download_timeout: 30,
+        download_retries: 5,
+    };
+    let manager = DownloadManager::new(client, settings);
     manager
 }
 
-pub async fn query_url_info() {
+pub async fn query_url_info(client: Client) {
     let receiver = QueryUrl::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
         let data = signal_pack.message;
         let url = data.url;
 
-        match utils::url::get_url_info(&url).await {
+        match get_url_info(client.clone(), &url).await {
             Ok(info) => {
                 let is_webpage = match &info.content_type {
                     Some(ct) => {
@@ -73,52 +87,9 @@ pub async fn spawn_download_worker(manager: Arc<DownloadManager>) {
         let dest = std::path::PathBuf::from(data.dest);
 
         let manager = Arc::clone(&manager);
-        match manager.add_download(url.clone(), dest.clone(), 8, 0).await {
+        match manager.add_download(url.clone(), dest).await {
             Ok(id) => debug_print!("Spawned worker for {} with id {}", url, id),
             Err(e) => debug_print!("Failed to spawn worker for {}: {:?}", url, e),
-        }
-    }
-}
-
-pub async fn list_downloads(manager: Arc<DownloadManager>) {
-    let mut time_interval = tokio::time::interval(Duration::from_secs(1));
-
-    loop {
-        time_interval.tick().await;
-
-        let manager = Arc::clone(&manager);
-        match manager.list_all().await {
-            Ok(list) => {
-                let mut download_list = Vec::new();
-                for info in list {
-                    let state_str = match &info.state {
-                        DownloadState::Queued => "Queued".to_string(),
-                        DownloadState::Running => "Running".to_string(),
-                        DownloadState::Paused => "Paused".to_string(),
-                        DownloadState::Completed => "Completed".to_string(),
-                        DownloadState::Cancelled => "Cancelled".to_string(),
-                        DownloadState::Error(_) => "Error".to_string(),
-                    };
-                    let speed = utils::helper::calc_speed(info.history);
-                    let glance = DownloadGlance {
-                        id: info.id.to_string(),
-                        name: info.dest
-                            .file_name()
-                            .and_then(|s| s.to_str())
-                            .unwrap_or("")
-                            .to_string(),
-                        total_size: info.total_size,
-                        downloaded: info.downloaded,
-                        speed: speed,
-                        state: state_str.clone(),
-                    };
-                    download_list.push(glance);
-                }
-                DownloadList { list: download_list }.send_signal_to_dart();
-            }
-            Err(e) => {
-                debug_print!("Failed to get download details: {:?}", e);
-            }
         }
     }
 }
@@ -147,7 +118,7 @@ pub async fn get_download_details(manager: Arc<DownloadManager>) {
                     DownloadState::Cancelled => "Cancelled".to_string(),
                     DownloadState::Error(e) => format!("Error: {}", e),
                 };
-                let speed = utils::helper::calc_speed(info.history);
+                let speed = calc_speed(info.history);
                 DownloadDetails {
                     id: info.id.to_string(),
                     name: info.dest
@@ -159,7 +130,6 @@ pub async fn get_download_details(manager: Arc<DownloadManager>) {
                     total_size: info.total_size,
                     downloaded: info.downloaded,
                     speed: speed,
-                    threads: info.threads,
                     state: state_str,
                 }.send_signal_to_dart();
             }

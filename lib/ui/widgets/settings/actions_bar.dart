@@ -31,7 +31,7 @@ class SettingsActionsBar extends StatelessWidget {
             ),
           ],
         ),
-        padding: EdgeInsets.symmetric(
+        margin: EdgeInsets.symmetric(
           vertical: AppTheme.spaceMD * AppTheme.spaceScale(context), 
           horizontal: AppTheme.spaceLG * AppTheme.spaceScale(context)),
         child: Row(
@@ -66,33 +66,33 @@ class SettingsActionsBar extends StatelessWidget {
                 ),
               ),
             ),
-            ElevatedButton.icon(
-              onPressed: () {
-                AppSnackBar.show(
-                  context,
-                  "Settings saved",
-                  type: SnackType.success,
-                );
-              },
-              icon: Icon(Icons.save_rounded, 
-                size: AppTheme.iconMD * AppTheme.iconScale(context)),
-              label: Text('Save', 
-                style: textTheme.bodyMedium?.copyWith(
-                    color: colors.onPrimary)
-              ),
-              style: ElevatedButton.styleFrom(
-                padding: EdgeInsets.symmetric(
-                  horizontal: AppTheme.spaceLG * AppTheme.spaceScale(context) ,
-                  vertical: AppTheme.spaceMD * AppTheme.spaceScale(context),
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppTheme.radiusMD * AppTheme.radiusScale(context)),
-                ),
-                backgroundColor: colors.primary,
-                foregroundColor: colors.onPrimary,
-                elevation: 3,
-              ),
-            ),
+            // ElevatedButton.icon(
+            //   onPressed: () {
+            //     AppSnackBar.show(
+            //       context,
+            //       "Settings saved",
+            //       type: SnackType.success,
+            //     );
+            //   },
+            //   icon: Icon(Icons.save_rounded, 
+            //     size: AppTheme.iconMD * AppTheme.iconScale(context)),
+            //   label: Text('Save', 
+            //     style: textTheme.bodyMedium?.copyWith(
+            //         color: colors.onPrimary)
+            //   ),
+            //   style: ElevatedButton.styleFrom(
+            //     padding: EdgeInsets.symmetric(
+            //       horizontal: AppTheme.spaceLG * AppTheme.spaceScale(context) ,
+            //       vertical: AppTheme.spaceMD * AppTheme.spaceScale(context),
+            //     ),
+            //     shape: RoundedRectangleBorder(
+            //       borderRadius: BorderRadius.circular(AppTheme.radiusMD * AppTheme.radiusScale(context)),
+            //     ),
+            //     backgroundColor: colors.primary,
+            //     foregroundColor: colors.onPrimary,
+            //     elevation: 3,
+            //   ),
+            // ),
           ],
         ),
       ),

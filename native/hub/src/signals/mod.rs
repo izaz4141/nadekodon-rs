@@ -1,32 +1,16 @@
 use rinf::{DartSignal, RustSignal, SignalPiece};
 use serde::{Deserialize, Serialize};
 
-/// To send data from Dart to Rust, use `DartSignal`.
+
+
 #[derive(Deserialize, DartSignal)]
-pub struct SmallText {
-    pub text: String,
-}
-
-/// To send data from Rust to Dart, use `RustSignal`.
-#[derive(Serialize, RustSignal)]
-pub struct SmallNumber {
-    pub number: i32,
-}
-
-/// A signal can be nested inside another signal.
-#[derive(Serialize, RustSignal)]
-pub struct BigBool {
-    pub member: bool,
-    pub nested: SmallBool,
-}
-
-/// To nest a signal inside other signal, use `SignalPiece`.
-#[derive(Serialize, SignalPiece)]
-pub struct SmallBool(pub bool);
-
-#[derive(Serialize, RustSignal)]
-pub struct SampleNumberOutput {
-  pub current_number: i32,
+pub struct UpdateSettings {
+    pub server_port: Option<u16>,
+    pub speed_limit: Option<u64>,
+    pub download_threads: Option<u8>,
+    pub concurrency_limit: Option<u8>,
+    pub download_timeout: Option<u64>,
+    pub download_retries: Option<u8>,
 }
 
 #[derive(Deserialize, DartSignal)]
@@ -81,7 +65,6 @@ pub struct DownloadDetails {
     pub total_size: Option<u64>,
     pub downloaded: u64,
     pub speed: f64,
-    pub threads: u8,
     pub state: String,
 }
 

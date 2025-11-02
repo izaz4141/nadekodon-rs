@@ -18,6 +18,7 @@ Future<void> main() async {
   await SettingsManager.init();
 
   await initializeRust(assignRustSignal);
+  await SettingsManager.sendAllSettings();
 
   if (!Platform.isAndroid) {
     await windowManager.ensureInitialized();
