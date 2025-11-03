@@ -97,9 +97,8 @@ impl DownloadWorker {
         let is_single_thread = !head_data.accept_ranges || head_data.total_size.is_none() || threads <= 1;
 
         let size = head_data.total_size.unwrap_or(0); // Use 0 for size if not available for single thread
-        if !is_single_thread {
-            self.prepare_file(&dest, size)?;
-        }
+        self.prepare_file(&dest, size, is_single_thread)?;
+
         self.spawn_download_tasks(&url, &dest, size, threads, is_single_thread, head_data.accept_ranges).await?;
         self.spawn_sampler_and_monitor().await?;
 
@@ -170,9 +169,9 @@ impl DownloadWorker {
         (info.url.clone(), info.dest.clone())
     }
 
-    fn prepare_file(&self, dest: &std::path::Path, size: u64) -> Result<()> {
+    fn prepare_file(&self, dest: &std::path::Path, size: u64, is_single_thread: bool) -> Result<()> {
         let f = std::fs::File::create(dest)?;
-        f.set_len(size)?;
+        if !is_single_thread {f.set_len(size)?};
         Ok(())
     }
 
@@ -413,11 +412,21 @@ impl DownloadWorker {
                 match res {
                     Ok(Ok(())) => {},
                     Ok(Err(e)) => {
-                        debug_print!("Monitor: segment {} failed {:?}", i, e);
+                        let err_str = format!("Monitor: segment {} failed {:?}", i, e);
+                        debug_print!("{}", &err_str);
+                        let mut info = monitor_worker.info.lock().await;
+                        info.state = DownloadState::Error(err_str.clone());
+                        let id = info.id;
+                        let _ = monitor_worker.event_tx.send(WorkerEvent::Error(id,err_str)).await;
                         return;
                     }
                     Err(e) => {
-                        debug_print!("Monitor: join error {:?}", e);
+                        let err_str = format!("Monitor: join error {:?}", &e);
+                        debug_print!("{}", &err_str);
+                        let mut info = monitor_worker.info.lock().await;
+                        info.state = DownloadState::Error(err_str.clone());
+                        let id = info.id;
+                        let _ = monitor_worker.event_tx.send(WorkerEvent::Error(id,err_str)).await;
                         return;
                     }
                 }
