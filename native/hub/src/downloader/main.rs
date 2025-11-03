@@ -94,14 +94,13 @@ impl DownloadWorker {
         let head_data = self.fetch_head(&url).await?;
         self.update_total_size(head_data.total_size).await;
 
-        if !head_data.accept_ranges || head_data.total_size.is_none() || threads <= 1 {
-            self.spawn_single_thread(&url, &dest).await;
-            return Ok(());
-        }
+        let is_single_thread = !head_data.accept_ranges || head_data.total_size.is_none() || threads <= 1;
 
-        let size = head_data.total_size.unwrap();
-        self.prepare_file(&dest, size)?;
-        self.spawn_segments(&url, &dest, size, threads).await?;
+        let size = head_data.total_size.unwrap_or(0); // Use 0 for size if not available for single thread
+        if !is_single_thread {
+            self.prepare_file(&dest, size)?;
+        }
+        self.spawn_download_tasks(&url, &dest, size, threads, is_single_thread, head_data.accept_ranges).await?;
         self.spawn_sampler_and_monitor().await?;
 
         Ok(())
@@ -177,25 +176,36 @@ impl DownloadWorker {
         Ok(())
     }
 
-    async fn spawn_segments(self: &Arc<Self>, url: &str, dest: &std::path::Path, size: u64, threads: u64) -> Result<()> {
+    async fn spawn_download_tasks(self: &Arc<Self>, url: &str, dest: &std::path::Path, size: u64, threads: u64, is_single_thread: bool, accept_ranges: bool) -> Result<()> {
         let client = self.client.clone();
-        let part_size = size / threads;
-
         let mut handles = Vec::new();
-
-        for i in 0..threads {
-            let start = i as u64 * part_size;
-            let end = if i == threads - 1 { size - 1 } else { start + part_size - 1 };
-
-            let client = client.clone();
+        
+        if is_single_thread {
+            // For single-threaded, we use a single task covering the whole (potentially unknown) range
             let worker = Arc::clone(self);
             let url = url.to_string();
             let dest = dest.to_path_buf();
-
             let h = tokio::spawn(async move {
-                worker.segment_download(i, &client, &url, &dest, start, end).await
+                worker.download_task(0, &client, &url, &dest, 0, size.saturating_sub(1), true, accept_ranges).await
             });
             handles.push(h);
+        } else {
+            // Multi-threaded segment logic
+            let part_size = size / threads;
+            for i in 0..threads {
+                let start = i as u64 * part_size;
+                let end = if i == threads - 1 { size - 1 } else { start + part_size - 1 };
+
+                let client = client.clone();
+                let worker = Arc::clone(self);
+                let url = url.to_string();
+                let dest = dest.to_path_buf();
+
+                let h = tokio::spawn(async move {
+                    worker.download_task(i, &client, &url, &dest, start, end, false, true).await
+                });
+                handles.push(h);
+            }
         }
 
         let mut guard = self.handles.lock().await;
@@ -203,7 +213,7 @@ impl DownloadWorker {
         Ok(())
     }
 
-    async fn segment_download(
+    async fn download_task(
         self: &Arc<Self>,
         i: u64,
         client: &reqwest::Client,
@@ -211,6 +221,8 @@ impl DownloadWorker {
         dest: &std::path::Path,
         start: u64,
         end: u64,
+        is_single_thread: bool,
+        accept_ranges: bool,
     ) -> Result<()> {
         let worker = Arc::clone(self);
 
@@ -234,12 +246,16 @@ impl DownloadWorker {
 
 
             let current_start = start + segment_progress;
-            if current_start > end {
+            if current_start >= end {
                 return Ok(());
             }
 
-            let range = format!("bytes={}-{}", current_start, end);
-            let resp = match client.get(url).header(RANGE, &range).send().await {
+            let mut request_builder = client.get(url);
+            if accept_ranges {
+                let range = format!("bytes={}-{}", current_start, end);
+                request_builder = request_builder.header(RANGE, &range);
+            }
+            let resp = match request_builder.send().await {
                 Ok(r) => match r.error_for_status() {
                     Ok(v) => v,
                     Err(e) => return Err(anyhow::anyhow!("Segment {} bad status: {}", i, e)),
@@ -256,7 +272,9 @@ impl DownloadWorker {
             };
 
             let mut file = TokioFile::options().write(true).open(dest).await?;
-            file.seek(SeekFrom::Start(current_start)).await?;
+            if accept_ranges {
+                file.seek(SeekFrom::Start(current_start)).await?;
+            }
             let mut stream = resp.bytes_stream();
 
             while let Ok(next_chunk) = timeout(
@@ -286,17 +304,23 @@ impl DownloadWorker {
                             self.cancel().await?;
                             return Err(anyhow::anyhow!("Segment {} stream error: {}", i, e));
                         }
+                        if !accept_ranges {
+                            self.downloaded.store(0, Ordering::SeqCst);
+                        }
                         attempt += 1;
                         continue;
                     }
 
                     None => {
-                        if start + segment_progress > end {
+                        if is_single_thread || start + segment_progress >= end {
                             break;
                         }
                         if attempt > download_retries {
                             self.cancel().await?;
                             return Err(anyhow::anyhow!("Segment {}: stream ended unexpectedly", i));
+                        }
+                        if !accept_ranges {
+                            self.downloaded.store(0, Ordering::SeqCst);
                         }
                         attempt += 1;
                         continue;
@@ -309,6 +333,9 @@ impl DownloadWorker {
                         self.cancel().await?;
                         return Err(anyhow::anyhow!("Segment {} file write failed: {}", i, e));
                     }
+                    if !accept_ranges {
+                        self.downloaded.store(0, Ordering::SeqCst);
+                    }
                     attempt += 1;
                     continue;
                 }
@@ -317,13 +344,13 @@ impl DownloadWorker {
                 segment_progress += len;
                 self.downloaded.fetch_add(len, Ordering::SeqCst);
 
-                if start + segment_progress > end {
+                if start + segment_progress >= end {
                     break;
                 }
                 worker.limit_speed().await;
             }
 
-            if start + segment_progress >= end {
+            if is_single_thread || start + segment_progress >= end {
                 return Ok(());
             }
         }
@@ -422,47 +449,6 @@ impl DownloadWorker {
         }
     }
 
-    async fn spawn_single_thread(self: &Arc<Self>, url: &str, dest: &std::path::Path) {
-        let worker = Arc::clone(self);
-        let url = url.to_string();
-        let dest = dest.to_path_buf();
-        let h = tokio::spawn(async move { worker.single_thread_download(&url, &dest).await });
-        self.handles.lock().await.push(h);
-    }
-
-    async fn single_thread_download(self: &Arc<Self>, url: &str, dest: &PathBuf) -> Result<()> {
-        let resp = self.client.get(url).send().await?;
-        let mut stream = resp.bytes_stream();
-        let mut f = TokioFile::create(dest).await?;
-
-        let stop_flag = Arc::new(Notify::new());
-        let stop_clone = stop_flag.clone();
-        self.spawn_sampler(stop_flag);
-
-        while let Some(chunk_res) = stream.next().await {
-            let chunk = chunk_res?;
-            
-            while self.paused.load(Ordering::SeqCst) {
-                self.notify_resume.notified().await;
-            }
-            if self.cancel.load(Ordering::SeqCst) {
-                return Ok(());
-            }
-
-            f.write_all(&chunk).await?;
-            let added = chunk.len() as u64;
-            self.downloaded.fetch_add(added, Ordering::SeqCst);
-            self.limit_speed().await;
-        }
-        stop_clone.notify_waiters();
-        let mut info = self.info.lock().await;
-        info.state = DownloadState::Completed;
-        info.downloaded = self.downloaded.load(Ordering::SeqCst);
-        let hist = self.history.read().await.to_vec();
-        info.history = hist.clone();
-        let _ = self.event_tx.send(WorkerEvent::Completed(info.id)).await;
-        Ok(())
-    }
 
     pub async fn pause(&self) -> Result<()> {
         self.paused.store(true, Ordering::SeqCst);
