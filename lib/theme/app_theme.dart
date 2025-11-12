@@ -9,10 +9,18 @@ class AppTheme {
     ColorScheme? lightDynamic,
     ColorScheme? darkDynamic,
   ) {
-    final light = lightDynamic?.harmonized() ??
-        ColorScheme.fromSeed(seedColor: fallbackSeed, brightness: Brightness.light);
-    final dark = darkDynamic?.harmonized() ??
-        ColorScheme.fromSeed(seedColor: fallbackSeed, brightness: Brightness.dark);
+    final light =
+        lightDynamic?.harmonized() ??
+        ColorScheme.fromSeed(
+          seedColor: fallbackSeed,
+          brightness: Brightness.light,
+        );
+    final dark =
+        darkDynamic?.harmonized() ??
+        ColorScheme.fromSeed(
+          seedColor: fallbackSeed,
+          brightness: Brightness.dark,
+        );
     return (light: light, dark: dark);
   }
 
@@ -94,10 +102,30 @@ class AppTheme {
       ),
 
       textTheme: TextTheme(
-        bodySmall: TextStyle(fontSize: textSM * textScale, fontWeight: FontWeight.w400),
-        bodyMedium: TextStyle(fontSize: textMD * textScale, fontWeight: FontWeight.w400),
-        titleMedium: TextStyle(fontSize: textLG * textScale, fontWeight: FontWeight.w600),
-        titleLarge: TextStyle(fontSize: textXL * textScale, fontWeight: FontWeight.w800),
+        bodySmall: TextStyle(
+          fontSize: textSM * textScale,
+          fontWeight: FontWeight.w400,
+        ),
+        bodyMedium: TextStyle(
+          fontSize: textMD * textScale,
+          fontWeight: FontWeight.w400,
+        ),
+        bodyLarge: TextStyle(
+          fontSize: textLG * textScale,
+          fontWeight: FontWeight.w400,
+        ),
+        titleSmall: TextStyle(
+          fontSize: textMD * textScale,
+          fontWeight: FontWeight.w600,
+        ),
+        titleMedium: TextStyle(
+          fontSize: textLG * textScale,
+          fontWeight: FontWeight.w600,
+        ),
+        titleLarge: TextStyle(
+          fontSize: textXL * textScale,
+          fontWeight: FontWeight.w800,
+        ),
       ),
 
       cardTheme: CardThemeData(

@@ -1,5 +1,5 @@
+import 'dart:io';
 import 'package:collection/collection.dart';
-
 
 String formatBytes(int bytes) {
   const suffixes = ["B", "KB", "MB", "GB"];
@@ -20,10 +20,12 @@ String snakeToCamel(String input) {
 }
 
 String camelToSnake(String input) {
-  return input.replaceAllMapped(
-    RegExp(r'([a-z0-9])([A-Z])'),
-    (match) => '${match[1]}_${match[2]!.toLowerCase()}',
-  ).toLowerCase();
+  return input
+      .replaceAllMapped(
+        RegExp(r'([a-z0-9])([A-Z])'),
+        (match) => '${match[1]}_${match[2]!.toLowerCase()}',
+      )
+      .toLowerCase();
 }
 
 bool isUrl(String url) {
@@ -37,4 +39,9 @@ bool isUrl(String url) {
     caseSensitive: false,
   );
   return regex.hasMatch(url);
+}
+
+Future<bool> fileExist(String path) async {
+  final file = File(path);
+  return await file.exists();
 }
