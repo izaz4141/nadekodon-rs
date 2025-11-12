@@ -8,14 +8,15 @@ class WindowControls extends StatelessWidget {
     required IconData icon,
     required VoidCallback onPressed,
     Color? hoverColor,
+    required ColorScheme colors,
   }) {
     return InkWell(
       onTap: onPressed,
-      hoverColor: hoverColor?.withAlpha(70) ?? Colors.grey.withAlpha(70),
+      hoverColor: hoverColor ?? colors.onSurface.withOpacity(0.1),
       child: SizedBox(
         width: kToolbarHeight,
         height: kToolbarHeight,
-        child: Icon(icon, color: hoverColor),
+        child: Icon(icon, color: colors.onSurface),
       ),
     );
   }
@@ -29,6 +30,7 @@ class WindowControls extends StatelessWidget {
         _buildButton(
           icon: Icons.remove, // better minimize icon
           onPressed: () => windowManager.minimize(),
+          colors: colors,
         ),
         _buildButton(
           icon: Icons.crop_square, // maximize/restore
@@ -40,11 +42,13 @@ class WindowControls extends StatelessWidget {
               await windowManager.maximize();
             }
           },
+          colors: colors,
         ),
         _buildButton(
           icon: Icons.close,
           onPressed: () => windowManager.close(),
-          hoverColor: Colors.red.withAlpha(70),
+          hoverColor: colors.error.withOpacity(0.1),
+          colors: colors,
         ),
       ],
     );

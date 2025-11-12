@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../theme/app_theme.dart';
 import '../pages/home_page.dart';
@@ -18,6 +19,13 @@ class NavigationRailSection extends StatefulWidget {
 class _NavigationRailSectionState extends State<NavigationRailSection>
     with SingleTickerProviderStateMixin {
   OverlayEntry? _overlayEntry;
+  PackageInfo _packageInfo = PackageInfo(
+    appName: 'Unknown',
+    packageName: 'Unknown',
+    version: 'Unknown',
+    buildNumber: 'Unknown',
+  );
+
   late final AnimationController _ctrl;
   late final Animation<Offset> _slideAnim;
   late final Animation<double> _fadeAnim;
@@ -25,6 +33,7 @@ class _NavigationRailSectionState extends State<NavigationRailSection>
   @override
   void initState() {
     super.initState();
+    _initPackageInfo();
 
     _ctrl = AnimationController(
       vsync: this,
@@ -43,6 +52,13 @@ class _NavigationRailSectionState extends State<NavigationRailSection>
     if (isExpandedNotifier.value == true) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _showSidebar());
     }
+  }
+
+  Future<void> _initPackageInfo() async {
+    final info = await PackageInfo.fromPlatform();
+    setState(() {
+      _packageInfo = info;
+    });
   }
 
   @override
@@ -80,40 +96,43 @@ class _NavigationRailSectionState extends State<NavigationRailSection>
                 BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 2, sigmaY: 2),
                   child: Container(
-                    color: Colors.black.withOpacity(0.25),
+                    color: colors.shadow.withOpacity(0.25),
                   ),
                 ),
 
                 // Sidebar
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: SlideTransition(
-                    position: _slideAnim,
-                    child: FadeTransition(
-                      opacity: _fadeAnim,
-                      child: Container(
-                        width: sidebarWidth * AppTheme.widthScale(context),
-                        margin: const EdgeInsets.all(AppTheme.spaceLG),
-                        decoration: BoxDecoration(
-                          color: colors.surface,
-                          borderRadius:
-                              BorderRadius.circular(AppTheme.radiusLG * 1.2),
-                          border: Border.all(
-                            color: colors.outlineVariant.withOpacity(0.5),
-                            width: 1.2,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.15),
-                              blurRadius: 20,
-                              offset: const Offset(0, 8),
+                  child: GestureDetector(
+                    onTap: () {},
+                    child: SlideTransition(
+                      position: _slideAnim,
+                      child: FadeTransition(
+                        opacity: _fadeAnim,
+                        child: Container(
+                          width: sidebarWidth * AppTheme.widthScale(context),
+                          margin: const EdgeInsets.all(AppTheme.spaceLG),
+                          decoration: BoxDecoration(
+                            color: colors.surface,
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusLG * 1.2),
+                            border: Border.all(
+                              color: colors.outlineVariant.withOpacity(0.5),
+                              width: 1.2,
                             ),
-                          ],
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: Material(
-                          type: MaterialType.transparency,
-                          child: _buildSidebarContent(),
+                            boxShadow: [
+                              BoxShadow(
+                                color: colors.shadow.withOpacity(0.15),
+                                blurRadius: 20,
+                                offset: const Offset(0, 8),
+                              ),
+                            ],
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: Material(
+                            type: MaterialType.transparency,
+                            child: _buildSidebarContent(),
+                          ),
                         ),
                       ),
                     ),
@@ -237,7 +256,7 @@ class _NavigationRailSectionState extends State<NavigationRailSection>
             child: Align(
               alignment: Alignment.centerRight,
               child: SvgPicture.asset(
-                'assets/nadeko-don.svg',
+                'assets/nadeko-don-outlined.svg',
                 width: AppTheme.iconXL * AppTheme.iconScale(context),
                 height: AppTheme.iconXL * AppTheme.iconScale(context),
                 colorFilter: ColorFilter.mode(
@@ -260,12 +279,13 @@ class _NavigationRailSectionState extends State<NavigationRailSection>
         const SizedBox(height: 4),
         buildItem(index: 1, icon: Icons.download, label: "Downloads"),
         buildItem(index: 2, icon: Icons.settings, label: "Settings"),
+        buildItem(index: 3, icon: Icons.monitor, label: "System"),
         const Spacer(),
         const Divider(height: 1),
         Padding(
           padding: EdgeInsets.all(AppTheme.spaceMD),
           child: Text(
-            "v1.0.0",
+            "v${_packageInfo.version}+${_packageInfo.buildNumber}",
             style: textTheme.bodySmall?.copyWith(
               color: colors.onSurfaceVariant,
             ),
@@ -329,6 +349,11 @@ class _NavigationRailSectionState extends State<NavigationRailSection>
                 icon: Icon(Icons.settings,
                     size: AppTheme.iconMD * AppTheme.iconScale(context)),
                 label: const Text(" Settings"),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.monitor,
+                    size: AppTheme.iconMD * AppTheme.iconScale(context)),
+                label: const Text(" System"),
               ),
             ],
           ),

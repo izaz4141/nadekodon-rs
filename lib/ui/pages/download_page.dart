@@ -196,7 +196,7 @@ class DownloadTile extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     switch (item.status) {
       case DownloadStatus.queued:
-        return Colors.blueGrey;
+        return colors.tertiary;
       case DownloadStatus.running:
         return colors.primary;
       case DownloadStatus.paused:
@@ -204,9 +204,9 @@ class DownloadTile extends StatelessWidget {
       case DownloadStatus.completed:
         return Colors.green;
       case DownloadStatus.cancelled:
-        return Colors.blueGrey;
+        return colors.secondary;
       case DownloadStatus.failed:
-        return Colors.red;
+        return colors.error;
     }
   }
 

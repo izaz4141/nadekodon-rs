@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 
 const fallbackSeed = Colors.pinkAccent;
-const double kDesktopBreakpoint = 640;
+const double kDesktopWidthBreakpoint = 640;
 
 class AppTheme {
   static ({ColorScheme light, ColorScheme dark}) getColorSchemes(
@@ -44,13 +44,13 @@ class AppTheme {
 
   static const double dialogWidthDesktop = 620;
   static const double dialogWidthMobile = 480;
-  static const double dialogMaxHeightDesktop = 560;
-  static const double dialogMaxHeightMobile = 420;
+  static const double dialogMaxHeightDesktop = 420;
+  static const double dialogMaxHeightMobile = 320;
 
   /// Determine if the layout is desktop-style
   static bool isDesktop(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
-    return width >= kDesktopBreakpoint;
+    return width >= kDesktopWidthBreakpoint;
   }
 
   /// Responsive dialog width
@@ -62,17 +62,17 @@ class AppTheme {
       isDesktop(context) ? dialogMaxHeightDesktop : dialogMaxHeightMobile;
 
   static double textScale(BuildContext context) =>
-      isDesktop(context) ? 1.0 : 0.9;
+      isDesktop(context) ? 1.0 : 0.95;
   static double spaceScale(BuildContext context) =>
-      isDesktop(context) ? 1.0 : 0.9;
+      isDesktop(context) ? 1.0 : 0.95;
   static double iconScale(BuildContext context) =>
-      isDesktop(context) ? 1.0 : 0.81;
-  static double radiusScale(BuildContext context) =>
       isDesktop(context) ? 1.0 : 0.9;
+  static double radiusScale(BuildContext context) =>
+      isDesktop(context) ? 1.0 : 0.95;
   static double widthScale(BuildContext context) =>
-      isDesktop(context) ? 1.0 : 0.75;
-  static double heightScale(BuildContext context) =>
       isDesktop(context) ? 1.0 : 0.8;
+  static double heightScale(BuildContext context) =>
+      isDesktop(context) ? 1.0 : 0.9;
 
   // =====================
   // THEME BUILDER

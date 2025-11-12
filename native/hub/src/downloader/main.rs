@@ -4,20 +4,20 @@ use futures::future::join_all;
 use indexmap::IndexMap;
 use reqwest::header::{ACCEPT_RANGES, CONTENT_LENGTH, RANGE};
 use std::{
-    collections::HashSet, iter::Cloned, path::PathBuf, sync::{
+    collections::HashSet, path::PathBuf, sync::{
         Arc, atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering}
     }, time::{Duration, SystemTime, UNIX_EPOCH}
 };
 use tokio::{
     fs::File as TokioFile,
     io::{AsyncSeekExt, AsyncWriteExt, SeekFrom},
-    sync::{mpsc, Mutex, Notify, Semaphore, RwLock},
+    sync::{mpsc, Mutex, Notify, RwLock},
     task::JoinHandle,
     time::{timeout, interval, Interval, Instant, sleep_until},
 };
 use uuid::Uuid;
-use bytes::Bytes;
-use rinf::{RustSignal, debug_print};
+use crate::utils::logger;
+use rinf::RustSignal;
 
 use crate::utils::{
     types::{
@@ -25,6 +25,7 @@ use crate::utils::{
         WorkerEvent, DMSettings,
     },
     helper::calc_speed,
+    url::is_hls_url,
 };
 use crate::signals::{DownloadGlance, DownloadList};
 
@@ -92,14 +93,19 @@ impl DownloadWorker {
         let threads = self.threads;
         let (url, dest) = self.extract_info().await;
         let head_data = self.fetch_head(&url).await?;
-        self.update_total_size(head_data.total_size).await;
 
-        let is_single_thread = !head_data.accept_ranges || head_data.total_size.is_none() || threads <= 1;
+        let is_hls = is_hls_url(&url, &head_data.content_type);
 
-        let size = head_data.total_size.unwrap_or(0); // Use 0 for size if not available for single thread
-        self.prepare_file(&dest, size, is_single_thread)?;
+        if is_hls {
+            self.spawn_hls_download_task(&url, &dest).await?;
+        } else {
+            self.update_total_size(head_data.total_size).await;
+            let is_single_thread = !head_data.accept_ranges || head_data.total_size.is_none() || threads <= 1;
+            let size = head_data.total_size.unwrap_or(0);
+            self.prepare_file(&dest, size, is_single_thread)?;
+            self.spawn_download_tasks(&url, &dest, size, threads, is_single_thread, head_data.accept_ranges).await?;
+        }
 
-        self.spawn_download_tasks(&url, &dest, size, threads, is_single_thread, head_data.accept_ranges).await?;
         self.spawn_sampler_and_monitor().await?;
 
         Ok(())
@@ -151,9 +157,16 @@ impl DownloadWorker {
             .map(|s| s.to_ascii_lowercase().contains("bytes"))
             .unwrap_or(false);
 
+        let content_type = head
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+
         Ok(HeadData {
             total_size,
             accept_ranges,
+            content_type,
         })
     }
 
@@ -239,7 +252,7 @@ impl DownloadWorker {
                 self.notify_resume.notified().await;
             }
             if self.cancel.load(Ordering::SeqCst) {
-                debug_print!("Segment {} canceled early", i);
+                logger::debug(&format!("Segment {} canceled early", i));
                 return Ok(());
             }
 
@@ -260,7 +273,7 @@ impl DownloadWorker {
                     Err(e) => return Err(anyhow::anyhow!("Segment {} bad status: {}", i, e)),
                 },
                 Err(e) => {
-                    debug_print!("Segment {} request failed: {:?}", i, e);
+                    logger::error(&format!("Segment {} request failed: {:?}", i, e));
                     if attempt > download_retries {
                         self.cancel().await?;
                         return Err(anyhow::anyhow!("Segment {} request failed: {:?}", i, e))
@@ -285,7 +298,7 @@ impl DownloadWorker {
                 }
                 
                 if self.cancel.load(Ordering::SeqCst) {
-                    debug_print!("Segment {} cancelled", i);
+                    logger::debug(&format!("Segment {} cancelled", i));
                     return Ok(());
                 }
 
@@ -298,7 +311,7 @@ impl DownloadWorker {
                     }
 
                     Some(Err(e)) => {
-                        debug_print!("Segment {}: stream error {:?}", i, e);
+                        logger::error(&format!("Segment {}: stream error {:?}", i, e));
                         if attempt > download_retries {
                             self.cancel().await?;
                             return Err(anyhow::anyhow!("Segment {} stream error: {}", i, e));
@@ -327,7 +340,7 @@ impl DownloadWorker {
                 };
 
                 if let Err(e) = file.write_all(&next_chunk).await {
-                    debug_print!("Segment {}: file write error {:?}", i, e);
+                    logger::error(&format!("Segment {}: file write error {:?}", i, e));
                     if attempt > download_retries {
                         self.cancel().await?;
                         return Err(anyhow::anyhow!("Segment {} file write failed: {}", i, e));
@@ -354,6 +367,123 @@ impl DownloadWorker {
             }
         }
         // Err(anyhow::anyhow!("Segment {} failed after retries", i))
+    }
+
+    async fn spawn_hls_download_task(self: &Arc<Self>, url: &str, dest: &std::path::Path) -> Result<()> {
+        logger::debug(&format!("Starting HLS download for {}", url));
+        let client = self.client.clone();
+        let worker = Arc::clone(self);
+
+        let url = url.to_string();
+        let dest = dest.to_path_buf();
+
+        let h = tokio::spawn(async move {
+            worker.download_hls_stream(&client, &url, &dest).await
+        });
+
+        let mut handles = self.handles.lock().await;
+        handles.push(h);
+        Ok(())
+    }
+
+    async fn download_hls_stream(
+        self: &Arc<Self>, 
+        client: &reqwest::Client, 
+        url: &str, 
+        dest: &std::path::Path) -> Result<()> {
+        // 1. Fetch master playlist
+        let playlist_content = client.get(url).send().await?.text().await?;
+
+        // 2. Parse playlist to find segments
+        // For simplicity, assuming it's a media playlist, not a master playlist with variants.
+        let base_url = {
+            let mut url_parts = url.split('/').collect::<Vec<_>>();
+            url_parts.pop();
+            url_parts.join("/") + "/"
+        };
+
+        let mut segment_urls = Vec::new();
+        for line in playlist_content.lines() {
+            if !line.starts_with('#') && !line.is_empty() {
+                if line.starts_with("http") {
+                    segment_urls.push(line.to_string());
+                } else {
+                    segment_urls.push(format!("{}{}", base_url, line));
+                }
+            }
+        }
+
+        if segment_urls.is_empty() {
+            return Err(anyhow::anyhow!("No segments found in HLS playlist"));
+        }
+
+        // Create a temporary directory for segments
+        let temp_dir = dest.parent().unwrap().join(format!("temp_{}", self.info.lock().await.id));
+        tokio::fs::create_dir_all(&temp_dir).await?;
+
+        // 5. Download all segments
+        let mut segment_paths = Vec::new();
+        for (i, segment_url) in segment_urls.iter().enumerate() {
+            if self.cancel.load(Ordering::SeqCst) {
+                return Ok(());
+            }
+            while self.paused.load(Ordering::SeqCst) {
+                self.notify_resume.notified().await;
+            }
+
+            let segment_path = temp_dir.join(format!("segment_{}.ts", i));
+            let mut file = TokioFile::create(&segment_path).await?;
+            
+            let resp = client.get(segment_url).send().await?;
+            let mut stream = resp.bytes_stream();
+
+            while let Some(chunk) = stream.next().await {
+                while self.paused.load(Ordering::SeqCst) {
+                    self.notify_resume.notified().await;
+                }
+                if self.cancel.load(Ordering::SeqCst) {
+                    logger::debug(&format!("Segment {} cancelled", i));
+                    return Ok(());
+                }
+
+                let chunk = chunk?;
+                file.write_all(&chunk).await?;
+                self.downloaded.fetch_add(chunk.len() as u64, Ordering::SeqCst);
+            }
+            segment_paths.push(segment_path);
+        }
+
+        // 6. Concatenate segments using ffmpeg
+        let list_path = temp_dir.join("mylist.txt");
+        let mut list_file = TokioFile::create(&list_path).await?;
+        for path in &segment_paths {
+            let line = format!("file '{}'\n", path.to_str().unwrap());
+            list_file.write_all(line.as_bytes()).await?;
+        }
+        list_file.flush().await?;
+
+        let mut command = tokio::process::Command::new("ffmpeg");
+        command.arg("-f").arg("concat")
+               .arg("-safe").arg("0")
+               .arg("-i").arg(&list_path)
+               .arg("-c").arg("copy")
+               .arg("-y")
+               .arg(dest);
+
+        match command.output().await {
+            Ok(output) => {
+                if !output.status.success() {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    return Err(anyhow::anyhow!("ffmpeg failed: {}", stderr));
+                }
+            }
+            Err(e) => return Err(anyhow::anyhow!("ffmpeg execution failed: {}", e)),
+        }
+
+        // Clean up temp directory
+        tokio::fs::remove_dir_all(&temp_dir).await?;
+
+        Ok(())
     }
 
     async fn spawn_sampler_and_monitor(self: &Arc<Self>) -> Result<()> {
@@ -413,7 +543,7 @@ impl DownloadWorker {
                     Ok(Ok(())) => {},
                     Ok(Err(e)) => {
                         let err_str = format!("Monitor: segment {} failed {:?}", i, e);
-                        debug_print!("{}", &err_str);
+                        logger::error(&err_str);
                         let mut info = monitor_worker.info.lock().await;
                         info.state = DownloadState::Error(err_str.clone());
                         let id = info.id;
@@ -422,7 +552,7 @@ impl DownloadWorker {
                     }
                     Err(e) => {
                         let err_str = format!("Monitor: join error {:?}", &e);
-                        debug_print!("{}", &err_str);
+                        logger::error(&err_str);
                         let mut info = monitor_worker.info.lock().await;
                         info.state = DownloadState::Error(err_str.clone());
                         let id = info.id;
@@ -563,7 +693,7 @@ impl DownloadManager {
                     };
                 }
 
-                debug_print!("Worker {:?} finished event: {:?}", id, event);
+                logger::debug(&format!("Worker {:?} finished event: {:?}", id, event));
             }
         }
         self.process_queue().await;
@@ -769,7 +899,7 @@ impl DownloadManager {
                     DownloadList { list: download_list }.send_signal_to_dart();
                 }
                 Err(e) => {
-                    debug_print!("Failed to get download details: {:?}", e);
+                    logger::error(&format!("Failed to get download details: {:?}", e));
                 }
             }
         }

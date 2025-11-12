@@ -11,6 +11,7 @@ use downloader::{
 };
 use rinf::{dart_shutdown, write_interface};
 use tokio::spawn;
+use utils::ytdlp::handle_ytdl_query;
 
 
 
@@ -36,6 +37,7 @@ async fn main() {
     spawn(pause_download(dm.clone()));
     spawn(resume_download(dm.clone()));
     spawn(cancel_download(dm.clone()));
+    spawn(handle_ytdl_query());
 
     // Keep the main function running until Dart shutdown.
     dart_shutdown().await;

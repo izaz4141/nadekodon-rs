@@ -17,6 +17,12 @@ pub struct UpdateSettings {
 pub struct QueryUrl {
     pub url: String,
 }
+
+#[derive(Deserialize, DartSignal)]
+pub struct QueryYtdl {
+    pub url: String,
+}
+
 #[derive(Serialize, RustSignal)]
 pub struct UrlQueryOutput {
     pub url: String,
@@ -28,10 +34,33 @@ pub struct UrlQueryOutput {
     pub error: bool,
 }
 
+#[derive(Serialize, RustSignal)]
+pub struct YtdlQueryOutput {
+    pub name: String,
+    pub thumbnail: Option<String>,
+    pub videos: Vec<YtdlFormat>,
+    pub audios: Vec<YtdlFormat>,
+    pub error: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, SignalPiece)]
+pub struct YtdlFormat {
+    pub format_id: String,
+    pub ext: String,
+    pub filesize: Option<u64>,
+    pub url: String,
+    pub vcodec: Option<String>,
+    pub acodec: Option<String>,
+    pub note: String,
+}
+
 #[derive(Deserialize, DartSignal)]
 pub struct DoDownload {
-    pub url: String,
+    pub url: Option<String>,
     pub dest: String,
+    pub video_format: Option<YtdlFormat>,
+    pub audio_format: Option<YtdlFormat>,
+    pub is_ytdl: bool,
 }
 
 #[derive(Deserialize, DartSignal)]
@@ -81,4 +110,10 @@ pub struct ResumeDownload {
 #[derive(Deserialize, DartSignal)]
 pub struct CancelDownload {
     pub id: String
+}
+
+#[derive(Serialize, RustSignal)]
+pub struct LogSignal {
+    pub level: String,
+    pub message: String,
 }

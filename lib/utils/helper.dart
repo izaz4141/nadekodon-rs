@@ -25,3 +25,16 @@ String camelToSnake(String input) {
     (match) => '${match[1]}_${match[2]!.toLowerCase()}',
   ).toLowerCase();
 }
+
+bool isUrl(String url) {
+  final regex = RegExp(
+    r'^(?:http|https)://'
+    r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'
+    r'localhost|'
+    r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'
+    r'(?::\d+)?'
+    r'(?:/?|[/?]\S+)$',
+    caseSensitive: false,
+  );
+  return regex.hasMatch(url);
+}

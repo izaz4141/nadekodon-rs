@@ -30,7 +30,8 @@ class AppSnackBar {
         defaultIcon = Icons.check_circle;
         break;
       case SnackType.error:
-        bgColor = Colors.red.shade600;
+        bgColor = colors.error;
+        fgColor = colors.onError;
         defaultIcon = Icons.error;
         break;
       case SnackType.info:
@@ -62,7 +63,7 @@ class AppSnackBar {
                   borderRadius: BorderRadius.circular(AppTheme.radiusMD),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withAlpha(50),
+                      color: colors.shadow.withOpacity(0.2),
                       blurRadius: 8,
                       offset: const Offset(0, 3),
                     )
@@ -186,6 +187,7 @@ class _OverlaySnackState extends State<_OverlaySnack>
   Widget build(BuildContext context) {
     final bottomPadding = MediaQuery.of(context).padding.bottom + AppTheme.spaceXXL;
     final textTheme = Theme.of(context).textTheme;
+    final colors = Theme.of(context).colorScheme;
 
     return Positioned(
       bottom: bottomPadding,
@@ -217,7 +219,7 @@ class _OverlaySnackState extends State<_OverlaySnack>
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withAlpha(50),
+                          color: colors.shadow.withOpacity(0.2),
                           blurRadius: 8,
                           offset: const Offset(0, 3),
                         ),

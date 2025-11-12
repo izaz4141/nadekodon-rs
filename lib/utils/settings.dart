@@ -5,35 +5,40 @@ import 'package:path_provider/path_provider.dart';
 
 import 'package:rinf/rinf.dart';
 import 'package:nadekodon/src/bindings/bindings.dart';
-import 'package:nadekodon/utils/helper.dart';
+import 'package:nadekodon/utils/defaults.dart';
+import 'package:nadekodon/utils/logger.dart';
 
 class SettingsManager {
   static late File _file;
   static late String configPath;
-
+  static late Directory? downloadsDir;
+  static late Directory? configDir;
 
   // Your ValueNotifiers
-  static final retreatToTray = ValueNotifier<bool>(true);
+  static final retreatToTray = ValueNotifier<bool>(DefaultSettings.retreatToTray);
   static final downloadFolder = ValueNotifier<String>('');
-  static final serverPort = ValueNotifier<int>(8080);
-  static final speedLimit = ValueNotifier<double>(0.0);
-  static final downloadThreads = ValueNotifier<int>(8);
-  static final concurrencyLimit = ValueNotifier<int>(3);
-  static final downloadTimeout = ValueNotifier<int>(30);
-  static final downloadRetries = ValueNotifier<int>(5);
+  static final serverPort = ValueNotifier<int>(DefaultSettings.serverPort);
+  static final speedLimit = ValueNotifier<double>(DefaultSettings.speedLimit);
+  static final downloadThreads = ValueNotifier<int>(DefaultSettings.downloadThreads);
+  static final concurrencyLimit = ValueNotifier<int>(DefaultSettings.concurrencyLimit);
+  static final downloadTimeout = ValueNotifier<int>(DefaultSettings.downloadTimeout);
+  static final downloadRetries = ValueNotifier<int>(DefaultSettings.downloadRetries);
 
   /// Init config system (call at app startup)
   static Future<void> init() async {
-    final dir = await getApplicationSupportDirectory();
-    configPath = '${dir.path}/config.json';
+    downloadsDir = await getDownloadsDirectory();
+    DefaultSettings.downloadFolder = downloadsDir?.path ?? '';
+    configDir = await getApplicationSupportDirectory();
+    configPath = '${configDir!.path}/config.json';
     _file = File(configPath);
 
     if (await _file.exists()) {
       final data = jsonDecode(await _file.readAsString());
       _applyFromJson(data);
-      debugPrint(configPath);
+      log(configPath);
     } else {
-      debugPrint("Initial Config");
+      log("Initial Config");
+      downloadFolder.value = '';
       await _saveAll();
     }
 
@@ -41,14 +46,14 @@ class SettingsManager {
   }
 
   static void _applyFromJson(Map<String, dynamic> json) {
-    retreatToTray.value = json['retreat_to_tray'] ?? true;
-    downloadFolder.value = json['download_folder'] ?? '';
-    serverPort.value = json['server_port'] ?? 8080;
-    speedLimit.value = (json['speed_limit'] ?? 2.0).toDouble();
-    downloadThreads.value = json['download_threads'] ?? 8;
-    concurrencyLimit.value = json['concurrency_limit'] ?? 3;
-    downloadTimeout.value = json['download_timeout'] ?? 30;
-    downloadRetries.value = json['download_retries'] ?? 5;
+    retreatToTray.value = json['retreat_to_tray'] ?? DefaultSettings.retreatToTray;
+    downloadFolder.value = json['download_folder'] ?? DefaultSettings.downloadFolder;
+    serverPort.value = json['server_port'] ?? DefaultSettings.serverPort;
+    speedLimit.value = (json['speed_limit'] ?? DefaultSettings.speedLimit).toDouble();
+    downloadThreads.value = json['download_threads'] ?? DefaultSettings.downloadThreads;
+    concurrencyLimit.value = json['concurrency_limit'] ?? DefaultSettings.concurrencyLimit;
+    downloadTimeout.value = json['download_timeout'] ?? DefaultSettings.downloadTimeout;
+    downloadRetries.value = json['download_retries'] ?? DefaultSettings.downloadRetries;
   }
 
   static Map<String, dynamic> _toJson() => {

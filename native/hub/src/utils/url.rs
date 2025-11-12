@@ -111,3 +111,13 @@ pub async fn get_url_info(client: Client, url: &str) -> Result<UrlInfo> {
         content_type,
     })
 }
+
+pub fn is_hls_url(url: &str, content_type: &Option<String>) -> bool {
+    url.ends_with(".m3u8") || match content_type {
+        Some(ct) => {
+            let ct_lower = ct.to_ascii_lowercase();
+            ct_lower.contains("application/vnd.apple.mpegurl") || ct_lower.contains("application/x-mpegurl")
+        }
+        None => false,
+    }
+}

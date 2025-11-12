@@ -7,6 +7,8 @@ use crate::utils::types::{
 };
 use crate::downloader::main::DownloadManager;
 
+use crate::utils::logger;
+
 pub async fn update_settings(dm: Arc<DownloadManager>) {
     let receiver = UpdateSettings::get_dart_signal_receiver();
 
@@ -24,7 +26,7 @@ pub async fn update_settings(dm: Arc<DownloadManager>) {
         };
         drop(dm_old);
 
-        debug_print!("Updated dm settings to {:?}", &dm_new);
+        logger::debug(&format!("Updated dm settings to {:?}", &dm_new));
         let _ = dm.update_settings(dm_new).await;
         match data_clone.server_port {
             Some(p) => {

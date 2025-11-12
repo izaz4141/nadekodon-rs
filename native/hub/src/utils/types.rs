@@ -31,6 +31,7 @@ pub struct ServerSettings {
 pub struct HeadData {
     pub total_size: Option<u64>,
     pub accept_ranges: bool,
+    pub content_type: Option<String>,
 }
 
 #[derive(Debug, Clone)]
