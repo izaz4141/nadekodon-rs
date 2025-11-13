@@ -3,25 +3,24 @@ version: 1
 script:
   # Clean up and prepare AppDir
   - rm -rf AppDir || true
-  - mkdir -p AppDir/usr/bin
-  - cp -r build/linux/x64/release/bundle/* AppDir/usr/bin/
+  - cp -r build/linux/x64/release/bundle AppDir
+  - mkdir -p AppDir/usr/share/icons
+  - cp assets/icons/nadekodon.png AppDir/usr/share/icons/
 
 AppDir:
   path: ./AppDir
 
   app_info:
     id: id.glicole.nadekodon
-    name: Nadekodon
-    icon: usr/bin/data/flutter_assets/assets/icons/nadekodon.png
+    name: Nadeko~don
+    icon: nadekodon
     version: latest
-    exec: usr/bin/nadekodon
+    exec: nadekodon
     exec_args: $@
 
-  # Set up environment variables for Flutter shared libs
-  runtime:
-    env:
-      LD_LIBRARY_PATH: "$APPDIR/usr/bin/lib:$LD_LIBRARY_PATH"
-      PATH: "$APPDIR/usr/bin:$PATH"
+  files:
+    include:
+      - assets/icons/nadekodon.png
 
 AppImage:
   arch: x86_64
