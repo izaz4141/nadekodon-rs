@@ -21,6 +21,7 @@ pub struct QueryUrl {
 #[derive(Deserialize, DartSignal)]
 pub struct QueryYtdl {
     pub url: String,
+    pub ytdlp_path: String,
 }
 
 #[derive(Serialize, RustSignal)]

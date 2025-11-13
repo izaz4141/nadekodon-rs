@@ -6,12 +6,14 @@ import 'package:path_provider/path_provider.dart';
 import 'package:nadekodon/src/bindings/bindings.dart';
 import 'package:nadekodon/utils/defaults.dart';
 import 'package:nadekodon/utils/logger.dart';
+import 'package:nadekodon/utils/helper.dart';
 
 class SettingsManager {
   static late File _file;
   static late String configPath;
   static late Directory? downloadsDir;
   static late Directory? configDir;
+  static late String ytdlpPath;
 
   // Your ValueNotifiers
   static final retreatToTray = ValueNotifier<bool>(
@@ -35,6 +37,7 @@ class SettingsManager {
 
   /// Init config system (call at app startup)
   static Future<void> init() async {
+    ytdlpPath = await prepareYtDlpExecutable();
     downloadsDir = await getDownloadsDirectory();
     DefaultSettings.downloadFolder = downloadsDir?.path ?? '';
     configDir = await getApplicationSupportDirectory();

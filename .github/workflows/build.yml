@@ -86,7 +86,7 @@ jobs:
         if: matrix.target == 'linux'
         run: |
           sudo apt update
-          sudo apt install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev libfuse2
+          sudo apt install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libfuse2 libayatana-appindicator
 
       - name: Install Java (Android only)
         if: startsWith(matrix.target, 'android')
@@ -117,6 +117,16 @@ jobs:
 
       - name: Generate launcher icons
         run: dart run flutter_launcher_icons
+
+      - name: Download yt-dlp for Android
+        if: matrix.target == 'android-arm64'
+        run: |
+          mkdir -p assets/bin
+          echo "Downloading yt-dlp_linux_aarch64 ..."
+          curl -L -o assets/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_aarch64
+          chmod +x assets/bin/yt-dlp
+          echo "yt-dlp added to assets/bin"
+          ls -lh assets/bin
 
       - name: Build app
         run: ${{ matrix.build_cmd }}

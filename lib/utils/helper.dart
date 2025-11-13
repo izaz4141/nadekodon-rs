@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:collection/collection.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:flutter/services.dart' show rootBundle;
 
 String formatBytes(int bytes) {
   const suffixes = ["B", "KB", "MB", "GB"];
@@ -44,4 +46,22 @@ bool isUrl(String url) {
 Future<bool> fileExist(String path) async {
   final file = File(path);
   return await file.exists();
+}
+
+Future<String> prepareYtDlpExecutable() async {
+  if (!Platform.isAndroid) {
+    return 'yt-dlp';
+  }
+  final dir = await getApplicationSupportDirectory();
+  final ytDlpPath = '${dir.path}/yt-dlp';
+
+  final ytDlpFile = File(ytDlpPath);
+  if (!await ytDlpFile.exists()) {
+    final bytes = await rootBundle.load('assets/bin/yt-dlp');
+    await ytDlpFile.writeAsBytes(bytes.buffer.asUint8List(), flush: true);
+
+    await Process.run('chmod', ['+x', ytDlpPath]);
+  }
+
+  return ytDlpPath;
 }

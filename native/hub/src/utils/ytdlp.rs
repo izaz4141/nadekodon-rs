@@ -6,8 +6,8 @@ use crate::utils::logger;
 
 use crate::signals::{QueryYtdl, YtdlQueryOutput, YtdlFormat};
 
-async fn get_ytdl_info(url: &str) -> Result<YtdlQueryOutput, String> {
-    let output = Command::new("yt-dlp")
+async fn get_ytdl_info(ytdlp_path: &str, url: &str) -> Result<YtdlQueryOutput, String> {
+    let output = Command::new(&ytdlp_path)
         .arg("--dump-json")
         .arg(url)
         .output()
@@ -61,7 +61,8 @@ pub async fn handle_ytdl_query() {
     let mut receiver = QueryYtdl::get_dart_signal_receiver();
     while let Some(signal) = receiver.recv().await {
         let url = signal.message.url;
-        let result = get_ytdl_info(&url).await;
+        let ytdlp_path = signal.message.ytdlp_path;
+        let result = get_ytdl_info(&ytdlp_path, &url).await;
         let signal_to_send = match result {
             Ok(output) => {
                 logger::debug(&format!("YT-DLP url queried OK!"));
