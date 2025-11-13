@@ -4,7 +4,6 @@ on:
   push:
     tags:
       - "v*"
-  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -84,6 +83,18 @@ jobs:
           name: pubspec
           path: .
 
+      - name: Cache Linux System Dependencies (APT)
+        # Use a specific, fixed key to re-run this step only if the key is missing.
+        # This prevents repeated slow 'sudo apt install' on subsequent runs.
+        if: matrix.target == 'linux-x64'
+        id: apt-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            /var/cache/apt/archives
+            /usr/lib/x86_64-linux-gnu/cmake
+          key: ${{ runner.os }}-linux-deps-v1 
+
       - name: Install system deps (Linux only)
         if: matrix.target == 'linux-x64'
         run: |
@@ -98,6 +109,18 @@ jobs:
           distribution: zulu
           java-version: 17
           cache: gradle
+
+      - name: Cache Rust dependencies and target directory
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          # Cache key changes if the OS or Cargo.lock file changes
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
