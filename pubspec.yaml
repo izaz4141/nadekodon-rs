@@ -108,7 +108,7 @@ flutter_launcher_icons:
   image_path: "assets/nadeko-don.png"
   android: "launcher_icon"
   min_sdk_android: 21 # android min sdk min:16, default 21
-  adaptive_icon_background: "@android:color/transparent"
+  adaptive_icon_background: "#FFFFFF"
   adaptive_icon_foreground: "assets/nadeko-don-sm.png"
   adaptive_icon_monochrome: "assets/nadeko-don-outlined-sm.png"
   ios: false

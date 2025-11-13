@@ -1,0 +1,188 @@
+name: Build Nadekodon
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  ARTIFACT_NAME: nadekodon
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      flutter_version: ${{ steps.out.outputs.flutter_version }}
+      version_name: ${{ steps.out.outputs.version_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine Flutter version
+        id: out
+        run: |
+          if [ -f ".fvmrc" ]; then
+            FLUTTER_VERSION=$(jq -r '.flutter' .fvmrc)
+          else
+            FLUTTER_VERSION="stable"
+          fi
+          echo "flutter_version=${FLUTTER_VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Update pubspec.yaml version using tag and run number
+        run: |
+          VERSION_TAG="${GITHUB_REF_NAME#v}"   # remove leading 'v' from tag
+          BUILD_NUM=${GITHUB_RUN_NUMBER}
+          NEW_VERSION="${VERSION_TAG}+${BUILD_NUM}"
+          echo "Setting pubspec.yaml version: ${NEW_VERSION}"
+
+          if grep -q '^version:' pubspec.yaml; then
+            sed -i "s/^version:.*/version: ${NEW_VERSION}/" pubspec.yaml
+          else
+            echo "version: ${NEW_VERSION}" >> pubspec.yaml
+          fi
+
+          grep version pubspec.yaml
+          echo "version_name=${VERSION_TAG}" >> $GITHUB_OUTPUT
+
+      - name: Upload updated pubspec.yaml
+        uses: actions/upload-artifact@v4
+        with:
+          name: pubspec
+          path: pubspec.yaml
+
+  build-template:
+    runs-on: ${{ matrix.os }}
+    needs: setup
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux
+            build_cmd: flutter build linux --release
+            artifact_path: build/linux/x64/release/bundle
+          - os: windows-latest
+            target: windows
+            build_cmd: flutter build windows --release
+            artifact_path: build/windows/x64/runner/Release
+          - os: ubuntu-latest
+            target: android-arm64
+            build_cmd: flutter build apk --release --target-platform android-arm64
+            artifact_path: build/app/outputs/flutter-apk/app-release.apk
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download updated pubspec.yaml
+        uses: actions/download-artifact@v4
+        with:
+          name: pubspec
+          path: .
+
+      - name: Install system deps (Linux only)
+        if: matrix.target == 'linux'
+        run: |
+          sudo apt update
+          sudo apt install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev libfuse2
+
+      - name: Install Java (Android only)
+        if: startsWith(matrix.target, 'android')
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: 17
+          cache: gradle
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ needs.setup.outputs.flutter_version }}
+          channel: stable
+          cache: true
+
+      - name: Install rinf_cli
+        run: cargo install rinf_cli --force
+
+      - name: Generate rinf bindings
+        run: rinf gen
+
+      - name: Get Flutter packages
+        run: flutter pub get
+
+      - name: Generate launcher icons
+        run: dart run flutter_launcher_icons
+
+      - name: Build app
+        run: ${{ matrix.build_cmd }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}-${{ matrix.target }}
+          path: ${{ matrix.artifact_path }}
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-template, setup]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # required to read previous tags
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Rename executables
+        run: |
+          mkdir -p uploads
+          if [ -d "dist/${{ env.ARTIFACT_NAME }}-linux" ]; then
+            cp dist/${{ env.ARTIFACT_NAME }}-linux/${{ env.ARTIFACT_NAME }} uploads/${{ env.ARTIFACT_NAME }}-linux
+          fi
+          if [ -d "dist/${{ env.ARTIFACT_NAME }}-windows" ]; then
+            cp dist/${{ env.ARTIFACT_NAME }}-windows/${{ env.ARTIFACT_NAME }}.exe uploads/${{ env.ARTIFACT_NAME }}-windows.exe
+          fi
+          if [ -f "dist/${{ env.ARTIFACT_NAME }}-android-arm64/app-release.apk" ]; then
+            cp dist/${{ env.ARTIFACT_NAME }}-android-arm64/app-release.apk uploads/${{ env.ARTIFACT_NAME }}-android-arm64.apk
+          fi
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          echo "Previous tag: $PREV_TAG"
+
+          BODY="## Changelog\n"
+          if [ -n "$PREV_TAG" ]; then
+            COMMITS=$(git log "$PREV_TAG"..HEAD --pretty=format:"- %s (%h)" --no-merges)
+          else
+            COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges)
+          fi
+
+          BODY="${BODY}${COMMITS}"
+          echo "BODY<<EOF" >> $GITHUB_ENV
+          echo -e "$BODY" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Push GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          body: ${{ env.BODY }}
+          files: |
+            uploads/${{ env.ARTIFACT_NAME }}-linux
+            uploads/${{ env.ARTIFACT_NAME }}-windows.exe
+            uploads/${{ env.ARTIFACT_NAME }}-android-arm64.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
