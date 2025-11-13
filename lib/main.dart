@@ -36,7 +36,7 @@ Future<void> main() async {
       );
 
       if (SettingsManager.retreatToTray.value) {
-        await trayManager.setIcon('assets/nadeko-don.png');
+        await trayManager.setIcon('assets/icons/nadeko-don.png');
         if (!Platform.isLinux) {
           await trayManager.setToolTip(
             'Nadeko~don',
@@ -48,7 +48,7 @@ Future<void> main() async {
               MenuItem(
                 key: 'show',
                 label: 'Show App',
-                icon: 'assets/nadeko-don.png',
+                icon: 'assets/icons/nadeko-don.png',
               ),
               MenuItem(key: 'exit', label: 'Close App'),
             ],

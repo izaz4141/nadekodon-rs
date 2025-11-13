@@ -1,5 +1,4 @@
 import 'package:intl/intl.dart';
-import 'package:flutter/foundation.dart';
 import 'package:nadekodon/src/bindings/bindings.dart';
 
 void log(String message, {bool isError = false}) {

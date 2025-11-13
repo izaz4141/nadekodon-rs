@@ -256,7 +256,7 @@ class _NavigationRailSectionState extends State<NavigationRailSection>
             child: Align(
               alignment: Alignment.centerRight,
               child: SvgPicture.asset(
-                'assets/nadeko-don-outlined.svg',
+                'assets/icons/nadeko-don-outlined.svg',
                 width: AppTheme.iconXL * AppTheme.iconScale(context),
                 height: AppTheme.iconXL * AppTheme.iconScale(context),
                 colorFilter: ColorFilter.mode(

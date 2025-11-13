@@ -3,6 +3,8 @@ import 'package:collection/collection.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
+import 'package:nadekodon/utils/logger.dart';
+
 String formatBytes(int bytes) {
   const suffixes = ["B", "KB", "MB", "GB"];
   double size = bytes.toDouble();
@@ -49,19 +51,31 @@ Future<bool> fileExist(String path) async {
 }
 
 Future<String> prepareYtDlpExecutable() async {
-  if (!Platform.isAndroid) {
+  try {
+    if (!Platform.isAndroid) {
+      return 'yt-dlp';
+    }
+
+    final supportDir = await getApplicationSupportDirectory();
+    final ytDlpPath = p.join(supportDir.path, 'yt-dlp');
+    final ytDlpFile = File(ytDlpPath);
+
+    if (await ytDlpFile.exists() && await ytDlpFile.length() > 0) {
+      return ytDlpPath;
+    }
+
+    ByteData bytes;
+    try {
+      bytes = await rootBundle.load('assets/bin/yt-dlp');
+    } on FlutterError catch (e) {
+      return 'yt-dlp';
+    }
+
+    await ytDlpFile.writeAsBytes(bytes.buffer.asUint8List(), flush: true);
+    await Process.run('chmod', ['+x', ytDlpPath]);
+
+    return ytDlpPath;
+  } catch (e, st) {
     return 'yt-dlp';
   }
-  final dir = await getApplicationSupportDirectory();
-  final ytDlpPath = '${dir.path}/yt-dlp';
-
-  final ytDlpFile = File(ytDlpPath);
-  if (!await ytDlpFile.exists()) {
-    final bytes = await rootBundle.load('assets/bin/yt-dlp');
-    await ytDlpFile.writeAsBytes(bytes.buffer.asUint8List(), flush: true);
-
-    await Process.run('chmod', ['+x', ytDlpPath]);
-  }
-
-  return ytDlpPath;
 }

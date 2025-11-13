@@ -53,7 +53,7 @@ class _SystemPageState extends State<SystemPage> {
               children: [
                 SizedBox(
                   height: AppTheme.iconXXL * 2 * AppTheme.iconScale(context),
-                  child: Image.asset('assets/nadeko-don.png'),
+                  child: Image.asset('assets/icons/nadeko-don.png'),
                 ),
                 SizedBox(height: AppTheme.spaceLG),
                 Text(
