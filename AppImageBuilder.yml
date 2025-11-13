@@ -5,7 +5,7 @@ script:
   - rm -rf AppDir || true
   - cp -r build/linux/x64/release/bundle AppDir
   - mkdir -p AppDir/usr/share/icons
-  - cp assets/icons/nadekodon.png AppDir/usr/share/icons/
+  - cp assets/icons/nadeko-don.png AppDir/usr/share/icons/
 
 AppDir:
   path: ./AppDir
@@ -13,14 +13,14 @@ AppDir:
   app_info:
     id: id.glicole.nadekodon
     name: Nadeko~don
-    icon: nadekodon
+    icon: nadeko-don
     version: latest
     exec: nadekodon
     exec_args: $@
 
   files:
     include:
-      - assets/icons/nadekodon.png
+      - assets/icons/nadeko-don.png
 
 AppImage:
   arch: x86_64
