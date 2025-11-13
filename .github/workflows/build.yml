@@ -86,7 +86,7 @@ jobs:
         if: matrix.target == 'linux'
         run: |
           sudo apt update
-          sudo apt install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libfuse2 libayatana-appindicator3-1
+          sudo apt install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libfuse2 libayatana-appindicator3-dev
 
       - name: Install Java (Android only)
         if: startsWith(matrix.target, 'android')
