@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:collection/collection.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -57,7 +59,7 @@ Future<String> prepareYtDlpExecutable() async {
     }
 
     final supportDir = await getApplicationSupportDirectory();
-    final ytDlpPath = p.join(supportDir.path, 'yt-dlp');
+    final ytDlpPath = '${supportDir.path}/yt-dlp';
     final ytDlpFile = File(ytDlpPath);
 
     if (await ytDlpFile.exists() && await ytDlpFile.length() > 0) {
@@ -68,6 +70,7 @@ Future<String> prepareYtDlpExecutable() async {
     try {
       bytes = await rootBundle.load('assets/bin/yt-dlp');
     } on FlutterError catch (e) {
+      log("Error when preparing YTDLP: $e");
       return 'yt-dlp';
     }
 
@@ -76,6 +79,7 @@ Future<String> prepareYtDlpExecutable() async {
 
     return ytDlpPath;
   } catch (e, st) {
+    log("Error when preparing YTDLP: $st");
     return 'yt-dlp';
   }
 }
