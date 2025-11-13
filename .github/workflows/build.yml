@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       flutter_version: ${{ steps.out.outputs.flutter_version }}
-      version_name: ${{ steps.out.outputs.version_name }}
+      version_name: ${{ steps.version.outputs.version_name }}
     steps:
       - uses: actions/checkout@v4
 
@@ -34,8 +34,9 @@ jobs:
           echo "flutter_version=${FLUTTER_VERSION}" >> $GITHUB_OUTPUT
 
       - name: Update pubspec.yaml version using tag and run number
+        id: version
         run: |
-          VERSION_TAG="${GITHUB_REF_NAME#v}"   # remove leading 'v' from tag
+          VERSION_TAG="${GITHUB_REF_NAME#v}"
           BUILD_NUM=${GITHUB_RUN_NUMBER}
           NEW_VERSION="${VERSION_TAG}+${BUILD_NUM}"
           echo "Setting pubspec.yaml version: ${NEW_VERSION}"
@@ -62,17 +63,18 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            target: linux
-            build_cmd: flutter build linux --release
-            artifact_path: build/linux/x64/release/bundle
+            target: linux-x64
+            build_cmd: flutter build linux --release --target-platform linux-x64
+            artifact_path: nadekodon-linux-x64.AppImage
           - os: windows-latest
             target: windows
             build_cmd: flutter build windows --release
-            artifact_path: build/windows/x64/runner/Release
+            artifact_path: nadekodon-windows.zip
           - os: ubuntu-latest
             target: android-arm64
             build_cmd: flutter build apk --release --target-platform android-arm64
-            artifact_path: build/app/outputs/flutter-apk/app-release.apk
+            artifact_path: nadekodon-android-arm64.apk
+
     steps:
       - uses: actions/checkout@v4
 
@@ -83,10 +85,11 @@ jobs:
           path: .
 
       - name: Install system deps (Linux only)
-        if: matrix.target == 'linux'
+        if: matrix.target == 'linux-x64'
         run: |
           sudo apt update
-          sudo apt install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libfuse2 libayatana-appindicator3-dev
+          sudo apt install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev \
+            libfuse2 libayatana-appindicator3-dev patchelf curl jq
 
       - name: Install Java (Android only)
         if: startsWith(matrix.target, 'android')
@@ -131,6 +134,37 @@ jobs:
       - name: Build app
         run: ${{ matrix.build_cmd }}
 
+      - name: Fix RPATH (Linux only)
+        if: matrix.target == 'linux-x64'
+        run: |
+          APP_PATH="build/linux/x64/release/bundle/${{ env.ARTIFACT_NAME }}"
+          LIB_PATH="build/linux/x64/release/bundle/lib"
+          for lib in "$LIB_PATH"/*.so; do
+            [[ -f "$lib" ]] && patchelf --set-rpath '$ORIGIN' "$lib"
+          done
+          patchelf --set-rpath '$ORIGIN/lib' "$APP_PATH"
+
+      - name: Build AppImage
+        if: matrix.target == 'linux-x64'
+        run: |
+          echo "Building AppImage using repo AppImageBuilder.yml ..."
+          wget -O appimage-builder-x86_64.AppImage https://github.com/AppImageCrafters/appimage-builder/releases/download/v1.1.0/appimage-builder-1.1.0-x86_64.AppImage
+          chmod +x appimage-builder-x86_64.AppImage
+          sudo mv appimage-builder-x86_64.AppImage /usr/local/bin/appimage-builder
+          appimage-builder --recipe AppImageBuilder.yml --skip-test
+          chmod +x ${{ matrix.artifact_path }}
+
+      - name: Package Windows build
+        if: matrix.target == 'windows'
+        run: |
+          echo "Creating portable Windows ZIP..."
+          7z a ./${{ matrix.artifact_path }} build/windows/x64/runner/Release/*
+
+      - name: Move Android artifact
+        if: matrix.target == 'android-arm64'
+        run: |
+          mv build/app/outputs/flutter-apk/app-release.apk ${{ matrix.artifact_path }}
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -146,53 +180,41 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # required to read previous tags
+          fetch-depth: 0
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist
 
-      - name: Rename executables
+      - name: Collect artifacts for release
         run: |
           mkdir -p uploads
-          if [ -d "dist/${{ env.ARTIFACT_NAME }}-linux" ]; then
-            cp dist/${{ env.ARTIFACT_NAME }}-linux/${{ env.ARTIFACT_NAME }} uploads/${{ env.ARTIFACT_NAME }}-linux
-          fi
-          if [ -d "dist/${{ env.ARTIFACT_NAME }}-windows" ]; then
-            cp dist/${{ env.ARTIFACT_NAME }}-windows/${{ env.ARTIFACT_NAME }}.exe uploads/${{ env.ARTIFACT_NAME }}-windows.exe
-          fi
-          if [ -f "dist/${{ env.ARTIFACT_NAME }}-android-arm64/app-release.apk" ]; then
-            cp dist/${{ env.ARTIFACT_NAME }}-android-arm64/app-release.apk uploads/${{ env.ARTIFACT_NAME }}-android-arm64.apk
-          fi
+          find dist -type f -exec cp {} uploads/ \;
+          ls -lh uploads
 
       - name: Generate release notes
         id: notes
         run: |
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           echo "Previous tag: $PREV_TAG"
-
           BODY="## Changelog\n"
           if [ -n "$PREV_TAG" ]; then
             COMMITS=$(git log "$PREV_TAG"..HEAD --pretty=format:"- %s (%h)" --no-merges)
           else
             COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges)
           fi
-
           BODY="${BODY}${COMMITS}"
           echo "BODY<<EOF" >> $GITHUB_ENV
           echo -e "$BODY" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
-      - name: Push GitHub Release
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
           body: ${{ env.BODY }}
-          files: |
-            uploads/${{ env.ARTIFACT_NAME }}-linux
-            uploads/${{ env.ARTIFACT_NAME }}-windows.exe
-            uploads/${{ env.ARTIFACT_NAME }}-android-arm64.apk
+          files: uploads/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
