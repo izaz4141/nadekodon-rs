@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:dynamic_color/dynamic_color.dart';
-import 'package:receive_sharing_intent/receive_sharing_intent.dart';
+import 'package:file_share_intent/file_share_intent.dart';
 
 import 'theme/app_theme.dart';
 import 'ui/pages/home_page.dart';
@@ -47,7 +47,7 @@ class _NadekoDonState extends State<NadekoDon> {
       _handleInitialIntent();
 
       // Listen for intents while app is running
-      _intentStreamSubscription = ReceiveSharingIntent.instance
+      _intentStreamSubscription = FileShareIntent.instance
           .getMediaStream()
           .listen(
             (List<SharedMediaFile> value) {
@@ -64,8 +64,7 @@ class _NadekoDonState extends State<NadekoDon> {
 
   Future<void> _handleInitialIntent() async {
     try {
-      final List<SharedMediaFile> initialMedia = await ReceiveSharingIntent
-          .instance
+      final List<SharedMediaFile> initialMedia = await FileShareIntent.instance
           .getInitialMedia();
       if (initialMedia.isNotEmpty) {
         // Small delay to ensure context is ready

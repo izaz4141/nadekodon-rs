@@ -137,6 +137,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "10.3.6"
+  file_share_intent:
+    dependency: "direct main"
+    description:
+      name: file_share_intent
+      sha256: a5c824f586afbbf9908c304355a8b723fcfb9594938303f75781f13293e42d28
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.1"
   flutter:
     dependency: "direct main"
     description: flutter
@@ -416,14 +424,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.0.3"
-  receive_sharing_intent:
-    dependency: "direct main"
-    description:
-      name: receive_sharing_intent
-      sha256: ec76056e4d258ad708e76d85591d933678625318e411564dcb9059048ca3a593
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.8.1"
   rinf:
     dependency: "direct main"
     description:
