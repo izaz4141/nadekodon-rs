@@ -9,6 +9,7 @@ import 'theme/app_theme.dart';
 import 'ui/pages/home_page.dart';
 import 'ui/widgets/dialog/add_download.dart';
 import 'utils/helper.dart';
+import 'utils/logger.dart';
 
 import 'package:rinf/rinf.dart';
 
@@ -64,20 +65,24 @@ class _NadekoDonState extends State<NadekoDon> {
 
   Future<void> _handleInitialIntent() async {
     try {
-      final List<SharedMediaFile> initialMedia = await FileShareIntent.instance
-          .getInitialMedia();
-      if (initialMedia.isNotEmpty) {
-        // Small delay to ensure context is ready
-        Future.delayed(const Duration(milliseconds: 500), () {
-          _handleSharedMedia(initialMedia);
-        });
-      }
+      FileShareIntent.instance.getInitialMedia().then((value) {
+        if (value.isNotEmpty) {
+          // Small delay to ensure context is ready
+          Future.delayed(const Duration(milliseconds: 500), () {
+            _handleSharedMedia(value);
+          });
+        }
+        FileShareIntent.instance.reset();
+      });
     } catch (e) {
       // Silently handle errors
     }
   }
 
   void _handleSharedMedia(List<SharedMediaFile> sharedMedia) {
+    log(
+      'Received ${sharedMedia.length} shared media items: ${sharedMedia.map((file) => 'type=${file.type.name}, path=${file.path}, value=${file.type.value}').join(' | ')}',
+    );
     // Filter for text or URL types
     final urlOrText = sharedMedia.firstWhere(
       (file) =>
