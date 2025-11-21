@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:nadekodon/utils/logger.dart';
 
 String formatBytes(int bytes) {
   const suffixes = ["B", "KB", "MB", "GB"];
@@ -63,8 +64,13 @@ Future<ResultType> openFile(String filePath) async {
     return ResultType.fileNotFound;
   }
 
-  final result = await OpenFilex.open(filePath);
-  return result.type;
+  try {
+    final result = await OpenFilex.open(filePath);
+    return result.type;
+  } catch (e) {
+    log('Error opening file: $e', isError: true);
+    return ResultType.error;
+  }
 }
 
 Future<bool> showInFolder(String filePath) async {
@@ -87,6 +93,7 @@ Future<bool> showInFolder(String filePath) async {
       return result.type == ResultType.done;
     }
   } catch (e) {
+    log('Error opening folder: $e', isError: true);
     return false;
   }
 }

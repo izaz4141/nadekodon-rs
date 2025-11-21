@@ -13,18 +13,23 @@ import 'package:nadekodon/ui/widgets/dialog/replace_file.dart';
 
 import 'package:nadekodon/src/bindings/bindings.dart';
 
-Future<void> showAddDownloadDialog(BuildContext context) async {
+Future<void> showAddDownloadDialog(
+  BuildContext context, {
+  String? initialUrl,
+}) async {
   await showDialog(
     context: context,
     builder: (context) {
-      return const _AddDownloadDialog();
+      return _AddDownloadDialog(initialUrl: initialUrl);
     },
   );
 }
 
 // Wrapper for mobile platforms to maintain dialog behavior
 class _AddDownloadDialog extends StatefulWidget {
-  const _AddDownloadDialog({super.key});
+  final String? initialUrl;
+
+  const _AddDownloadDialog({super.key, this.initialUrl});
 
   @override
   State<_AddDownloadDialog> createState() => _AddDownloadDialogState();
@@ -47,7 +52,12 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
   @override
   void initState() {
     super.initState();
-    _getClipboardContent();
+    // Prioritize initialUrl over clipboard content
+    if (widget.initialUrl != null && isUrl(widget.initialUrl!)) {
+      _urlController.text = widget.initialUrl!;
+    } else {
+      _getClipboardContent();
+    }
   }
 
   Future<void> _getClipboardContent() async {

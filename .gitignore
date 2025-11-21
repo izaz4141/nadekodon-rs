@@ -52,6 +52,3 @@ app.*.map.json
 /lib/src/bincode
 /lib/src/serde
 /lib/src/bindings
-
-# AI related
-AGENTS.md
