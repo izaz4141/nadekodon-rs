@@ -36,7 +36,7 @@
             </intent-filter>
             
             <!-- Intent filter to handle download links and URLs -->
-            <intent-filter android:label="@string/app_name">
+            <intent-filter android:label="nadekodon">
                 <action android:name="android.intent.action.VIEW" />
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
