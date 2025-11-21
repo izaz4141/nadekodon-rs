@@ -7,7 +7,7 @@ use uuid::Uuid;
 use main::{DownloadManager};
 use crate::utils::{
     types::{
-        DMSettings, DownloadState
+        DMSettings, DownloadState, DownloadInfo
     },
     url::get_url_info,
     helper::calc_speed,
@@ -20,7 +20,7 @@ use crate::signals::{
     QueryUrl, UrlQueryOutput, DoDownload, 
     GetDownloadList, DownloadList, DownloadGlance,
     GetDownloadDetails, DownloadDetails,
-    PauseDownload, ResumeDownload, CancelDownload,
+    PauseDownload, ResumeDownload, CancelDownload, DeleteDownload,
 };
 
 /// Function to spawn the single global DownloadManager at startup
@@ -110,20 +110,28 @@ pub async fn spawn_download_worker(manager: Arc<DownloadManager>) {
                 let mut video_dest: Option<std::path::PathBuf> = None;
                 let mut audio_dest: Option<std::path::PathBuf> = None;
 
-                if audio_format.is_some() && video_format.is_some() {
+                let mut audio_path_base = temp_dest_base.clone();
+                let mut video_path_base = temp_dest_base.clone();
 
-                    if let Some(mut file_name) = temp_dest_base.file_name()
+                if audio_format.is_some() && video_format.is_some() {
+                    if let Some(mut file_name) = audio_path_base.file_name()
                         .and_then(|s| s.to_string_lossy().into_owned().into()) {
-                            file_name.push_str("_part"); 
-                            temp_dest_base.set_file_name(file_name); 
+                            file_name.push_str("_audio"); 
+                            audio_path_base.set_file_name(file_name); 
                     }
+                    if let Some(mut file_name) = video_path_base.file_name()
+                        .and_then(|s| s.to_string_lossy().into_owned().into()) {
+                            file_name.push_str("_video"); 
+                            video_path_base.set_file_name(file_name); 
+                    }
+
                     if let Some(format) = &video_format {
                         dest = dest.with_extension(format.ext.clone());
                     }
                 }
                 
                 let audio_id = if let Some(format) = audio_format {
-                    let path = temp_dest_base.with_extension(format.ext);
+                    let path = audio_path_base.with_extension(format.ext);
                     audio_dest = Some(path.clone());
                     match manager.add_download(format.url.clone(), path).await {
                         Ok(id) => Some(id),
@@ -137,7 +145,7 @@ pub async fn spawn_download_worker(manager: Arc<DownloadManager>) {
                 };
 
                 let video_id = if let Some(format) = video_format {
-                    let path = temp_dest_base.with_extension(format.ext);
+                    let path = video_path_base.with_extension(format.ext);
                     video_dest = Some(path.clone());
                     match manager.add_download(format.url.clone(), path).await {
                         Ok(id) => Some(id),
@@ -180,7 +188,19 @@ pub async fn spawn_download_worker(manager: Arc<DownloadManager>) {
                     if let Some(a_path) = audio_dest.as_ref() { 
                         command.arg("-i").arg(a_path);
                     }
-                    command.arg("-c").arg("copy");
+                    
+                    let is_webm = dest.extension()
+                        .and_then(|ext| ext.to_str())
+                        .map(|ext| ext.eq_ignore_ascii_case("webm"))
+                        .unwrap_or(false);
+                    
+                    if is_webm {
+                        command.arg("-c:v").arg("copy");
+                        command.arg("-c:a").arg("libopus");
+                    } else {
+                        command.arg("-c").arg("copy");
+                    }
+                    
                     command.arg("-map").arg("0:v:0");
                     command.arg("-map").arg("1:a:0");
                     command.arg("-y");
@@ -190,6 +210,34 @@ pub async fn spawn_download_worker(manager: Arc<DownloadManager>) {
                         Ok(output) => {
                             if output.status.success() {
                                 logger::debug("Merge successful");
+
+                                let mut total_size = 0;
+                                if let Some(vid) = video_id {
+                                    if let Ok(info) = manager.info(vid).await {
+                                        total_size += info.downloaded;
+                                    }
+                                    let _ = manager.delete_worker(vid).await;
+                                }
+                                if let Some(aid) = audio_id {
+                                    if let Ok(info) = manager.info(aid).await {
+                                        total_size += info.downloaded;
+                                    }
+                                    let _ = manager.delete_worker(aid).await;
+                                }
+
+                                let final_info = DownloadInfo {
+                                    id: Uuid::new_v4(),
+                                    url: data.url.clone().unwrap_or_default(),
+                                    dest: dest.clone(),
+                                    total_size: Some(total_size),
+                                    downloaded: total_size,
+                                    state: DownloadState::Completed,
+                                    history: Vec::new(),
+                                    parts: Vec::new(),
+                                };
+                                
+                                manager.load_snapshot(vec![final_info]).await;
+
                                 if let Some(v_path) = video_dest.as_ref() { 
                                     let _ = tokio::fs::remove_file(v_path).await;
                                 }
@@ -325,6 +373,46 @@ pub async fn cancel_download(manager: Arc<DownloadManager>) {
         match manager.cancel(id).await {
             Ok(_) => logger::debug(&format!("Canceled worker with id {}", id)),
             Err(e) => logger::error(&format!("Failed to cancel worker for {:?}", e)),
+        }
+    }
+}
+
+pub async fn delete_download(manager: Arc<DownloadManager>) {
+    let receiver = DeleteDownload::get_dart_signal_receiver();
+    while let Some(signal_pack) = receiver.recv().await {
+        let data = signal_pack.message;
+
+        let id = match Uuid::parse_str(&data.id) {
+            Ok(uuid) => uuid,
+            Err(e) => {
+                logger::error(&format!("Invalid UUID from Dart: {:?}", e));
+                continue;
+            }
+        };
+
+        let manager = Arc::clone(&manager);
+        manager.delete_worker(id).await;
+        logger::debug(&format!("Deleted worker with id {}", id));
+    }
+}
+
+pub async fn handle_update_download_url(manager: Arc<DownloadManager>) {
+    let receiver = crate::signals::UpdateDownloadUrl::get_dart_signal_receiver();
+    while let Some(signal_pack) = receiver.recv().await {
+        let data = signal_pack.message;
+        
+        let id = match Uuid::parse_str(&data.id) {
+            Ok(uuid) => uuid,
+            Err(e) => {
+                logger::error(&format!("Invalid UUID from Dart: {:?}", e));
+                continue;
+            }
+        };
+
+        let manager = Arc::clone(&manager);
+        match manager.update_download_url(id, data.new_url.clone()).await {
+            Ok(_) => logger::debug(&format!("Updated URL for worker {}", id)),
+            Err(e) => logger::error(&format!("Failed to update URL for worker {}: {:?}", id, e)),
         }
     }
 }

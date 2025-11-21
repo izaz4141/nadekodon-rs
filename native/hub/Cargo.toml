@@ -36,7 +36,7 @@ openssl = { version = "0.10.74", features = ["vendored"] }
 indexmap = { version = "2.2.6", features = ["serde"] }
 chrono = "0.4"
 serde_json = "1.0"
-sqlx = "0.8.6"
+sqlx = { version = "0.8.2", features = ["sqlite", "runtime-tokio"] }
 
 # Uncomment below to target the web.
 # tokio_with_wasm = { version = "0.8.5", features = ["rt", "macros", "time"] }

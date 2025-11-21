@@ -1,9 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'package:nadekodon/theme/app_theme.dart';
 import 'package:nadekodon/utils/helper.dart';
 import 'package:nadekodon/ui/widgets/components/dir_choose.dart';
-import 'package:nadekodon/utils/settings.dart';
 
 import 'package:nadekodon/src/bindings/bindings.dart';
 
@@ -14,6 +14,7 @@ class QueryResultView extends StatelessWidget {
   final ValueNotifier<bool> queryFinished;
   final ValueNotifier<bool> isQueryingYtdl;
   final void Function() onDownload;
+  final void Function() onQueryYtdl;
 
   const QueryResultView({
     super.key,
@@ -23,6 +24,7 @@ class QueryResultView extends StatelessWidget {
     required this.queryFinished,
     required this.isQueryingYtdl,
     required this.onDownload,
+    required this.onQueryYtdl,
   });
 
   @override
@@ -60,7 +62,7 @@ class QueryResultView extends StatelessWidget {
                 ],
               );
             }
-            final urlQuery = signalPack.message as UrlQueryOutput;
+            final urlQuery = signalPack.message;
             if (!queryFinished.value && !urlQuery.error) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 queryFinished.value = true;
@@ -137,19 +139,14 @@ class QueryResultView extends StatelessWidget {
                                   ),
                                 ),
                                 const SizedBox(width: AppTheme.spaceMD),
-                                ElevatedButton(
-                                  onPressed: () {
-                                    isQueryingYtdl.value = true;
-                                    QueryYtdl(
-                                      url: urlController.text.trim(),
-                                      ytdlpPath: SettingsManager.ytdlpPath,
-                                    ).sendSignalToRust();
-                                  },
-                                  child: Text(
-                                    "YTDL",
-                                    style: textTheme.bodySmall,
+                                if (!Platform.isAndroid)
+                                  ElevatedButton(
+                                    onPressed: onQueryYtdl,
+                                    child: Text(
+                                      "YTDL",
+                                      style: textTheme.bodySmall,
+                                    ),
                                   ),
-                                ),
                               ],
                             ),
                           Text(

@@ -1,0 +1,201 @@
+use std::sync::Arc;
+use std::time::Duration;
+use sqlx::{sqlite::SqlitePoolOptions, Pool, Sqlite};
+use tokio::time::sleep;
+use crate::downloader::main::DownloadManager;
+use crate::signals::InitDatabase;
+use crate::utils::logger;
+use rinf::DartSignal;
+
+use crate::utils::types::{DownloadInfo, DownloadState, PartInfo};
+use std::path::PathBuf;
+use uuid::Uuid;
+
+pub async fn start_database_manager(dm: Arc<DownloadManager>) {
+    let receiver = InitDatabase::get_dart_signal_receiver();
+    while let Some(signal_pack) = receiver.recv().await {
+        let path = signal_pack.message.path;
+        let dm = dm.clone();
+        
+        tokio::spawn(async move {
+            match init_db(&path).await {
+                Ok(pool) => {
+                    logger::debug(&format!("Database initialized at {}", path));
+                    
+                    // Load existing downloads
+                    match load_downloads(&pool).await {
+                        Ok(downloads) => {
+                            logger::debug(&format!("Loaded {} downloads from DB", downloads.len()));
+                            dm.load_snapshot(downloads).await;
+                        }
+                        Err(e) => {
+                            logger::error(&format!("Failed to load downloads from DB: {:?}", e));
+                        }
+                    }
+
+                    start_db_loop(pool, dm).await;
+                }
+                Err(e) => {
+                    logger::error(&format!("Failed to initialize database: {:?}", e));
+                }
+            }
+        });
+    }
+}
+
+use sqlx::Row;
+
+async fn load_downloads(pool: &Pool<Sqlite>) -> Result<Vec<DownloadInfo>, sqlx::Error> {
+    let rows = sqlx::query(
+        r#"
+        SELECT id, url, dest, total_size, downloaded, state, parts, updated_at
+        FROM downloads
+        "#
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut downloads = Vec::new();
+    for row in rows {
+        let id_str: String = row.get("id");
+        let id = Uuid::parse_str(&id_str).unwrap_or_default();
+        let url: String = row.get("url");
+        let dest_str: String = row.get("dest");
+        let dest = PathBuf::from(dest_str);
+        let total_size: Option<i64> = row.get("total_size");
+        let total_size = total_size.map(|s| s as u64);
+        let downloaded: i64 = row.get("downloaded");
+        let downloaded = downloaded as u64;
+        
+        let state_str: String = row.get("state");
+        let state = if state_str.contains("Completed") {
+            DownloadState::Completed
+        } else if state_str.contains("Cancelled") {
+            DownloadState::Cancelled
+        } else if state_str.contains("Error") {
+            DownloadState::Error(state_str)
+        } else {
+            DownloadState::Paused
+        };
+
+        let parts_str: Option<String> = row.get("parts");
+        let parts: Vec<PartInfo> = if let Some(p) = parts_str {
+            serde_json::from_str(&p).unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        downloads.push(DownloadInfo {
+            id,
+            url,
+            dest,
+            total_size,
+            downloaded,
+            state,
+            history: Vec::new(),
+            parts,
+        });
+    }
+
+    Ok(downloads)
+}
+
+async fn init_db(path: &str) -> Result<Pool<Sqlite>, sqlx::Error> {
+    let db_url = format!("sqlite://{}", path);
+    
+    // Create database file if it doesn't exist
+    if !std::path::Path::new(path).exists() {
+        if let Some(parent) = std::path::Path::new(path).parent() {
+            std::fs::create_dir_all(parent).unwrap_or_default();
+        }
+        std::fs::File::create(path).unwrap_or_else(|_| panic!("Failed to create db file"));
+    }
+
+    let pool = SqlitePoolOptions::new()
+        .max_connections(5)
+        .connect(&db_url)
+        .await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS downloads (
+            id TEXT PRIMARY KEY,
+            url TEXT NOT NULL,
+            dest TEXT NOT NULL,
+            total_size INTEGER,
+            downloaded INTEGER NOT NULL,
+            state TEXT NOT NULL,
+            parts TEXT,
+            updated_at INTEGER NOT NULL
+        );
+        "#
+    )
+    .execute(&pool)
+    .await?;
+
+    Ok(pool)
+}
+
+async fn start_db_loop(pool: Pool<Sqlite>, dm: Arc<DownloadManager>) {
+    loop {
+        sleep(Duration::from_secs(5)).await;
+        
+        // Process pending deletions
+        let deletions = dm.drain_pending_deletions().await;
+        for id in deletions {
+            let id_str = id.to_string();
+            if let Err(e) = sqlx::query("DELETE FROM downloads WHERE id = ?")
+                .bind(id_str)
+                .execute(&pool)
+                .await
+            {
+                logger::error(&format!("Failed to delete download {} from DB: {:?}", id, e));
+            }
+        }
+
+        let downloads = match dm.list_all().await {
+            Ok(d) => d,
+            Err(e) => {
+                logger::error(&format!("Failed to get downloads list: {:?}", e));
+                continue;
+            }
+        };
+        for download in downloads {
+            let id = download.id.to_string();
+            let url = download.url;
+            let dest = download.dest.to_string_lossy().to_string();
+            let total_size = download.total_size.map(|s| s as i64);
+            let downloaded = download.downloaded as i64;
+            let state = format!("{:?}", download.state);
+            let updated_at = chrono::Utc::now().timestamp();
+
+            let parts = serde_json::to_string(&download.parts).unwrap_or_default();
+
+            let result = sqlx::query(
+                r#"
+                INSERT INTO downloads (id, url, dest, total_size, downloaded, state, parts, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    downloaded = excluded.downloaded,
+                    state = excluded.state,
+                    parts = excluded.parts,
+                    updated_at = excluded.updated_at;
+                "#
+            )
+            .bind(id)
+            .bind(url)
+            .bind(dest)
+            .bind(total_size)
+            .bind(downloaded)
+            .bind(state)
+            .bind(parts)
+            .bind(updated_at)
+            .execute(&pool)
+            .await;
+
+            if let Err(e) = result {
+                logger::error(&format!("Failed to save download to DB: {:?}", e));
+            }
+        }
+    }
+}

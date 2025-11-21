@@ -9,14 +9,16 @@ import '../pages/home_page.dart';
 const double railWidth = 72;
 const double sidebarWidth = 360.00;
 
-class NavigationRailSection extends StatefulWidget {
-  const NavigationRailSection({super.key});
+/// Separate widget that handles sidebar overlay
+/// This is always present (but invisible) so it can respond to isExpandedNotifier
+class SidebarOverlayHandler extends StatefulWidget {
+  const SidebarOverlayHandler({super.key});
 
   @override
-  State<NavigationRailSection> createState() => _NavigationRailSectionState();
+  State<SidebarOverlayHandler> createState() => _SidebarOverlayHandlerState();
 }
 
-class _NavigationRailSectionState extends State<NavigationRailSection>
+class _SidebarOverlayHandlerState extends State<SidebarOverlayHandler>
     with SingleTickerProviderStateMixin {
   OverlayEntry? _overlayEntry;
   PackageInfo _packageInfo = PackageInfo(
@@ -80,7 +82,6 @@ class _NavigationRailSectionState extends State<NavigationRailSection>
   void _showSidebar() {
     if (_overlayEntry != null) return;
     final overlay = Overlay.of(context, rootOverlay: true);
-    if (overlay == null) return;
 
     _overlayEntry = OverlayEntry(
       builder: (ctx) {
@@ -95,9 +96,7 @@ class _NavigationRailSectionState extends State<NavigationRailSection>
                 // Slightly blurred scrim
                 BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 2, sigmaY: 2),
-                  child: Container(
-                    color: colors.shadow.withOpacity(0.25),
-                  ),
+                  child: Container(color: colors.shadow.withOpacity(0.25)),
                 ),
 
                 // Sidebar
@@ -114,8 +113,9 @@ class _NavigationRailSectionState extends State<NavigationRailSection>
                           margin: const EdgeInsets.all(AppTheme.spaceLG),
                           decoration: BoxDecoration(
                             color: colors.surface,
-                            borderRadius:
-                                BorderRadius.circular(AppTheme.radiusLG * 1.2),
+                            borderRadius: BorderRadius.circular(
+                              AppTheme.radiusLG * 1.2,
+                            ),
                             border: Border.all(
                               color: colors.outlineVariant.withOpacity(0.5),
                               width: 1.2,
@@ -220,8 +220,7 @@ class _NavigationRailSectionState extends State<NavigationRailSection>
                   label,
                   style: textTheme.bodyMedium?.copyWith(
                     color: fg,
-                    fontWeight:
-                        selected ? FontWeight.w600 : FontWeight.normal,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
                   ),
                 ),
               ),
@@ -239,9 +238,11 @@ class _NavigationRailSectionState extends State<NavigationRailSection>
       child: Row(
         children: [
           IconButton(
-            icon: Icon(Icons.chevron_left,
-                size: AppTheme.iconLG * AppTheme.iconScale(context),
-                color: colors.onSurfaceVariant),
+            icon: Icon(
+              Icons.chevron_left,
+              size: AppTheme.iconLG * AppTheme.iconScale(context),
+              color: colors.onSurfaceVariant,
+            ),
             onPressed: () => isExpandedNotifier.value = false,
           ),
           const SizedBox(width: 4),
@@ -259,10 +260,7 @@ class _NavigationRailSectionState extends State<NavigationRailSection>
                 'assets/icons/nadeko-don-outlined.svg',
                 width: AppTheme.iconXL * AppTheme.iconScale(context),
                 height: AppTheme.iconXL * AppTheme.iconScale(context),
-                colorFilter: ColorFilter.mode(
-                  colors.primary,
-                  BlendMode.srcIn,
-                ),
+                colorFilter: ColorFilter.mode(colors.primary, BlendMode.srcIn),
               ),
             ),
           ),
@@ -298,6 +296,16 @@ class _NavigationRailSectionState extends State<NavigationRailSection>
 
   @override
   Widget build(BuildContext context) {
+    // This widget is invisible but listens to isExpandedNotifier
+    return const SizedBox.shrink();
+  }
+}
+
+class NavigationRailSection extends StatelessWidget {
+  const NavigationRailSection({super.key});
+
+  @override
+  Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
@@ -308,10 +316,7 @@ class _NavigationRailSectionState extends State<NavigationRailSection>
         return Container(
           decoration: BoxDecoration(
             border: Border(
-              right: BorderSide(
-                color: colors.surfaceContainer,
-                width: 2,
-              ),
+              right: BorderSide(color: colors.surfaceContainer, width: 2),
             ),
           ),
           child: NavigationRail(
@@ -341,18 +346,24 @@ class _NavigationRailSectionState extends State<NavigationRailSection>
                 label: Text(" Menu", style: textTheme.titleLarge),
               ),
               NavigationRailDestination(
-                icon: Icon(Icons.download,
-                    size: AppTheme.iconMD * AppTheme.iconScale(context)),
+                icon: Icon(
+                  Icons.download,
+                  size: AppTheme.iconMD * AppTheme.iconScale(context),
+                ),
                 label: const Text(" Downloads"),
               ),
               NavigationRailDestination(
-                icon: Icon(Icons.settings,
-                    size: AppTheme.iconMD * AppTheme.iconScale(context)),
+                icon: Icon(
+                  Icons.settings,
+                  size: AppTheme.iconMD * AppTheme.iconScale(context),
+                ),
                 label: const Text(" Settings"),
               ),
               NavigationRailDestination(
-                icon: Icon(Icons.monitor,
-                    size: AppTheme.iconMD * AppTheme.iconScale(context)),
+                icon: Icon(
+                  Icons.monitor,
+                  size: AppTheme.iconMD * AppTheme.iconScale(context),
+                ),
                 label: const Text(" System"),
               ),
             ],

@@ -1,11 +1,6 @@
 import 'dart:io';
-import 'dart:typed_data';
-import 'package:flutter/foundation.dart';
 import 'package:collection/collection.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:flutter/services.dart' show rootBundle;
-
-import 'package:nadekodon/utils/logger.dart';
+import 'package:open_filex/open_filex.dart';
 
 String formatBytes(int bytes) {
   const suffixes = ["B", "KB", "MB", "GB"];
@@ -52,34 +47,46 @@ Future<bool> fileExist(String path) async {
   return await file.exists();
 }
 
-Future<String> prepareYtDlpExecutable() async {
+Future<void> deleteDownloadFile(String filePath) async {
+  final file = File(filePath);
+  if (await file.exists()) {
+    await file.delete();
+  } else {
+    throw Exception('File not found: $filePath');
+  }
+}
+
+Future<ResultType> openFile(String filePath) async {
+  final file = File(filePath);
+
+  if (!await file.exists()) {
+    return ResultType.fileNotFound;
+  }
+
+  final result = await OpenFilex.open(filePath);
+  return result.type;
+}
+
+Future<bool> showInFolder(String filePath) async {
+  final file = File(filePath);
+
+  if (!await file.exists()) {
+    return false;
+  }
+
   try {
-    if (!Platform.isAndroid) {
-      return 'yt-dlp';
+    if (Platform.isWindows) {
+      await Process.run('explorer', ['/select,', filePath]);
+      return true;
+    } else if (Platform.isMacOS) {
+      await Process.run('open', ['-R', filePath]);
+      return true;
+    } else {
+      final directory = file.parent.path;
+      final result = await OpenFilex.open(directory);
+      return result.type == ResultType.done;
     }
-
-    final supportDir = await getApplicationSupportDirectory();
-    final ytDlpPath = '${supportDir.path}/yt-dlp';
-    final ytDlpFile = File(ytDlpPath);
-
-    if (await ytDlpFile.exists() && await ytDlpFile.length() > 0) {
-      return ytDlpPath;
-    }
-
-    ByteData bytes;
-    try {
-      bytes = await rootBundle.load('assets/bin/yt-dlp');
-    } on FlutterError catch (e) {
-      log("Error when preparing YTDLP: $e");
-      return 'yt-dlp';
-    }
-
-    await ytDlpFile.writeAsBytes(bytes.buffer.asUint8List(), flush: true);
-    await Process.run('chmod', ['+x', ytDlpPath]);
-
-    return ytDlpPath;
-  } catch (e, st) {
-    log("Error when preparing YTDLP: $st");
-    return 'yt-dlp';
+  } catch (e) {
+    return false;
   }
 }

@@ -21,7 +21,6 @@ pub struct QueryUrl {
 #[derive(Deserialize, DartSignal)]
 pub struct QueryYtdl {
     pub url: String,
-    pub ytdlp_path: String,
 }
 
 #[derive(Serialize, RustSignal)]
@@ -75,6 +74,7 @@ pub struct DownloadList {
 pub struct DownloadGlance {
     pub id: String,
     pub name: String,
+    pub dest: String,
     pub total_size: Option<u64>,
     pub downloaded: u64,
     pub speed: f64,
@@ -113,8 +113,24 @@ pub struct CancelDownload {
     pub id: String
 }
 
+#[derive(Deserialize, DartSignal)]
+pub struct DeleteDownload {
+    pub id: String
+}
+
 #[derive(Serialize, RustSignal)]
 pub struct LogSignal {
     pub level: String,
     pub message: String,
+}
+
+#[derive(Deserialize, DartSignal)]
+pub struct InitDatabase {
+    pub path: String,
+}
+
+#[derive(Deserialize, DartSignal)]
+pub struct UpdateDownloadUrl {
+    pub id: String,
+    pub new_url: String,
 }

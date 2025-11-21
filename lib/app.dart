@@ -6,7 +6,6 @@ import 'theme/app_theme.dart';
 import 'ui/pages/home_page.dart';
 
 import 'package:rinf/rinf.dart';
-import 'src/bindings/bindings.dart';
 
 class NadekoDon extends StatefulWidget {
   const NadekoDon({super.key});
@@ -14,7 +13,6 @@ class NadekoDon extends StatefulWidget {
   @override
   State<NadekoDon> createState() => _NadekoDonState();
 }
-
 
 class _NadekoDonState extends State<NadekoDon> {
   /// This `AppLifecycleListener` is responsible for the

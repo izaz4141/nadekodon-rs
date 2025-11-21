@@ -52,7 +52,12 @@ class _LogsDialogState extends State<LogsDialog> {
             onPressed: _selectedLogs.isEmpty
                 ? null
                 : () {
-                    final selectedLogText = _selectedLogs.map((log) => '[${log.level.toString().split('.').last.toUpperCase()}] [${log.timestamp}] ${log.message}').join('\n');
+                    final selectedLogText = _selectedLogs
+                        .map(
+                          (log) =>
+                              '[${log.level.toString().split('.').last.toUpperCase()}] [${log.timestamp}] ${log.message}',
+                        )
+                        .join('\n');
                     Clipboard.setData(ClipboardData(text: selectedLogText));
                   },
             icon: const Icon(Icons.copy),
@@ -95,7 +100,7 @@ class _LogsDialogState extends State<LogsDialog> {
             const SizedBox(height: AppTheme.spaceMD),
             Flexible(
               child: Container(
-                color: colors.surfaceVariant.withOpacity(0.5),
+                color: colors.surfaceContainerHighest.withOpacity(0.5),
                 child: filteredLogs.isEmpty
                     ? const Center(child: Text('No logs yet.'))
                     : ListView.builder(
@@ -105,33 +110,39 @@ class _LogsDialogState extends State<LogsDialog> {
                           final log = filteredLogs[index];
                           final isSelected = _selectedLogs.contains(log);
                           return SelectableRegion(
-                        focusNode: FocusNode(),
-                        selectionControls: materialTextSelectionControls,
-                        child: InkWell(
-                          onTap: () {
-                            setState(() {
-                              if (isSelected) {
-                                _selectedLogs.remove(log);
-                              } else {
-                                _selectedLogs.add(log);
-                              }
-                            });
-                          },
-                          child: Container(
-                            width: double.infinity,
-                            color: isSelected ? colors.primaryContainer : null,
-                            child: Padding(
-                              padding: const EdgeInsets.all(AppTheme.spaceSM),
-                              child: Text(
-                                '[${log.level.toString().split('.').last.toUpperCase()}] [${log.timestamp}] ${log.message}',
-                                style: textTheme.bodyMedium?.copyWith(
-                                  color: log.level == LogLevel.error ? colors.error : null,
+                            focusNode: FocusNode(),
+                            selectionControls: materialTextSelectionControls,
+                            child: InkWell(
+                              onTap: () {
+                                setState(() {
+                                  if (isSelected) {
+                                    _selectedLogs.remove(log);
+                                  } else {
+                                    _selectedLogs.add(log);
+                                  }
+                                });
+                              },
+                              child: Container(
+                                width: double.infinity,
+                                color: isSelected
+                                    ? colors.primaryContainer
+                                    : null,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(
+                                    AppTheme.spaceSM,
+                                  ),
+                                  child: Text(
+                                    '[${log.level.toString().split('.').last.toUpperCase()}] [${log.timestamp}] ${log.message}',
+                                    style: textTheme.bodyMedium?.copyWith(
+                                      color: log.level == LogLevel.error
+                                          ? colors.error
+                                          : null,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        ),
-                      );
+                          );
                         },
                       ),
               ),

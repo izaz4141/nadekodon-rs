@@ -2,11 +2,10 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
+import '../../utils/helper.dart';
+import '../../src/bindings/bindings.dart';
 import '../widgets/dialog/add_download.dart';
-import 'package:nadekodon/utils/helper.dart';
-
-import 'package:rinf/rinf.dart';
-import 'package:nadekodon/src/bindings/bindings.dart';
+import '../widgets/dialog/download_context_menu.dart';
 
 enum DownloadStatus { queued, running, paused, completed, cancelled, failed }
 
@@ -34,6 +33,7 @@ DownloadStatus parseDownloadStatus(String state) {
 class DownloadItem {
   final String id;
   final String name;
+  final String dest;
   final int downloaded;
   final int? total;
   final DownloadStatus status;
@@ -42,6 +42,7 @@ class DownloadItem {
   const DownloadItem({
     required this.id,
     required this.name,
+    required this.dest,
     required this.downloaded,
     required this.total,
     required this.status,
@@ -71,18 +72,22 @@ class DownloadPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
+    final isDesktop = AppTheme.isDesktop(context);
 
     return DefaultTabController(
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          title: Text("Downloads", style: textTheme.titleLarge),
+          toolbarHeight: isDesktop ? null : 0,
+          title: isDesktop
+              ? Text("Downloads", style: textTheme.titleLarge)
+              : null,
           bottom: TabBar(
-            labelStyle: textTheme.bodyMedium?.copyWith(
-              color: colors.primary,
-            ),
+            labelStyle: textTheme.bodyMedium?.copyWith(color: colors.primary),
             unselectedLabelStyle: textTheme.bodyMedium,
-            splashBorderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusLG)),
+            splashBorderRadius: BorderRadius.vertical(
+              top: Radius.circular(AppTheme.radiusLG),
+            ),
             tabs: [
               Tab(text: "Active"),
               Tab(text: "Completed"),
@@ -98,7 +103,7 @@ class DownloadPage extends StatelessWidget {
                 children: [
                   const Center(child: CircularProgressIndicator()),
                   const Center(child: CircularProgressIndicator()),
-                ]
+                ],
               );
             }
             final downloadListOutput = signalPack.message;
@@ -109,10 +114,11 @@ class DownloadPage extends StatelessWidget {
               return DownloadItem(
                 id: d.id,
                 name: d.name,
+                dest: d.dest,
                 downloaded: d.downloaded.toInt(),
                 total: d.totalSize?.toInt(),
                 status: status,
-                speed:d.speed,
+                speed: d.speed,
               );
             }).toList();
 
@@ -126,9 +132,15 @@ class DownloadPage extends StatelessWidget {
             return TabBarView(
               children: [
                 _buildDownloadList(
-                    context, activeDownloads, "No active downloads"),
+                  context,
+                  activeDownloads,
+                  "No active downloads",
+                ),
                 _buildDownloadList(
-                    context, completedDownloads, "No completed downloads"),
+                  context,
+                  completedDownloads,
+                  "No completed downloads",
+                ),
               ],
             );
           },
@@ -147,11 +159,16 @@ class DownloadPage extends StatelessWidget {
   }
 
   Widget _buildDownloadList(
-      BuildContext context, List<DownloadItem> items, String emptyMessage) {
+    BuildContext context,
+    List<DownloadItem> items,
+    String emptyMessage,
+  ) {
     if (items.isEmpty) {
       return Center(
-        child: Text(emptyMessage,
-            style: Theme.of(context).textTheme.bodyMedium),
+        child: Text(
+          emptyMessage,
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
       );
     }
 
@@ -164,16 +181,16 @@ class DownloadPage extends StatelessWidget {
           onPauseResume: () {
             if (items[index].status == DownloadStatus.running ||
                 items[index].status == DownloadStatus.queued) {
-                PauseDownload(id: items[index].id).sendSignalToRust();
+              PauseDownload(id: items[index].id).sendSignalToRust();
             } else {
-                ResumeDownload(id: items[index].id).sendSignalToRust();
+              ResumeDownload(id: items[index].id).sendSignalToRust();
             }
           },
           onCancel: () {
-            if ( activeStatuses.contains(items[index].status)) {
+            if (activeStatuses.contains(items[index].status)) {
               CancelDownload(id: items[index].id).sendSignalToRust();
             }
-          }
+          },
         );
       },
     );
@@ -215,95 +232,104 @@ class DownloadTile extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
-    return Card(
-      margin: const EdgeInsets.symmetric(
-        vertical: AppTheme.spaceXS,
-        horizontal: AppTheme.spaceMD,
-      ),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppTheme.radiusMD),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(AppTheme.spaceSM),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Name + Status row
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(item.name,
-                      style: textTheme.bodyMedium),
-                ),
-                Text(
-                  item.status.name.toUpperCase(),
-                  style: textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: _progressColor(context),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppTheme.spaceSM),
-            LinearProgressIndicator(
-              value: item.progress,
-              backgroundColor: colors.surfaceVariant,
-              color: _progressColor(context),
-              minHeight: AppTheme.spaceSM * AppTheme.spaceScale(context),
-              borderRadius: BorderRadius.circular(AppTheme.radiusSM * AppTheme.radiusScale(context)),
-            ),
-            const SizedBox(height: AppTheme.spaceSM),
-            Row(
-              children: [
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      item.total != null
-                          ? "${formatBytes(item.downloaded)} / ${formatBytes(item.total!)}"
-                          : formatBytes(item.downloaded),
-                      style: textTheme.bodySmall,
+    return GestureDetector(
+      onSecondaryTapDown: (details) {
+        showDownloadContextMenu(context, details.globalPosition, item);
+      },
+      onLongPressStart: (details) {
+        showDownloadContextMenu(context, details.globalPosition, item);
+      },
+      child: Card(
+        margin: const EdgeInsets.symmetric(
+          vertical: AppTheme.spaceXS,
+          horizontal: AppTheme.spaceMD,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(AppTheme.spaceSM),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Name + Status row
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(child: Text(item.name, style: textTheme.bodyMedium)),
+                  Text(
+                    item.status.name.toUpperCase(),
+                    style: textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: _progressColor(context),
                     ),
                   ),
+                ],
+              ),
+              const SizedBox(height: AppTheme.spaceSM),
+              LinearProgressIndicator(
+                value: item.progress,
+                backgroundColor: colors.surfaceContainerHighest,
+                color: _progressColor(context),
+                minHeight: AppTheme.spaceSM * AppTheme.spaceScale(context),
+                borderRadius: BorderRadius.circular(
+                  AppTheme.radiusSM * AppTheme.radiusScale(context),
                 ),
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.center,
-                    child: Text(
-                      "${formatBytes(item.speed.toInt())}/s",
-                      style: textTheme.bodySmall,
+              ),
+              const SizedBox(height: AppTheme.spaceSM),
+              Row(
+                children: [
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        item.total != null
+                            ? "${formatBytes(item.downloaded)} / ${formatBytes(item.total!)}"
+                            : formatBytes(item.downloaded),
+                        style: textTheme.bodySmall,
+                      ),
                     ),
                   ),
-                ),
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: Icon(Icons.stop),
-                          iconSize: AppTheme.iconMD * AppTheme.iconScale(context),
-                          onPressed: onCancel,
-                        ),
-                        IconButton(
-                          icon: Icon(
-                            (item.status == DownloadStatus.running ||
-                                    item.status == DownloadStatus.queued)
-                                ? Icons.pause
-                                : Icons.play_arrow,
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.center,
+                      child: Text(
+                        "${formatBytes(item.speed.toInt())}/s",
+                        style: textTheme.bodySmall,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: Icon(Icons.stop),
+                            iconSize:
+                                AppTheme.iconMD * AppTheme.iconScale(context),
+                            onPressed: onCancel,
                           ),
-                          iconSize: AppTheme.iconMD * AppTheme.iconScale(context),
-                          onPressed: onPauseResume,
-                        ),
-                      ]
-                    )
+                          IconButton(
+                            icon: Icon(
+                              (item.status == DownloadStatus.running ||
+                                      item.status == DownloadStatus.queued)
+                                  ? Icons.pause
+                                  : Icons.play_arrow,
+                            ),
+                            iconSize:
+                                AppTheme.iconMD * AppTheme.iconScale(context),
+                            onPressed: onPauseResume,
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

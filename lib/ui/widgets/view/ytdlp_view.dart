@@ -4,7 +4,6 @@ import 'package:nadekodon/theme/app_theme.dart';
 import 'package:nadekodon/utils/helper.dart';
 import 'package:nadekodon/ui/widgets/components/dir_choose.dart';
 
-import 'package:rinf/rinf.dart';
 import 'package:nadekodon/src/bindings/bindings.dart';
 
 class YtdlpView extends StatefulWidget {
@@ -51,46 +50,63 @@ class _YtdlpView extends State<YtdlpView> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (ytdlOutput.thumbnail != null)
-                  Expanded(
-                    flex: 2,
-                    child: Image.network(
-                      ytdlOutput.thumbnail!,
-                      // height: 5 * AppTheme.spaceXXL * AppTheme.spaceScale(context),
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        // height: 5 * AppTheme.spaceXXL * AppTheme.spaceScale(context),
-                        color: colors.surfaceVariant,
-                        child: Center(
-                          child: Icon(Icons.broken_image, color: colors.onSurfaceVariant),
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (ytdlOutput.thumbnail != null)
+                    Expanded(
+                      flex: 2,
+                      child: SizedBox(
+                        height: 0,
+                        child: Image.network(
+                          ytdlOutput.thumbnail!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              Container(
+                                color: colors.surfaceContainerHighest,
+                                child: Center(
+                                  child: Icon(
+                                    Icons.broken_image,
+                                    color: colors.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
                         ),
                       ),
                     ),
+                  const SizedBox(width: AppTheme.spaceMD),
+                  Expanded(
+                    flex: 3,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (ytdlOutput.videos.isNotEmpty)
+                          _buildFormatSelector(
+                            "Video",
+                            ytdlOutput.videos,
+                            selectedVideo,
+                            (format) {
+                              setState(() => selectedVideo = format);
+                              widget.onVideoChanged(format);
+                            },
+                          ),
+                        const SizedBox(height: AppTheme.spaceMD),
+                        if (ytdlOutput.audios.isNotEmpty)
+                          _buildFormatSelector(
+                            "Audio",
+                            ytdlOutput.audios,
+                            selectedAudio,
+                            (format) {
+                              setState(() => selectedAudio = format);
+                              widget.onAudioChanged(format);
+                            },
+                          ),
+                      ],
+                    ),
                   ),
-                const SizedBox(width: AppTheme.spaceMD),
-                Expanded(
-                  flex: 3,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (ytdlOutput.videos.isNotEmpty)
-                        _buildFormatSelector("Video", ytdlOutput.videos, selectedVideo, (format) {
-                          setState(() => selectedVideo = format);
-                          widget.onVideoChanged(format);
-                        }),
-                      const SizedBox(height: AppTheme.spaceMD),
-                      if (ytdlOutput.audios.isNotEmpty)
-                        _buildFormatSelector("Audio", ytdlOutput.audios, selectedAudio, (format) {
-                          setState(() => selectedAudio = format);
-                          widget.onAudioChanged(format);
-                        }),
-                    ],
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
             const SizedBox(height: AppTheme.spaceMD),
             TextField(
@@ -105,7 +121,9 @@ class _YtdlpView extends State<YtdlpView> {
                 hintText: "No format needed",
                 hintStyle: textTheme.bodyMedium,
                 border: const OutlineInputBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(AppTheme.radiusMD)),
+                  borderRadius: BorderRadius.all(
+                    Radius.circular(AppTheme.radiusMD),
+                  ),
                 ),
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: AppTheme.spaceSM,

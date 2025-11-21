@@ -1,3 +1,4 @@
+pub mod database;
 pub mod helper;
 pub mod logger;
 pub mod settings;

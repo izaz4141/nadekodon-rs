@@ -7,7 +7,8 @@ mod utils;
 use downloader::{
     start_download_manager, spawn_download_worker,
     query_url_info, get_download_details,
-    pause_download, resume_download, cancel_download
+    pause_download, resume_download, cancel_download, delete_download,
+    handle_update_download_url
 };
 use rinf::{dart_shutdown, write_interface};
 use tokio::spawn;
@@ -37,6 +38,9 @@ async fn main() {
     spawn(pause_download(dm.clone()));
     spawn(resume_download(dm.clone()));
     spawn(cancel_download(dm.clone()));
+    spawn(delete_download(dm.clone()));
+    spawn(handle_update_download_url(dm.clone()));
+    spawn(utils::database::start_database_manager(dm.clone()));
     spawn(handle_ytdl_query());
 
     // Keep the main function running until Dart shutdown.

@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:intl/intl.dart';
 
 import 'log_entry.dart';
@@ -37,7 +36,13 @@ class LogService {
       logs.add(LogEntry(level: level, timestamp: timestamp, message: message!));
     } else {
       // If the log doesn't match the format, treat it as STDOUT
-      logs.add(LogEntry(level: LogLevel.stdout, timestamp: DateTime.now(), message: line));
+      logs.add(
+        LogEntry(
+          level: LogLevel.stdout,
+          timestamp: DateTime.now(),
+          message: line,
+        ),
+      );
     }
   }
 

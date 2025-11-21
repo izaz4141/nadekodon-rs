@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -16,13 +17,14 @@ Future<void> showAddDownloadDialog(BuildContext context) async {
   await showDialog(
     context: context,
     builder: (context) {
-      return _AddDownloadDialog();
+      return const _AddDownloadDialog();
     },
   );
 }
 
+// Wrapper for mobile platforms to maintain dialog behavior
 class _AddDownloadDialog extends StatefulWidget {
-  const _AddDownloadDialog({Key? key}) : super(key: key);
+  const _AddDownloadDialog({super.key});
 
   @override
   State<_AddDownloadDialog> createState() => _AddDownloadDialogState();
@@ -68,6 +70,15 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
     setState(() {
       ytdlAudio = audio;
     });
+  }
+
+  Future<void> _onQueryYtdl() async {
+    _isQueryingYtdl.value = true;
+    if (Platform.isAndroid) {
+      return;
+    } else {
+      QueryYtdl(url: _urlController.text.trim()).sendSignalToRust();
+    }
   }
 
   void _queryUrl() {
@@ -221,8 +232,6 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
         return ConstrainedBox(
           constraints: BoxConstraints(
             minWidth: 400 * AppTheme.widthScale(context),
-            maxWidth: AppTheme.dialogWidth(context),
-            maxHeight: AppTheme.dialogMaxHeight(context),
           ),
           child: _buildContent(),
         );
@@ -257,6 +266,7 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
             queryFinished: _queryFinished,
             isQueryingYtdl: _isQueryingYtdl,
             onDownload: _handleSubmit,
+            onQueryYtdl: _onQueryYtdl,
           ),
       ],
     );

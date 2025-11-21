@@ -17,17 +17,16 @@ class SettingsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
+    final isDesktop = AppTheme.isDesktop(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Settings', style: textTheme.titleLarge),
-      ),
+      appBar: isDesktop
+          ? AppBar(title: Text('Settings', style: textTheme.titleLarge))
+          : null,
       body: Stack(
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(
-              vertical: AppTheme.spaceSM,
-            ),
+            padding: const EdgeInsets.symmetric(vertical: AppTheme.spaceSM),
             child: ListView(
               children: [
                 DownloadFolderTile(),

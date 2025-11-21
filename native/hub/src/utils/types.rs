@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
@@ -44,6 +44,15 @@ pub enum DownloadState {
     Error(String),
 }
 
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PartInfo {
+    pub start: u64,
+    pub end: u64,
+    pub current: u64,
+}
+
 #[derive(Debug, Clone)]
 pub struct DownloadInfo {
     pub id: Uuid,
@@ -54,6 +63,7 @@ pub struct DownloadInfo {
     pub state: DownloadState,
     // history is a list of (timestamp_millis, downloaded_bytes) samples
     pub history: Vec<(u128, u64)>,
+    pub parts: Vec<PartInfo>,
 }
 
 #[derive(Debug)]

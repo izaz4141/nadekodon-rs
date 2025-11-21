@@ -42,58 +42,6 @@ class AppSnackBar {
     }
 
     final overlay = Overlay.of(context, rootOverlay: true);
-    if (overlay == null) {
-      // fallback to regular snackbar if overlay not available
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          elevation: 0, // 🚫 disable default shadow
-          backgroundColor: Colors.transparent, // 🚫 disable default bg
-          behavior: SnackBarBehavior.floating,
-          margin: EdgeInsets.only(bottom: AppTheme.spaceXXL * AppTheme.spaceScale(context)), // float above action bar
-          content: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 320),
-              child: Container(
-                padding: EdgeInsets.symmetric(
-                    horizontal: AppTheme.spaceMD * AppTheme.spaceScale(context), 
-                    vertical: AppTheme.spaceMD * AppTheme.spaceScale(context),
-                  ),
-                decoration: BoxDecoration(
-                  color: bgColor,
-                  borderRadius: BorderRadius.circular(AppTheme.radiusMD),
-                  boxShadow: [
-                    BoxShadow(
-                      color: colors.shadow.withOpacity(0.2),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
-                    )
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      icon ?? defaultIcon, 
-                      color: fgColor, 
-                      size: AppTheme.iconSM * AppTheme.iconScale(context),
-                    ),
-                    const SizedBox(width: AppTheme.spaceSM),
-                    Flexible(
-                      child: Text(
-                        message,
-                        style: textTheme.bodySmall?.copyWith(color: fgColor),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          duration: duration,
-        ),
-      );
-      return;
-    }
 
     late OverlayEntry entry;
     entry = OverlayEntry(
@@ -130,8 +78,8 @@ class _OverlaySnack extends StatefulWidget {
     required this.icon,
     required this.duration,
     required this.onRequestClose,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   State<_OverlaySnack> createState() => _OverlaySnackState();
@@ -185,7 +133,8 @@ class _OverlaySnackState extends State<_OverlaySnack>
 
   @override
   Widget build(BuildContext context) {
-    final bottomPadding = MediaQuery.of(context).padding.bottom + AppTheme.spaceXXL;
+    final bottomPadding =
+        MediaQuery.of(context).padding.bottom + AppTheme.spaceXXL;
     final textTheme = Theme.of(context).textTheme;
     final colors = Theme.of(context).colorScheme;
 
@@ -206,16 +155,18 @@ class _OverlaySnackState extends State<_OverlaySnack>
                   color: Colors.transparent,
                   child: Container(
                     margin: EdgeInsets.symmetric(
-                      horizontal: AppTheme.spaceMD * AppTheme.spaceScale(context)
+                      horizontal:
+                          AppTheme.spaceMD * AppTheme.spaceScale(context),
                     ),
                     padding: EdgeInsets.symmetric(
-                        horizontal: AppTheme.spaceMD * AppTheme.spaceScale(context), 
-                        vertical: AppTheme.spaceMD * AppTheme.spaceScale(context),
-                      ),
+                      horizontal:
+                          AppTheme.spaceMD * AppTheme.spaceScale(context),
+                      vertical: AppTheme.spaceMD * AppTheme.spaceScale(context),
+                    ),
                     decoration: BoxDecoration(
                       color: widget.bgColor,
                       borderRadius: BorderRadius.circular(
-                        AppTheme.radiusLG * AppTheme.radiusScale(context)
+                        AppTheme.radiusLG * AppTheme.radiusScale(context),
                       ),
                       boxShadow: [
                         BoxShadow(
@@ -229,15 +180,20 @@ class _OverlaySnackState extends State<_OverlaySnack>
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          widget.icon, 
-                          color: widget.fgColor, 
+                          widget.icon,
+                          color: widget.fgColor,
                           size: AppTheme.iconSM * AppTheme.iconScale(context),
                         ),
-                        SizedBox(width: AppTheme.spaceSM * AppTheme.spaceScale(context)),
+                        SizedBox(
+                          width:
+                              AppTheme.spaceSM * AppTheme.spaceScale(context),
+                        ),
                         Flexible(
                           child: Text(
                             widget.message,
-                            style: textTheme.bodySmall?.copyWith(color: widget.fgColor),
+                            style: textTheme.bodySmall?.copyWith(
+                              color: widget.fgColor,
+                            ),
                           ),
                         ),
                       ],
