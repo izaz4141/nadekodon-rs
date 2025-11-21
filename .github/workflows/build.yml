@@ -93,7 +93,7 @@ jobs:
           path: |
             /var/cache/apt/archives
             /usr/lib/x86_64-linux-gnu/cmake
-          key: ${{ runner.os }}-linux-deps-v1 
+          key: ${{ matrix.target }}-linux-deps-v1 
 
       - name: Install system deps (Linux only)
         if: matrix.target == 'linux-x64'
@@ -117,10 +117,10 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          # Cache key changes if the OS or Cargo.lock file changes
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          # Cache key changes if the target or Cargo.lock file changes
+          key: ${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-
+            ${{ matrix.target }}-cargo-
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -143,16 +143,6 @@ jobs:
 
       - name: Generate launcher icons
         run: dart run flutter_launcher_icons
-
-      - name: Download yt-dlp for Android
-        if: matrix.target == 'android-arm64'
-        run: |
-          mkdir -p assets/bin
-          echo "Downloading yt-dlp_linux_aarch64 ..."
-          curl -L -o assets/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_aarch64
-          chmod +x assets/bin/yt-dlp
-          echo "yt-dlp added to assets/bin"
-          ls -lh assets/bin
 
       - name: Build app
         run: ${{ matrix.build_cmd }}
