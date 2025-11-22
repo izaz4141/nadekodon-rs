@@ -4,6 +4,52 @@ import 'package:open_filex/open_filex.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:nadekodon/utils/logger.dart';
 
+enum DownloadStatus { queued, running, paused, completed, cancelled, failed }
+
+DownloadStatus parseDownloadStatus(String state) {
+  final s = state.toLowerCase();
+  if (s.contains('error')) return DownloadStatus.failed;
+  switch (s) {
+    case 'queued':
+      return DownloadStatus.queued;
+    case 'running':
+      return DownloadStatus.running;
+    case 'paused':
+      return DownloadStatus.paused;
+    case 'completed':
+      return DownloadStatus.completed;
+    case 'cancelled':
+      return DownloadStatus.cancelled;
+    case 'error':
+      return DownloadStatus.failed;
+    default:
+      return DownloadStatus.failed;
+  }
+}
+
+class DownloadItem {
+  final String id;
+  final String name;
+  final String dest;
+  final int downloaded;
+  final int? total;
+  final DownloadStatus status;
+  final double speed;
+
+  const DownloadItem({
+    required this.id,
+    required this.name,
+    required this.dest,
+    required this.downloaded,
+    required this.total,
+    required this.status,
+    required this.speed,
+  });
+
+  double get progress =>
+      (total != null && total! > 0) ? downloaded / total! : 0.0;
+}
+
 String formatBytes(int bytes) {
   const suffixes = ["B", "KB", "MB", "GB"];
   double size = bytes.toDouble();

@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:nadekodon/ui/pages/download_page.dart';
+
 import 'package:nadekodon/ui/widgets/app_snackbar.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:share_plus/share_plus.dart';
@@ -26,6 +26,10 @@ Future<void> showDownloadContextMenu(
     position: RelativeRect.fromRect(
       position & const Size(40, 40),
       Offset.zero & overlay.size,
+    ),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(AppTheme.radiusSM),
+      side: BorderSide(color: Theme.of(context).dividerColor, width: 1),
     ),
     items: [
       PopupMenuItem<String>(

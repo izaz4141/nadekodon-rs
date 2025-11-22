@@ -1,5 +1,6 @@
-// lib/ui/pages/download_page.dart
 import 'package:flutter/material.dart';
+import 'package:nadekodon/ui/widgets/components/download_card.dart';
+import 'package:nadekodon/ui/widgets/dialog/delete_multiple_download.dart';
 
 import '../../theme/app_theme.dart';
 import '../../utils/helper.dart';
@@ -7,53 +8,7 @@ import '../../src/bindings/bindings.dart';
 import '../widgets/dialog/add_download.dart';
 import '../widgets/dialog/download_context_menu.dart';
 
-enum DownloadStatus { queued, running, paused, completed, cancelled, failed }
-
-DownloadStatus parseDownloadStatus(String state) {
-  final s = state.toLowerCase();
-  if (s.contains('error')) return DownloadStatus.failed;
-  switch (s) {
-    case 'queued':
-      return DownloadStatus.queued;
-    case 'running':
-      return DownloadStatus.running;
-    case 'paused':
-      return DownloadStatus.paused;
-    case 'completed':
-      return DownloadStatus.completed;
-    case 'cancelled':
-      return DownloadStatus.cancelled;
-    case 'error':
-      return DownloadStatus.failed;
-    default:
-      return DownloadStatus.failed;
-  }
-}
-
-class DownloadItem {
-  final String id;
-  final String name;
-  final String dest;
-  final int downloaded;
-  final int? total;
-  final DownloadStatus status;
-  final double speed;
-
-  const DownloadItem({
-    required this.id,
-    required this.name,
-    required this.dest,
-    required this.downloaded,
-    required this.total,
-    required this.status,
-    required this.speed,
-  });
-
-  double get progress =>
-      (total != null && total! > 0) ? downloaded / total! : 0.0;
-}
-
-class DownloadPage extends StatelessWidget {
+class DownloadPage extends StatefulWidget {
   const DownloadPage({super.key});
 
   static const activeStatuses = {
@@ -69,92 +24,264 @@ class DownloadPage extends StatelessWidget {
   };
 
   @override
+  State<DownloadPage> createState() => _DownloadPageState();
+}
+
+class _DownloadPageState extends State<DownloadPage> {
+  final Set<String> _selectedIds = {};
+  bool get _isSelectionMode => _selectedIds.isNotEmpty;
+
+  void _toggleSelection(String id) {
+    setState(() {
+      if (_selectedIds.contains(id)) {
+        _selectedIds.remove(id);
+      } else {
+        _selectedIds.add(id);
+      }
+    });
+  }
+
+  void _toggleSelectAll(List<DownloadItem> items) {
+    setState(() {
+      final allIds = items.map((e) => e.id).toSet();
+      if (_selectedIds.containsAll(allIds)) {
+        _selectedIds.clear();
+      } else {
+        _selectedIds.addAll(allIds);
+      }
+    });
+  }
+
+  void _unselectAll() {
+    setState(() {
+      _selectedIds.clear();
+    });
+  }
+
+  void _cancelSelected(List<DownloadItem> allItems) {
+    final selectedItems = allItems
+        .where((item) => _selectedIds.contains(item.id))
+        .toList();
+
+    if (selectedItems.isEmpty) return;
+
+    for (final item in selectedItems) {
+      if (DownloadPage.activeStatuses.contains(item.status)) {
+        CancelDownload(id: item.id).sendSignalToRust();
+      }
+    }
+    _unselectAll();
+  }
+
+  Future<void> _deleteSelected(List<DownloadItem> allItems) async {
+    final selectedItems = allItems
+        .where((item) => _selectedIds.contains(item.id))
+        .toList();
+
+    if (selectedItems.isEmpty) return;
+
+    await showDeleteMultipleDownloadsDialog(
+      context,
+      selectedItems,
+      onDeleted: _unselectAll,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final isDesktop = AppTheme.isDesktop(context);
 
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        appBar: AppBar(
-          toolbarHeight: isDesktop ? null : 0,
-          title: isDesktop
-              ? Text("Downloads", style: textTheme.titleLarge)
-              : null,
-          bottom: TabBar(
-            labelStyle: textTheme.bodyMedium?.copyWith(color: colors.primary),
-            unselectedLabelStyle: textTheme.bodyMedium,
-            splashBorderRadius: BorderRadius.vertical(
-              top: Radius.circular(AppTheme.radiusLG),
-            ),
-            tabs: [
-              Tab(text: "Active"),
-              Tab(text: "Completed"),
-            ],
-          ),
-        ),
-        body: StreamBuilder(
-          stream: DownloadList.rustSignalStream,
-          builder: (context, snapshot) {
-            final signalPack = snapshot.data;
-            if (signalPack == null) {
-              return TabBarView(
-                children: [
-                  const Center(child: CircularProgressIndicator()),
-                  const Center(child: CircularProgressIndicator()),
-                ],
-              );
-            }
-            final downloadListOutput = signalPack.message;
-            final downloads = downloadListOutput.list;
+    return StreamBuilder(
+      stream: DownloadList.rustSignalStream,
+      builder: (context, snapshot) {
+        final signalPack = snapshot.data;
+        final List<DownloadItem> allDownloads;
 
-            final downloadItems = downloads.map<DownloadItem>((d) {
-              final status = parseDownloadStatus(d.state);
-              return DownloadItem(
-                id: d.id,
-                name: d.name,
-                dest: d.dest,
-                downloaded: d.downloaded.toInt(),
-                total: d.totalSize?.toInt(),
-                status: status,
-                speed: d.speed,
-              );
-            }).toList();
-
-            final activeDownloads = downloadItems
-                .where((d) => activeStatuses.contains(d.status))
-                .toList();
-            final completedDownloads = downloadItems
-                .where((d) => completedStatuses.contains(d.status))
-                .toList();
-
-            return TabBarView(
-              children: [
-                _buildDownloadList(
-                  context,
-                  activeDownloads,
-                  "No active downloads",
-                ),
-                _buildDownloadList(
-                  context,
-                  completedDownloads,
-                  "No completed downloads",
-                ),
-              ],
+        if (signalPack == null) {
+          allDownloads = [];
+        } else {
+          final downloadListOutput = signalPack.message;
+          allDownloads = downloadListOutput.list.map<DownloadItem>((d) {
+            final status = parseDownloadStatus(d.state);
+            return DownloadItem(
+              id: d.id,
+              name: d.name,
+              dest: d.dest,
+              downloaded: d.downloaded.toInt(),
+              total: d.totalSize?.toInt(),
+              status: status,
+              speed: d.speed,
             );
-          },
-        ),
-        floatingActionButton: Padding(
-          padding: const EdgeInsets.all(AppTheme.spaceMD),
-          child: FloatingActionButton(
-            onPressed: () => showAddDownloadDialog(context),
-            tooltip: 'Add download',
-            child: const Icon(Icons.add),
+          }).toList();
+        }
+
+        final activeDownloads = allDownloads
+            .where((d) => DownloadPage.activeStatuses.contains(d.status))
+            .toList();
+        final completedDownloads = allDownloads
+            .where((d) => DownloadPage.completedStatuses.contains(d.status))
+            .toList();
+
+        // Determine if all are selected for the toggle button label/icon
+        final allIds = allDownloads.map((e) => e.id).toSet();
+        final isAllSelected =
+            allDownloads.isNotEmpty && _selectedIds.containsAll(allIds);
+
+        return DefaultTabController(
+          length: 2,
+          child: Scaffold(
+            appBar: AppBar(
+              toolbarHeight: isDesktop ? null : 0,
+              title: isDesktop
+                  ? Text("Downloads", style: textTheme.titleLarge)
+                  : null,
+              bottom: TabBar(
+                labelStyle: textTheme.bodyMedium?.copyWith(
+                  color: colors.primary,
+                ),
+                unselectedLabelStyle: textTheme.bodyMedium,
+                splashBorderRadius: BorderRadius.vertical(
+                  top: Radius.circular(AppTheme.radiusLG),
+                ),
+                tabs: const [
+                  Tab(text: "Active"),
+                  Tab(text: "Completed"),
+                ],
+              ),
+            ),
+            body: Stack(
+              children: [
+                signalPack == null
+                    ? const Center(child: CircularProgressIndicator())
+                    : TabBarView(
+                        children: [
+                          _buildDownloadList(
+                            context,
+                            activeDownloads,
+                            "No active downloads",
+                          ),
+                          _buildDownloadList(
+                            context,
+                            completedDownloads,
+                            "No completed downloads",
+                          ),
+                        ],
+                      ),
+                // Floating Selection Menu
+                if (_isSelectionMode)
+                  Positioned(
+                    bottom: AppTheme.spaceLG,
+                    left: AppTheme.spaceLG,
+                    right: AppTheme.spaceLG,
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 600),
+                        child: Card(
+                          elevation: 4,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppTheme.radiusLG,
+                            ),
+                          ),
+                          color: colors.surfaceContainer,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppTheme.spaceMD,
+                              vertical: AppTheme.spaceXS,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                TextButton.icon(
+                                  onPressed: () =>
+                                      _cancelSelected(allDownloads),
+                                  icon: Icon(
+                                    Icons.stop,
+                                    size:
+                                        AppTheme.iconMD *
+                                        AppTheme.iconScale(context),
+                                  ),
+                                  label: Text(
+                                    "Stop",
+                                    style: textTheme.bodyMedium,
+                                  ),
+                                ),
+                                SizedBox(
+                                  height:
+                                      AppTheme.spaceLG *
+                                      AppTheme.spaceScale(context),
+                                  child: VerticalDivider(
+                                    color: colors.outlineVariant,
+                                  ),
+                                ),
+                                TextButton.icon(
+                                  onPressed: () =>
+                                      _toggleSelectAll(allDownloads),
+                                  icon: Icon(
+                                    isAllSelected
+                                        ? Icons.deselect
+                                        : Icons.select_all,
+                                    size:
+                                        AppTheme.iconMD *
+                                        AppTheme.iconScale(context),
+                                  ),
+                                  label: Text(
+                                    isAllSelected
+                                        ? "Unselect All"
+                                        : "Select All",
+                                    style: textTheme.bodyMedium,
+                                  ),
+                                ),
+                                SizedBox(
+                                  height:
+                                      AppTheme.spaceLG *
+                                      AppTheme.spaceScale(context),
+                                  child: VerticalDivider(
+                                    color: colors.outlineVariant,
+                                  ),
+                                ),
+                                TextButton.icon(
+                                  onPressed: () =>
+                                      _deleteSelected(allDownloads),
+                                  icon: Icon(
+                                    Icons.delete,
+                                    size:
+                                        AppTheme.iconMD *
+                                        AppTheme.iconScale(context),
+                                  ),
+                                  label: Text(
+                                    "Delete",
+                                    style: textTheme.bodyMedium,
+                                  ),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: colors.error,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            floatingActionButton: _isSelectionMode
+                ? null
+                : Padding(
+                    padding: const EdgeInsets.all(AppTheme.spaceMD),
+                    child: FloatingActionButton(
+                      onPressed: () => showAddDownloadDialog(context),
+                      tooltip: 'Add download',
+                      child: const Icon(Icons.add),
+                    ),
+                  ),
+            floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
           ),
-        ),
-        floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      ),
+        );
+      },
     );
   }
 
@@ -163,175 +290,70 @@ class DownloadPage extends StatelessWidget {
     List<DownloadItem> items,
     String emptyMessage,
   ) {
+    final textTheme = Theme.of(context).textTheme;
+    final colors = Theme.of(context).colorScheme;
     if (items.isEmpty) {
       return Center(
-        child: Text(
-          emptyMessage,
-          style: Theme.of(context).textTheme.bodyMedium,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.file_download_off_rounded,
+              size: AppTheme.iconXXL * AppTheme.iconScale(context),
+              color: colors.outline,
+            ),
+            Text(
+              "No Downloads",
+              style: textTheme.bodyMedium?.copyWith(color: colors.outline),
+            ),
+          ],
         ),
       );
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: AppTheme.spaceSM),
+      padding: const EdgeInsets.only(
+        top: AppTheme.spaceSM,
+        bottom: 100, // Add padding for floating menu
+      ),
       itemCount: items.length,
       itemBuilder: (context, index) {
-        return DownloadTile(
-          item: items[index],
+        final item = items[index];
+        final isSelected = _selectedIds.contains(item.id);
+
+        return DownloadCard(
+          item: item,
+          isSelected: isSelected,
+          isSelectionMode: _isSelectionMode,
+          onTap: () {
+            if (_isSelectionMode) {
+              _toggleSelection(item.id);
+            }
+          },
+          onLongPress: () {
+            _toggleSelection(item.id);
+          },
+          onSecondaryTapDown: (details) {
+            showDownloadContextMenu(context, details.globalPosition, item);
+          },
+          onMenuPressed: (details) {
+            showDownloadContextMenu(context, details.globalPosition, item);
+          },
           onPauseResume: () {
-            if (items[index].status == DownloadStatus.running ||
-                items[index].status == DownloadStatus.queued) {
-              PauseDownload(id: items[index].id).sendSignalToRust();
+            if (item.status == DownloadStatus.running ||
+                item.status == DownloadStatus.queued) {
+              PauseDownload(id: item.id).sendSignalToRust();
             } else {
-              ResumeDownload(id: items[index].id).sendSignalToRust();
+              ResumeDownload(id: item.id).sendSignalToRust();
             }
           },
           onCancel: () {
-            if (activeStatuses.contains(items[index].status)) {
-              CancelDownload(id: items[index].id).sendSignalToRust();
+            if (DownloadPage.activeStatuses.contains(item.status)) {
+              CancelDownload(id: item.id).sendSignalToRust();
             }
           },
         );
       },
-    );
-  }
-}
-
-class DownloadTile extends StatelessWidget {
-  final DownloadItem item;
-  final VoidCallback onPauseResume;
-  final VoidCallback onCancel;
-
-  const DownloadTile({
-    super.key,
-    required this.item,
-    required this.onPauseResume,
-    required this.onCancel,
-  });
-
-  Color _progressColor(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    switch (item.status) {
-      case DownloadStatus.queued:
-        return colors.tertiary;
-      case DownloadStatus.running:
-        return colors.primary;
-      case DownloadStatus.paused:
-        return colors.secondary;
-      case DownloadStatus.completed:
-        return Colors.green;
-      case DownloadStatus.cancelled:
-        return colors.secondary;
-      case DownloadStatus.failed:
-        return colors.error;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-
-    return GestureDetector(
-      onSecondaryTapDown: (details) {
-        showDownloadContextMenu(context, details.globalPosition, item);
-      },
-      onLongPressStart: (details) {
-        showDownloadContextMenu(context, details.globalPosition, item);
-      },
-      child: Card(
-        margin: const EdgeInsets.symmetric(
-          vertical: AppTheme.spaceXS,
-          horizontal: AppTheme.spaceMD,
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusMD),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(AppTheme.spaceSM),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Name + Status row
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(child: Text(item.name, style: textTheme.bodyMedium)),
-                  Text(
-                    item.status.name.toUpperCase(),
-                    style: textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: _progressColor(context),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppTheme.spaceSM),
-              LinearProgressIndicator(
-                value: item.progress,
-                backgroundColor: colors.surfaceContainerHighest,
-                color: _progressColor(context),
-                minHeight: AppTheme.spaceSM * AppTheme.spaceScale(context),
-                borderRadius: BorderRadius.circular(
-                  AppTheme.radiusSM * AppTheme.radiusScale(context),
-                ),
-              ),
-              const SizedBox(height: AppTheme.spaceSM),
-              Row(
-                children: [
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        item.total != null
-                            ? "${formatBytes(item.downloaded)} / ${formatBytes(item.total!)}"
-                            : formatBytes(item.downloaded),
-                        style: textTheme.bodySmall,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.center,
-                      child: Text(
-                        "${formatBytes(item.speed.toInt())}/s",
-                        style: textTheme.bodySmall,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: Icon(Icons.stop),
-                            iconSize:
-                                AppTheme.iconMD * AppTheme.iconScale(context),
-                            onPressed: onCancel,
-                          ),
-                          IconButton(
-                            icon: Icon(
-                              (item.status == DownloadStatus.running ||
-                                      item.status == DownloadStatus.queued)
-                                  ? Icons.pause
-                                  : Icons.play_arrow,
-                            ),
-                            iconSize:
-                                AppTheme.iconMD * AppTheme.iconScale(context),
-                            onPressed: onPauseResume,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

@@ -79,7 +79,7 @@ class _UpdateUrlDialogState extends State<UpdateUrlDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: Text('Cancel', style: textTheme.bodyMedium),
         ),
-        FilledButton(
+        ElevatedButton(
           onPressed: () {
             final url = _controller.text.trim();
             if (url.isNotEmpty) {
@@ -92,7 +92,10 @@ class _UpdateUrlDialogState extends State<UpdateUrlDialog> {
               );
             }
           },
-          child: Text('Update', style: textTheme.bodyMedium),
+          child: Text(
+            'Update',
+            style: textTheme.bodyMedium?.copyWith(color: colors.primary),
+          ),
         ),
       ],
     );

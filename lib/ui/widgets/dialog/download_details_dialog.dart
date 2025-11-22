@@ -1,6 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:nadekodon/src/bindings/bindings.dart';
-import 'package:nadekodon/ui/pages/download_page.dart';
 import 'package:nadekodon/theme/app_theme.dart';
 import 'package:nadekodon/utils/helper.dart';
 
@@ -14,80 +15,138 @@ class DownloadDetailsDialog extends StatefulWidget {
 }
 
 class _DownloadDetailsDialogState extends State<DownloadDetailsDialog> {
+  Timer? _timer;
+
   @override
   void initState() {
     super.initState();
+    _sendSignal();
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      _sendSignal();
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _sendSignal() {
     GetDownloadDetails(id: widget.item.id).sendSignalToRust();
   }
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return AlertDialog(
-      title: Text('Download Details', style: textTheme.titleMedium),
-      content: StreamBuilder(
-        stream: DownloadDetails.rustSignalStream,
-        builder: (context, snapshot) {
-          final signalPack = snapshot.data;
-          if (signalPack == null) {
-            return const SizedBox(
-              height: 100,
-              child: Center(child: CircularProgressIndicator()),
-            );
-          }
+      title: Row(
+        children: [
+          Icon(Icons.download_rounded, color: colorScheme.primary),
+          const SizedBox(width: AppTheme.spaceSM),
+          Text('Download Details', style: textTheme.titleMedium),
+        ],
+      ),
+      content: SizedBox(
+        width: AppTheme.dialogWidth(context),
+        child: StreamBuilder(
+          stream: DownloadDetails.rustSignalStream,
+          builder: (context, snapshot) {
+            final signalPack = snapshot.data;
+            if (signalPack == null) {
+              return const SizedBox(
+                height: 100,
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
 
-          final details = signalPack.message;
-          if (details.id != widget.item.id) {
-            return const SizedBox(
-              height: 100,
-              child: Center(child: CircularProgressIndicator()),
-            );
-          }
+            final details = signalPack.message;
+            if (details.id != widget.item.id) {
+              return const SizedBox(
+                height: 100,
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
 
-          return SingleChildScrollView(
-            child: SelectionArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildDetailRow('Name', details.name, textTheme),
-                  const SizedBox(height: AppTheme.spaceSM),
-                  _buildDetailRow('URL', details.url, textTheme),
-                  const SizedBox(height: AppTheme.spaceSM),
-                  _buildDetailRow('Destination', details.dest, textTheme),
-                  const SizedBox(height: AppTheme.spaceSM),
-                  _buildDetailRow(
-                    'Size',
-                    details.totalSize != null
-                        ? formatBytes(details.totalSize!.toInt())
-                        : 'Unknown',
-                    textTheme,
-                  ),
-                  const SizedBox(height: AppTheme.spaceSM),
-                  _buildDetailRow(
-                    'Downloaded',
-                    formatBytes(details.downloaded.toInt()),
-                    textTheme,
-                  ),
-                  const SizedBox(height: AppTheme.spaceSM),
-                  _buildDetailRow(
-                    'Speed',
-                    '${formatBytes(details.speed.toInt())}/s',
-                    textTheme,
-                  ),
-                  const SizedBox(height: AppTheme.spaceSM),
-                  _buildDetailRow('Status', details.state, textTheme),
-                ],
+            return SingleChildScrollView(
+              child: SelectionArea(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildInfoSection(details, textTheme, colorScheme),
+                    const SizedBox(height: AppTheme.spaceMD),
+                    const Divider(),
+                    const SizedBox(height: AppTheme.spaceMD),
+                    Text('Parts Progress', style: textTheme.titleSmall),
+                    const SizedBox(height: AppTheme.spaceSM),
+                    _buildPartsList(details.partInfo, colorScheme),
+                  ],
+                ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: Text('Close', style: textTheme.bodyMedium),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInfoSection(
+    DownloadDetails details,
+    TextTheme textTheme,
+    ColorScheme colorScheme,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildDetailRow('Name', details.name, textTheme),
+        const SizedBox(height: AppTheme.spaceSM),
+        _buildDetailRow('URL', details.url, textTheme),
+        const SizedBox(height: AppTheme.spaceSM),
+        _buildDetailRow('Destination', details.dest, textTheme),
+        const SizedBox(height: AppTheme.spaceSM),
+        Row(
+          children: [
+            Expanded(
+              child: _buildDetailRow(
+                'Downloaded',
+                formatBytes(details.downloaded.toInt()),
+                textTheme,
+              ),
+            ),
+            Expanded(
+              child: _buildDetailRow(
+                'Size',
+                details.totalSize != null
+                    ? formatBytes(details.totalSize!.toInt())
+                    : 'Unknown',
+                textTheme,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppTheme.spaceSM),
+        Row(
+          children: [
+            Expanded(
+              child: _buildDetailRow(
+                'Speed',
+                '${formatBytes(details.speed.toInt())}/s',
+                textTheme,
+              ),
+            ),
+            Expanded(
+              child: _buildDetailRow('Status', details.state, textTheme),
+            ),
+          ],
         ),
       ],
     );
@@ -99,10 +158,86 @@ class _DownloadDetailsDialogState extends State<DownloadDetailsDialog> {
       children: [
         Text(
           label,
-          style: textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold),
+          style: textTheme.bodySmall?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: Theme.of(context).colorScheme.secondary,
+          ),
         ),
-        Text(value, style: textTheme.bodyMedium),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: textTheme.bodyMedium,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
       ],
+    );
+  }
+
+  Widget _buildPartsList(List<PartInfo> parts, ColorScheme colorScheme) {
+    if (parts.isEmpty) {
+      return const Text('No part information available.');
+    }
+
+    return Column(
+      children: parts.asMap().entries.map((entry) {
+        final index = entry.key;
+        final part = entry.value;
+        final start = part.start.toBigInt();
+        final end = part.end.toBigInt();
+        final current = part.current.toBigInt();
+        final total = end - start;
+        final progress = total > BigInt.zero
+            ? current.toDouble() / total.toDouble()
+            : 0.0;
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: AppTheme.spaceXS),
+          child: Row(
+            children: [
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final double availableWidth = constraints.maxWidth;
+                    const double blockSize = AppTheme.spaceSM;
+                    const double spacing = AppTheme.spaceXS;
+
+                    // Calculate how many blocks fit
+                    // width = n * size + (n - 1) * spacing
+                    // width = n * (size + spacing) - spacing
+                    // width + spacing = n * (size + spacing)
+                    final int blockCount =
+                        ((availableWidth + spacing) / (blockSize + spacing))
+                            .floor();
+
+                    // Ensure at least 1 block
+                    final int count = blockCount > 0 ? blockCount : 1;
+
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        for (int i = 0; i < count; i++) ...[
+                          if (i > 0) const SizedBox(width: spacing),
+                          Container(
+                            width: blockSize,
+                            height: blockSize,
+                            decoration: BoxDecoration(
+                              color: progress >= (i + 1) / count
+                                  ? colorScheme.primary
+                                  : colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        ],
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 }

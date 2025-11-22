@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
-
 import 'package:nadekodon/utils/logger.dart';
 
 import '../../../utils/helper.dart';
 import '../app_snackbar.dart';
 import '../../../src/bindings/bindings.dart';
+import '../../../theme/app_theme.dart';
 
-/// Shows a dialog to confirm deletion of a download
-Future<void> showDeleteDownloadDialog(
+/// Shows a dialog to confirm deletion of multiple downloads
+Future<void> showDeleteMultipleDownloadsDialog(
   BuildContext context,
-  DownloadItem item,
-) async {
+  List<DownloadItem> items, {
+  required VoidCallback onDeleted,
+}) async {
   bool deleteFromList = true;
   bool deleteFile = false;
 
@@ -18,14 +19,18 @@ Future<void> showDeleteDownloadDialog(
     context: context,
     builder: (context) {
       final textTheme = Theme.of(context).textTheme;
-
       return StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            title: Text('Delete Download', style: textTheme.titleMedium),
+            title: const Text('Delete Selected'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                Text(
+                  'Are you sure you want to delete ${items.length} items?',
+                  style: textTheme.bodyMedium,
+                ),
+                const SizedBox(height: AppTheme.spaceMD),
                 CheckboxListTile(
                   title: Text('Remove from list', style: textTheme.bodyMedium),
                   value: deleteFromList,
@@ -37,7 +42,7 @@ Future<void> showDeleteDownloadDialog(
                 ),
                 CheckboxListTile(
                   title: Text(
-                    'Delete downloaded file',
+                    'Delete downloaded files',
                     style: textTheme.bodyMedium,
                   ),
                   value: deleteFile,
@@ -52,11 +57,11 @@ Future<void> showDeleteDownloadDialog(
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
-                child: Text('Cancel', style: textTheme.bodyMedium),
+                child: const Text('Cancel'),
               ),
               ElevatedButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: Text('Delete', style: textTheme.bodyMedium),
+                child: const Text('Delete'),
               ),
             ],
           );
@@ -67,38 +72,27 @@ Future<void> showDeleteDownloadDialog(
 
   if (result != true || !context.mounted) return;
 
-  // Delete file if requested
-  if (deleteFile) {
-    try {
-      await deleteDownloadFile(item.dest);
-      if (context.mounted) {
-        AppSnackBar.show(
-          context,
-          "File deleted successfully",
-          type: SnackType.success,
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        AppSnackBar.show(
-          context,
-          "Failed to delete file",
-          type: SnackType.error,
-        );
-        log('Failed to delete file: $e');
+  int successCount = 0;
+  for (final item in items) {
+    if (deleteFile) {
+      try {
+        await deleteDownloadFile(item.dest);
+      } catch (e) {
+        log('Failed to delete file: ${item.dest}, error: $e');
       }
     }
+    if (deleteFromList) {
+      DeleteDownload(id: item.id).sendSignalToRust();
+    }
+    successCount++;
   }
 
-  // Remove from list if requested
-  if (deleteFromList) {
-    DeleteDownload(id: item.id).sendSignalToRust();
-    if (context.mounted) {
-      AppSnackBar.show(
-        context,
-        "Download removed from list",
-        type: SnackType.success,
-      );
-    }
+  if (context.mounted) {
+    AppSnackBar.show(
+      context,
+      "Deleted $successCount items",
+      type: SnackType.success,
+    );
+    onDeleted();
   }
 }

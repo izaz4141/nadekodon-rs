@@ -19,7 +19,7 @@ use crate::signals::{
     UpdateSettings,
     QueryUrl, UrlQueryOutput, DoDownload, 
     GetDownloadList, DownloadList, DownloadGlance,
-    GetDownloadDetails, DownloadDetails,
+    GetDownloadDetails, DownloadDetails, PartInfo,
     PauseDownload, ResumeDownload, CancelDownload, DeleteDownload,
 };
 
@@ -305,6 +305,11 @@ pub async fn get_download_details(manager: Arc<DownloadManager>) {
                     downloaded: info.downloaded,
                     speed: speed,
                     state: state_str,
+                    part_info: info.parts.iter().map(|p| PartInfo {
+                        start: p.start,
+                        end: p.end,
+                        current: p.current,
+                    }).collect(),
                 }.send_signal_to_dart();
             }
             Err(e) => {

@@ -96,6 +96,14 @@ pub struct DownloadDetails {
     pub downloaded: u64,
     pub speed: f64,
     pub state: String,
+    pub part_info: Vec<PartInfo>,
+}
+
+#[derive(Serialize, Deserialize, SignalPiece)]
+pub struct PartInfo {
+    pub start: u64,
+    pub end: u64,
+    pub current: u64,
 }
 
 #[derive(Deserialize, DartSignal)]
