@@ -51,6 +51,7 @@ dependencies:
   flutter_launcher_icons: ^0.14.4
   open_filex: ^4.7.0
   file_share_intent: ^3.0.1
+  app_links: ^6.4.1
 
 dev_dependencies:
   flutter_test:

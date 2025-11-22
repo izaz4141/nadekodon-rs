@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:file_share_intent/file_share_intent.dart';
+import 'package:app_links/app_links.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'theme/app_theme.dart';
@@ -32,6 +33,8 @@ class _NadekoDonState extends State<NadekoDon> {
   /// creating this listener is not necessary.
   late final AppLifecycleListener _listener;
   StreamSubscription? _intentStreamSubscription;
+  late final AppLinks _appLinks;
+  StreamSubscription? _linkSubscription;
 
   @override
   void initState() {
@@ -45,6 +48,7 @@ class _NadekoDonState extends State<NadekoDon> {
 
     // Only set up intent handling on Android
     if (Platform.isAndroid) {
+      _initAppLinks();
       // Handle initial intent when app is opened via sharing
       _handleInitialIntent();
 
@@ -78,6 +82,35 @@ class _NadekoDonState extends State<NadekoDon> {
     } catch (e) {
       // Silently handle errors
     }
+  }
+
+  Future<void> _initAppLinks() async {
+    _appLinks = AppLinks();
+
+    // Handle initial link
+    try {
+      final initialUri = await _appLinks.getInitialLink();
+      if (initialUri != null) {
+        _handleIncomingUri(initialUri);
+      }
+    } catch (e) {
+      // Silently handle errors
+    }
+
+    // Listen for new links
+    _linkSubscription = _appLinks.uriLinkStream.listen((uri) {
+      _handleIncomingUri(uri);
+    });
+  }
+
+  void _handleIncomingUri(Uri uri) {
+    // Small delay to ensure context is ready
+    Future.delayed(const Duration(milliseconds: 500), () {
+      final context = navigatorKey.currentContext;
+      if (context != null) {
+        showAddDownloadDialog(context, initialUrl: uri.toString());
+      }
+    });
   }
 
   Future<void> _handleSharedMedia(List<SharedMediaFile> sharedMedia) async {
@@ -139,6 +172,7 @@ class _NadekoDonState extends State<NadekoDon> {
   void dispose() {
     _listener.dispose();
     _intentStreamSubscription?.cancel();
+    _linkSubscription?.cancel();
     super.dispose();
   }
 
