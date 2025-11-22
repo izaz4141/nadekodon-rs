@@ -39,10 +39,6 @@ class _DownloadDetailsDialogState extends State<DownloadDetailsDialog> {
 
           final details = signalPack.message;
           if (details.id != widget.item.id) {
-            // Keep showing loading if the signal is for another download
-            // Ideally we should filter the stream, but for now this simple check works
-            // if we assume only one details dialog is open at a time.
-            // A better approach would be to filter the stream in the stream property.
             return const SizedBox(
               height: 100,
               child: Center(child: CircularProgressIndicator()),

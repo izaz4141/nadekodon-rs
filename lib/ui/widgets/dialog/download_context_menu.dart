@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:nadekodon/ui/pages/download_page.dart';
 import 'package:nadekodon/ui/widgets/app_snackbar.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../../theme/app_theme.dart';
 import '../../../utils/helper.dart';
 import '../../../src/bindings/bindings.dart';
@@ -78,6 +80,20 @@ Future<void> showDownloadContextMenu(
           ],
         ),
       ),
+      if (!Platform.isLinux)
+        PopupMenuItem<String>(
+          value: 'share',
+          child: Row(
+            children: [
+              Icon(
+                Icons.share_outlined,
+                size: AppTheme.iconSM * AppTheme.iconScale(context),
+              ),
+              SizedBox(width: AppTheme.spaceSM),
+              Text('Share', style: textTheme.bodySmall),
+            ],
+          ),
+        ),
       PopupMenuItem<String>(
         value: 'info',
         child: Row(
@@ -114,6 +130,17 @@ Future<void> showDownloadContextMenu(
           'Error showing folder',
           type: SnackType.error,
         );
+      }
+      break;
+    case 'share':
+      final file = File(item.dest);
+      if (await file.exists()) {
+        final xFile = XFile(item.dest);
+        await SharePlus.instance.share(ShareParams(files: [xFile]));
+      } else {
+        if (context.mounted) {
+          AppSnackBar.show(context, 'File not found', type: SnackType.error);
+        }
       }
       break;
     case 'info':

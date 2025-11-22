@@ -49,26 +49,12 @@ class _NadekoDonState extends State<NadekoDon> {
     // Only set up intent handling on Android
     if (Platform.isAndroid) {
       _initAppLinks();
-      // Handle initial intent when app is opened via sharing
-      _handleInitialIntent();
-
-      // Listen for intents while app is running
-      _intentStreamSubscription = FileShareIntent.instance
-          .getMediaStream()
-          .listen(
-            (List<SharedMediaFile> value) {
-              if (value.isNotEmpty) {
-                _handleSharedMedia(value);
-              }
-            },
-            onError: (err) {
-              // Silently handle errors
-            },
-          );
+      _initFileShareIntent();
     }
   }
 
-  Future<void> _handleInitialIntent() async {
+  Future<void> _initFileShareIntent() async {
+    // Handle initial intent
     try {
       FileShareIntent.instance.getInitialMedia().then((value) {
         if (value.isNotEmpty) {
@@ -82,6 +68,20 @@ class _NadekoDonState extends State<NadekoDon> {
     } catch (e) {
       // Silently handle errors
     }
+
+    // Listen for new intents while app is running
+    _intentStreamSubscription = FileShareIntent.instance
+        .getMediaStream()
+        .listen(
+          (List<SharedMediaFile> value) {
+            if (value.isNotEmpty) {
+              _handleSharedMedia(value);
+            }
+          },
+          onError: (err) {
+            // Silently handle errors
+          },
+        );
   }
 
   Future<void> _initAppLinks() async {
@@ -126,35 +126,6 @@ class _NadekoDonState extends State<NadekoDon> {
         if (isUrl(file.path)) {
           sharedUrl = file.path;
           break;
-        }
-      } else if (file.type == SharedMediaType.file) {
-        try {
-          final tempDir = await getTemporaryDirectory();
-          File fileToRead = File(file.path);
-
-          // If the path is not absolute or doesn't exist, try finding it in temp dir
-          if (!await fileToRead.exists()) {
-            // Remove leading slash if present to join correctly
-            final relativePath = file.path.startsWith('/')
-                ? file.path.substring(1)
-                : file.path;
-            fileToRead = File('${tempDir.path}/$relativePath');
-          }
-          if (await fileToRead.exists()) {
-            final fileContent = await fileToRead.readAsString();
-            final trimmedContent = fileContent.trim();
-            if (isUrl(trimmedContent)) {
-              sharedUrl = trimmedContent;
-              break;
-            }
-          } else {
-            log(
-              'Shared file not found at ${file.path} or ${fileToRead.path}',
-              isError: true,
-            );
-          }
-        } catch (e) {
-          log('Error reading shared file: $e', isError: true);
         }
       }
     }

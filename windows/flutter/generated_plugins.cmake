@@ -6,6 +6,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   app_links
   dynamic_color
   screen_retriever_windows
+  share_plus
   tray_manager
   url_launcher_windows
   window_manager
