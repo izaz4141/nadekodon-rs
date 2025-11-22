@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:file_share_intent/file_share_intent.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'theme/app_theme.dart';
 import 'ui/pages/home_page.dart';
@@ -79,30 +80,58 @@ class _NadekoDonState extends State<NadekoDon> {
     }
   }
 
-  void _handleSharedMedia(List<SharedMediaFile> sharedMedia) {
+  Future<void> _handleSharedMedia(List<SharedMediaFile> sharedMedia) async {
     log(
       'Received ${sharedMedia.length} shared media items: ${sharedMedia.map((file) => 'type=${file.type.name}, path=${file.path}, value=${file.type.value}').join(' | ')}',
     );
-    // Filter for text or URL types
-    final urlOrText = sharedMedia.firstWhere(
-      (file) =>
-          file.type == SharedMediaType.url || file.type == SharedMediaType.text,
-      orElse: () => SharedMediaFile(path: '', type: SharedMediaType.file),
-    );
 
-    if (urlOrText.path.isEmpty) return;
+    String? sharedUrl;
 
-    final sharedText = urlOrText.path;
+    for (final file in sharedMedia) {
+      if (file.type == SharedMediaType.url ||
+          file.type == SharedMediaType.text) {
+        if (isUrl(file.path)) {
+          sharedUrl = file.path;
+          break;
+        }
+      } else if (file.type == SharedMediaType.file) {
+        try {
+          final tempDir = await getTemporaryDirectory();
+          File fileToRead = File(file.path);
 
-    // Validate that the shared text is a URL
-    if (!isUrl(sharedText)) {
-      return;
+          // If the path is not absolute or doesn't exist, try finding it in temp dir
+          if (!await fileToRead.exists()) {
+            // Remove leading slash if present to join correctly
+            final relativePath = file.path.startsWith('/')
+                ? file.path.substring(1)
+                : file.path;
+            fileToRead = File('${tempDir.path}/$relativePath');
+          }
+          if (await fileToRead.exists()) {
+            final fileContent = await fileToRead.readAsString();
+            final trimmedContent = fileContent.trim();
+            if (isUrl(trimmedContent)) {
+              sharedUrl = trimmedContent;
+              break;
+            }
+          } else {
+            log(
+              'Shared file not found at ${file.path} or ${fileToRead.path}',
+              isError: true,
+            );
+          }
+        } catch (e) {
+          log('Error reading shared file: $e', isError: true);
+        }
+      }
     }
+
+    if (sharedUrl == null) return;
 
     // Get the navigator context and open the dialog
     final context = navigatorKey.currentContext;
     if (context != null) {
-      showAddDownloadDialog(context, initialUrl: sharedText);
+      showAddDownloadDialog(context, initialUrl: sharedUrl);
     }
   }
 
