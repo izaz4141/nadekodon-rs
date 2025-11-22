@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:nadekodon/utils/logger.dart';
 
 String formatBytes(int bytes) {
@@ -87,7 +88,45 @@ Future<bool> showInFolder(String filePath) async {
     } else if (Platform.isMacOS) {
       await Process.run('open', ['-R', filePath]);
       return true;
+    } else if (Platform.isAndroid) {
+      // On Android, try multiple methods to open the directory
+      final directory = file.parent.path;
+
+      // Method 1: Try OpenFilex first
+      final result = await OpenFilex.open(directory);
+      if (result.type == ResultType.done) {
+        return true;
+      }
+
+      // Method 2: Fallback to url_launcher with file:// URI
+      try {
+        final uri = Uri.file(directory);
+        final launched = await launchUrl(
+          uri,
+          mode: LaunchMode.externalApplication,
+        );
+        if (launched) {
+          return true;
+        }
+      } catch (e) {
+        log('Error launching directory with url_launcher: $e', isError: true);
+      }
+
+      // If both methods fail, return false
+      return false;
+    } else if (Platform.isLinux) {
+      // On Linux, try to open with the default file manager
+      final directory = file.parent.path;
+      try {
+        await Process.run('xdg-open', [directory]);
+        return true;
+      } catch (e) {
+        // Fallback to OpenFilex
+        final result = await OpenFilex.open(directory);
+        return result.type == ResultType.done;
+      }
     } else {
+      // Fallback for other platforms
       final directory = file.parent.path;
       final result = await OpenFilex.open(directory);
       return result.type == ResultType.done;
