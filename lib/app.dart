@@ -82,7 +82,7 @@ class _NadekoDonState extends State<NadekoDon> {
 
   Future<void> _handleSharedMedia(List<SharedMediaFile> sharedMedia) async {
     log(
-      'Received ${sharedMedia.length} shared media items: ${sharedMedia.map((file) => 'type=${file.type.name}, path=${file.path}, value=${file.type.value}').join(' | ')}',
+      'Received ${sharedMedia.length} shared media items: ${sharedMedia.map((file) => file.toMap()).join(' | ')}',
     );
 
     String? sharedUrl;
