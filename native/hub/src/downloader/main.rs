@@ -991,11 +991,11 @@ impl DownloadManager {
                 {
                     let mut info = worker.info.lock().await;
                     match info.state {
-                        DownloadState::Completed | DownloadState::Running => {
-                            return Ok(());
+                        DownloadState::Paused => {
+                            info.state = DownloadState::Queued;
                         }
                         _ => {
-                            info.state = DownloadState::Queued;
+                            return Ok(());
                         }
                     }
                 }
