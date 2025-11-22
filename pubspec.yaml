@@ -53,6 +53,7 @@ dependencies:
   file_share_intent: ^3.0.1
   app_links: ^6.4.1
   share_plus: ^12.0.1
+  permission_handler: ^12.0.1
 
 dev_dependencies:
   flutter_test:

@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:file_share_intent/file_share_intent.dart';
 import 'package:app_links/app_links.dart';
-import 'package:path_provider/path_provider.dart';
 
 import 'theme/app_theme.dart';
 import 'ui/pages/home_page.dart';

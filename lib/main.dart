@@ -11,6 +11,7 @@ import 'app.dart';
 import 'utils/log_service.dart';
 import 'utils/settings.dart';
 import 'utils/logger.dart';
+import 'utils/permission_helper.dart';
 
 final _trayListener = _TrayListener();
 final _windowListener = _WindowListener();
@@ -21,6 +22,7 @@ Future<void> main() async {
       WidgetsFlutterBinding.ensureInitialized();
 
       await SettingsManager.init();
+      await checkAndRequestStoragePermission();
 
       await initializeRust(assignRustSignal);
       initRustSignalLogger();
