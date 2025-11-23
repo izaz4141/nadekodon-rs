@@ -64,11 +64,20 @@ pub struct DoDownload {
 }
 
 #[derive(Deserialize, DartSignal)]
-pub struct GetDownloadList {}
+pub struct GetDownloadList {
+    pub anchor_id: Option<String>,
+    pub before: u32,
+    pub after: u32,
+    pub statuses: Vec<String>,
+    pub tag: Option<i32>,
+}
 
 #[derive(Serialize, RustSignal)]
 pub struct DownloadList {
-    pub list: Vec<DownloadGlance>
+    pub list: Vec<DownloadGlance>,
+    pub total_count: u64,
+    pub start_index: u64,
+    pub tag: Option<i32>,
 }
 #[derive(Serialize, SignalPiece)]
 pub struct DownloadGlance {

@@ -421,3 +421,97 @@ pub async fn handle_update_download_url(manager: Arc<DownloadManager>) {
         }
     }
 }
+
+pub async fn get_download_list(manager: Arc<DownloadManager>) {
+    let mut receiver = GetDownloadList::get_dart_signal_receiver();
+    while let Some(dart_signal) = receiver.recv().await {
+        let query = dart_signal.message;
+        
+        match manager.list_all().await {
+            Ok(list) => {
+                // 1. Filter
+                let mut filtered: Vec<DownloadInfo> = list.into_iter()
+                    .filter(|info| {
+                        let state_str = match &info.state {
+                            DownloadState::Queued => "Queued",
+                            DownloadState::Running => "Running",
+                            DownloadState::Paused => "Paused",
+                            DownloadState::Completed => "Completed",
+                            DownloadState::Cancelled => "Cancelled",
+                            DownloadState::Error(_) => "Error",
+                        };
+                        // Check if state_str is in query.statuses (case-insensitive or exact?)
+                        // Assuming exact match for now based on UI constants
+                        query.statuses.contains(&state_str.to_string())
+                    })
+                    .collect();
+
+                filtered.reverse();
+
+                let total_count = filtered.len() as u64;
+
+                // 3. Find Anchor
+                let anchor_index = if let Some(anchor_id_str) = query.anchor_id {
+                    filtered.iter().position(|x| x.id.to_string() == anchor_id_str)
+                } else {
+                    None
+                };
+
+                // 4. Calculate Range
+                let (start, end) = match anchor_index {
+                    Some(idx) => {
+                        let s = idx.saturating_sub(query.before as usize);
+                        let e = (idx + query.after as usize + 1).min(filtered.len());
+                        (s, e)
+                    }
+                    None => {
+                        // If no anchor or anchor not found, start from 0
+                        let s = 0;
+                        let e = (query.after as usize + 1).min(filtered.len());
+                        (s, e)
+                    }
+                };
+
+                // 5. Slice and Map
+                let slice = &filtered[start..end];
+                let mut download_list = Vec::new();
+                
+                for info in slice {
+                    let state_str = match &info.state {
+                        DownloadState::Queued => "Queued".to_string(),
+                        DownloadState::Running => "Running".to_string(),
+                        DownloadState::Paused => "Paused".to_string(),
+                        DownloadState::Completed => "Completed".to_string(),
+                        DownloadState::Cancelled => "Cancelled".to_string(),
+                        DownloadState::Error(_) => "Error".to_string(),
+                    };
+                    let speed = calc_speed(info.history.clone());
+                    let glance = DownloadGlance {
+                        id: info.id.to_string(),
+                        name: info.dest
+                            .file_name()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        dest: info.dest.to_string_lossy().to_string(),
+                        total_size: info.total_size,
+                        downloaded: info.downloaded,
+                        speed: speed,
+                        state: state_str,
+                    };
+                    download_list.push(glance);
+                }
+
+                DownloadList { 
+                    list: download_list,
+                    total_count,
+                    start_index: start as u64,
+                    tag: query.tag,
+                }.send_signal_to_dart();
+            }
+            Err(e) => {
+                logger::error(&format!("Failed to get download list: {:?}", e));
+            }
+        }
+    }
+}

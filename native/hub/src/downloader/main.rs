@@ -16,9 +16,8 @@ use tokio::{
     time::{timeout, interval, Interval, Instant, sleep_until},
 };
 use uuid::Uuid;
-use crate::utils::logger;
-use rinf::RustSignal;
 
+use crate::utils::logger;
 use crate::utils::{
     types::{
         HeadData, DownloadState, DownloadInfo,
@@ -27,7 +26,7 @@ use crate::utils::{
     helper::calc_speed,
     url::is_hls_url,
 };
-use crate::signals::{DownloadGlance, DownloadList};
+
 
 const HISTORY_SAMPLE_INTERVAL_SECS: u64 = 1;
 const MAX_HISTORY: usize = 15;
@@ -1091,48 +1090,6 @@ impl DownloadManager {
         Ok(out)
     }
 
-    pub async fn send_list(&self, mut interval: Interval) {
-        loop {
-            interval.tick().await;
-
-            match self.list_all().await {
-                Ok(list) => {
-                    let mut download_list = Vec::new();
-                    let list_ref = list.clone();
-                    for info in list {
-                        let state_str = match &info.state {
-                            DownloadState::Queued => "Queued".to_string(),
-                            DownloadState::Running => "Running".to_string(),
-                            DownloadState::Paused => "Paused".to_string(),
-                            DownloadState::Completed => "Completed".to_string(),
-                            DownloadState::Cancelled => "Cancelled".to_string(),
-                            DownloadState::Error(_) => "Error".to_string(),
-                        };
-                        let speed = calc_speed(info.history);
-                        let glance = DownloadGlance {
-                            id: info.id.to_string(),
-                            name: info.dest
-                                .file_name()
-                                .and_then(|s| s.to_str())
-                                .unwrap_or("")
-                                .to_string(),
-                            dest: info.dest.to_string_lossy().to_string(),
-                            total_size: info.total_size,
-                            downloaded: info.downloaded,
-                            speed: speed,
-                            state: state_str.clone(),
-                        };
-                        download_list.push(glance);
-                    }
-                    DownloadList { list: download_list }.send_signal_to_dart();
-                }
-                Err(e) => {
-                    logger::error(&format!("Failed to get download details: {:?}", e));
-                }
-            }
-        }
-    }
-
     pub async fn recalculate_speed_limits(&self, mut interval: Interval) {
         loop {
             interval.tick().await;
@@ -1178,14 +1135,8 @@ impl DownloadManager {
     }
 
     pub async fn updater(self: &Arc<Self>) {
-        let mut interval1 = interval(Duration::from_secs(1));
         let mut interval2 = interval(Duration::from_secs(1));
-        let mgr1 = self.clone();
         let mgr2 = self.clone();
-
-        tokio::spawn( async move {
-            mgr1.send_list(interval1).await;
-        });
 
         tokio::spawn( async move {
             mgr2.recalculate_speed_limits(interval2).await;
