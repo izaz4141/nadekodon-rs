@@ -440,13 +440,72 @@ pub async fn get_download_list(manager: Arc<DownloadManager>) {
                             DownloadState::Cancelled => "Cancelled",
                             DownloadState::Error(_) => "Error",
                         };
-                        // Check if state_str is in query.statuses (case-insensitive or exact?)
-                        // Assuming exact match for now based on UI constants
-                        query.statuses.contains(&state_str.to_string())
+                        
+                        let matches_status = query.statuses.contains(&state_str.to_string());
+                        
+                        let matches_search = if let Some(q) = &query.search_query {
+                            let q = q.to_lowercase();
+                            let name = info.dest.file_name()
+                                .and_then(|s| s.to_str())
+                                .unwrap_or("")
+                                .to_lowercase();
+                            let url = info.url.to_lowercase();
+                            name.contains(&q) || url.contains(&q)
+                        } else {
+                            true
+                        };
+
+                        matches_status && matches_search
                     })
                     .collect();
 
-                filtered.reverse();
+                // 2. Sort
+                let sort_by = query.sort_by.unwrap_or(0);
+                let ascending = query.ascending.unwrap_or(false);
+
+                match sort_by {
+                    1 => { // Name
+                        filtered.sort_by(|a, b| {
+                            let name_a = a.dest.file_name().and_then(|s| s.to_str()).unwrap_or("");
+                            let name_b = b.dest.file_name().and_then(|s| s.to_str()).unwrap_or("");
+                            if ascending {
+                                name_a.cmp(name_b)
+                            } else {
+                                name_b.cmp(name_a)
+                            }
+                        });
+                    },
+                    2 => { // Size
+                        filtered.sort_by(|a, b| {
+                            let size_a = a.total_size.unwrap_or(0);
+                            let size_b = b.total_size.unwrap_or(0);
+                            if ascending {
+                                size_a.cmp(&size_b)
+                            } else {
+                                size_b.cmp(&size_a)
+                            }
+                        });
+                    },
+                    3 => { // Speed
+                        filtered.sort_by(|a, b| {
+                            let speed_a = calc_speed(a.history.clone()) as u64;
+                            let speed_b = calc_speed(b.history.clone()) as u64;
+                            if ascending {
+                                speed_a.cmp(&speed_b)
+                            } else {
+                                speed_b.cmp(&speed_a)
+                            }
+                        });
+                    },
+                    _ => { // Date (Insertion Order)
+                        // Default is oldest first.
+                        // If ascending (Oldest First), do nothing.
+                        // If descending (Newest First), reverse.
+                        if !ascending {
+                            filtered.reverse();
+                        }
+                    }
+                }
 
                 let total_count = filtered.len() as u64;
 

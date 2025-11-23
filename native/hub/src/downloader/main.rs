@@ -689,6 +689,9 @@ impl DownloadWorker {
             }
             if !monitor_worker.cancel.load(Ordering::SeqCst) {
                 let mut info = monitor_worker.info.lock().await;
+                if info.total_size.is_none() {
+                    info.total_size = Some(monitor_worker.downloaded.load(Ordering::SeqCst));
+                }
                 info.state = DownloadState::Completed;
                 let id = info.id.clone();
                 drop(info);

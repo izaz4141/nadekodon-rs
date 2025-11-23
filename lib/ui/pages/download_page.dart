@@ -48,6 +48,13 @@ class _DownloadPageState extends State<DownloadPage>
   final _activeState = _DownloadListState();
   final _completedState = _DownloadListState();
 
+  // Search and Sort State
+  String _searchQuery = "";
+  int _sortBy = 0; // 0: Date, 1: Name, 2: Size, 3: Speed
+  bool _ascending = false;
+  bool _isSearching = false;
+  final TextEditingController _searchController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -72,6 +79,7 @@ class _DownloadPageState extends State<DownloadPage>
     _dListSubs.cancel();
     _activeState.scrollController.dispose();
     _completedState.scrollController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -178,6 +186,9 @@ class _DownloadPageState extends State<DownloadPage>
       after: afterCount,
       statuses: statusStrings,
       tag: tag,
+      searchQuery: _searchQuery.isNotEmpty ? _searchQuery : null,
+      sortBy: _sortBy,
+      ascending: _ascending,
     ).sendSignalToRust();
   }
 
@@ -241,6 +252,33 @@ class _DownloadPageState extends State<DownloadPage>
     );
   }
 
+  String _getSortLabel(int sort) {
+    switch (sort) {
+      case 0:
+        return "Date";
+      case 1:
+        return "Name";
+      case 2:
+        return "Size";
+      case 3:
+        return "Speed";
+      default:
+        return "Date";
+    }
+  }
+
+  void _resetList() {
+    setState(() {
+      _activeState.items = [];
+      _activeState.totalCount = 0;
+      _activeState.isLoading = true;
+      _completedState.items = [];
+      _completedState.totalCount = 0;
+      _completedState.isLoading = true;
+    });
+    _pollDownloads();
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -266,24 +304,234 @@ class _DownloadPageState extends State<DownloadPage>
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
+      body: Column(
         children: [
-          _DownloadListTab(
-            state: _activeState,
-            emptyMessage: "No active downloads",
-            onToggleSelection: (id) => _toggleSelection(_activeState, id),
-            onToggleSelectAll: () => _toggleSelectAll(_activeState),
-            onCancelSelected: () => _cancelSelected(_activeState),
-            onDeleteSelected: () => _deleteSelected(_activeState),
+          // Filter Bar
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              AppTheme.spaceMD * AppTheme.spaceScale(context),
+              AppTheme.spaceMD * AppTheme.spaceScale(context),
+              AppTheme.spaceMD * AppTheme.spaceScale(context),
+              0,
+            ),
+            child: Row(
+              children: [
+                // Search
+                if (_isSearching)
+                  Expanded(
+                    child: TextField(
+                      controller: _searchController,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: "Search downloads...",
+                        prefixIcon: Icon(
+                          Icons.search,
+                          size: AppTheme.iconSM * AppTheme.iconScale(context),
+                        ),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            Icons.close,
+                            size: AppTheme.iconSM * AppTheme.iconScale(context),
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _isSearching = false;
+                              _searchQuery = "";
+                              _searchController.clear();
+                              _resetList();
+                            });
+                          },
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(
+                            AppTheme.radiusLG * AppTheme.radiusScale(context),
+                          ),
+                          borderSide: BorderSide.none,
+                        ),
+                        filled: true,
+                        fillColor: colors.surfaceContainer,
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal:
+                              AppTheme.spaceMD * AppTheme.spaceScale(context),
+                          vertical:
+                              AppTheme.spaceXS * AppTheme.spaceScale(context),
+                        ),
+                      ),
+                      style: textTheme.bodyMedium,
+                      onChanged: (value) {
+                        _searchQuery = value;
+                        _resetList();
+                      },
+                    ),
+                  )
+                else ...[
+                  ActionChip(
+                    avatar: Icon(
+                      Icons.search,
+                      size: AppTheme.iconSM * AppTheme.iconScale(context),
+                      color: colors.onSurfaceVariant,
+                    ),
+                    label: Text("Search", style: textTheme.bodyMedium),
+                    onPressed: () {
+                      setState(() {
+                        _isSearching = true;
+                      });
+                    },
+                    backgroundColor: colors.surfaceContainer,
+                    side: BorderSide.none,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(
+                        AppTheme.radiusLG * AppTheme.radiusScale(context),
+                      ),
+                    ),
+                    padding: EdgeInsets.symmetric(
+                      horizontal:
+                          AppTheme.spaceXS * AppTheme.spaceScale(context),
+                      vertical: AppTheme.spaceXS * AppTheme.spaceScale(context),
+                    ),
+                  ),
+                  SizedBox(
+                    width: AppTheme.spaceSM * AppTheme.spaceScale(context),
+                  ),
+                  // Sort
+                  Builder(
+                    builder: (context) {
+                      return ActionChip(
+                        avatar: Icon(
+                          _ascending
+                              ? Icons.arrow_upward
+                              : Icons.arrow_downward,
+                          size: AppTheme.iconSM * AppTheme.iconScale(context),
+                          color: colors.onSurfaceVariant,
+                        ),
+                        label: Text(
+                          _getSortLabel(_sortBy),
+                          style: textTheme.bodyMedium,
+                        ),
+                        onPressed: () {
+                          final RenderBox button =
+                              context.findRenderObject() as RenderBox;
+                          final RenderBox overlay =
+                              Overlay.of(context).context.findRenderObject()
+                                  as RenderBox;
+                          final RelativeRect position = RelativeRect.fromRect(
+                            Rect.fromPoints(
+                              button.localToGlobal(
+                                Offset.zero,
+                                ancestor: overlay,
+                              ),
+                              button.localToGlobal(
+                                button.size.bottomRight(Offset.zero),
+                                ancestor: overlay,
+                              ),
+                            ),
+                            Offset.zero & overlay.size,
+                          );
+
+                          showMenu<int>(
+                            context: context,
+                            position: position,
+                            color: colors.surfaceContainer,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(
+                                AppTheme.radiusMD *
+                                    AppTheme.radiusScale(context),
+                              ),
+                            ),
+                            items: [
+                              PopupMenuItem(
+                                value: 0,
+                                child: Text(
+                                  "Date",
+                                  style: textTheme.bodyMedium,
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 1,
+                                child: Text(
+                                  "Name",
+                                  style: textTheme.bodyMedium,
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 2,
+                                child: Text(
+                                  "Size",
+                                  style: textTheme.bodyMedium,
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 3,
+                                child: Text(
+                                  "Speed",
+                                  style: textTheme.bodyMedium,
+                                ),
+                              ),
+                            ],
+                          ).then((value) {
+                            if (value != null) {
+                              if (_sortBy == value) {
+                                setState(() {
+                                  _ascending = !_ascending;
+                                });
+                              } else {
+                                setState(() {
+                                  _sortBy = value;
+                                  // Preserve current direction when switching sort type
+                                });
+                              }
+                              _resetList();
+                            }
+                          });
+                        },
+                        backgroundColor: colors.surfaceContainer,
+                        side: BorderSide.none,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(
+                            AppTheme.radiusLG * AppTheme.radiusScale(context),
+                          ),
+                        ),
+                        padding: EdgeInsets.symmetric(
+                          horizontal:
+                              AppTheme.spaceXS * AppTheme.spaceScale(context),
+                          vertical:
+                              AppTheme.spaceXS * AppTheme.spaceScale(context),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ],
+            ),
           ),
-          _DownloadListTab(
-            state: _completedState,
-            emptyMessage: "No completed downloads",
-            onToggleSelection: (id) => _toggleSelection(_completedState, id),
-            onToggleSelectAll: () => _toggleSelectAll(_completedState),
-            onCancelSelected: () => _cancelSelected(_completedState),
-            onDeleteSelected: () => _deleteSelected(_completedState),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _DownloadListTab(
+                  state: _activeState,
+                  emptyMessage: _searchQuery.isNotEmpty
+                      ? "No results found"
+                      : "No active downloads",
+                  onToggleSelection: (id) => _toggleSelection(_activeState, id),
+                  onToggleSelectAll: () => _toggleSelectAll(_activeState),
+                  onCancelSelected: () => _cancelSelected(_activeState),
+                  onDeleteSelected: () => _deleteSelected(_activeState),
+                ),
+                _DownloadListTab(
+                  state: _completedState,
+                  emptyMessage: _searchQuery.isNotEmpty
+                      ? "No results found"
+                      : "No completed downloads",
+                  onToggleSelection: (id) =>
+                      _toggleSelection(_completedState, id),
+                  onToggleSelectAll: () => _toggleSelectAll(_completedState),
+                  onCancelSelected: () => _cancelSelected(_completedState),
+                  onDeleteSelected: () => _deleteSelected(_completedState),
+                ),
+              ],
+            ),
           ),
         ],
       ),

@@ -70,6 +70,9 @@ pub struct GetDownloadList {
     pub after: u32,
     pub statuses: Vec<String>,
     pub tag: Option<i32>,
+    pub search_query: Option<String>,
+    pub sort_by: Option<i32>, // 0: Date, 1: Name, 2: Size, 3: Speed
+    pub ascending: Option<bool>,
 }
 
 #[derive(Serialize, RustSignal)]
