@@ -3,7 +3,32 @@ import 'dart:io';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:nadekodon/utils/helper.dart';
 import 'package:nadekodon/src/bindings/bindings.dart';
+import 'package:rinf/rinf.dart';
 import 'package:flutter_local_notifications_linux/src/model/hint.dart';
+
+@pragma('vm:entry-point')
+void notificationTapBackground(NotificationResponse details) {
+  // Initialize Rust for background isolate
+  initializeRust(assignRustSignal);
+
+  final actionId = details.actionId;
+  final payload = details.payload;
+
+  if (payload != null && actionId != null) {
+    final id = payload;
+    switch (actionId) {
+      case 'pause':
+        PauseDownload(id: id).sendSignalToRust();
+        break;
+      case 'resume':
+        ResumeDownload(id: id).sendSignalToRust();
+        break;
+      case 'cancel':
+        CancelDownload(id: id).sendSignalToRust();
+        break;
+    }
+  }
+}
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -48,6 +73,7 @@ class NotificationService {
 
     await flutterLocalNotificationsPlugin.initialize(
       initializationSettings,
+      onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
       onDidReceiveNotificationResponse: (NotificationResponse details) {
         final actionId = details.actionId;
         final payload = details.payload;
@@ -244,10 +270,24 @@ class NotificationService {
           playSound: false,
           enableVibration: false,
           actions: <AndroidNotificationAction>[
-            if (isRunning) const AndroidNotificationAction('pause', 'Pause'),
-            if (isPaused) const AndroidNotificationAction('resume', 'Resume'),
+            if (isRunning)
+              const AndroidNotificationAction(
+                'pause',
+                'Pause',
+                showsUserInterface: false,
+              ),
+            if (isPaused)
+              const AndroidNotificationAction(
+                'resume',
+                'Resume',
+                showsUserInterface: false,
+              ),
             if (isRunning || isPaused)
-              const AndroidNotificationAction('cancel', 'Cancel'),
+              const AndroidNotificationAction(
+                'cancel',
+                'Cancel',
+                showsUserInterface: false,
+              ),
           ],
         );
 
