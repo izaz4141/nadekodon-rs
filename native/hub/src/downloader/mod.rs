@@ -1,6 +1,6 @@
 pub mod main;
 
-use std::{str::from_utf8, sync::Arc, time::Duration};
+use std::{str::from_utf8, sync::Arc, time::{Duration, SystemTime, UNIX_EPOCH}};
 use reqwest::Client;
 use uuid::Uuid;
 
@@ -234,6 +234,8 @@ pub async fn spawn_download_worker(manager: Arc<DownloadManager>) {
                                     state: DownloadState::Completed,
                                     history: Vec::new(),
                                     parts: Vec::new(),
+                                    added_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,
+                                    updated_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,
                                 };
                                 
                                 manager.load_snapshot(vec![final_info]).await;
@@ -498,12 +500,13 @@ pub async fn get_download_list(manager: Arc<DownloadManager>) {
                         });
                     },
                     _ => { // Date (Insertion Order)
-                        // Default is oldest first.
-                        // If ascending (Oldest First), do nothing.
-                        // If descending (Newest First), reverse.
-                        if !ascending {
-                            filtered.reverse();
-                        }
+                        filtered.sort_by(|a, b| {
+                            if ascending {
+                                a.added_at.cmp(&b.added_at)
+                            } else {
+                                b.added_at.cmp(&a.added_at)
+                            }
+                        });
                     }
                 }
 

@@ -64,6 +64,8 @@ pub struct DownloadInfo {
     // history is a list of (timestamp_millis, downloaded_bytes) samples
     pub history: Vec<(u128, u64)>,
     pub parts: Vec<PartInfo>,
+    pub added_at: u64,
+    pub updated_at: u64,
 }
 
 #[derive(Debug)]

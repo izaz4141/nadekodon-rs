@@ -69,6 +69,8 @@ impl DownloadWorker {
                 state: DownloadState::Queued,
                 history: Vec::new(),
                 parts: Vec::new(),
+                added_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,
+                updated_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,
             }),
             client: client,
             threads: settings.clone().read().await.download_threads as u64,
@@ -766,6 +768,7 @@ impl DownloadWorker {
         let mut info = self.info.lock().await;
         info.downloaded = self.downloaded.load(Ordering::SeqCst);
         info.history = self.history.read().await.clone();
+        info.updated_at = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
         
         let pp = self.part_progress.read().await.clone();
         if info.parts.len() == pp.len() {
@@ -1091,6 +1094,20 @@ impl DownloadManager {
             out.push(w.info().await);
         }
         Ok(out)
+    }
+
+    pub async fn sync_active_workers(&self) {
+        let active_ids = {
+            let active = self.active.lock().await;
+            active.iter().cloned().collect::<Vec<_>>()
+        };
+
+        let workers = self.workers.lock().await;
+        for id in active_ids {
+            if let Some(w) = workers.get(&id) {
+                w.sync_to_info().await;
+            }
+        }
     }
 
     pub async fn recalculate_speed_limits(&self, mut interval: Interval) {

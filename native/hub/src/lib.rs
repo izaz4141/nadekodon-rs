@@ -29,6 +29,9 @@ async fn main() {
     // If you must use blocking code, use `tokio::task::spawn_blocking`
     // or the equivalent provided by your async library.
 
+    let shutdown_signal = std::sync::Arc::new(tokio::sync::Notify::new());
+    let db_done_signal = std::sync::Arc::new(tokio::sync::Notify::new());
+
     let rclient = utils::url::build_browser_client().await;
     let dm = start_download_manager(rclient.clone()).await;
     spawn(utils::settings::update_settings(dm.clone()));
@@ -41,11 +44,17 @@ async fn main() {
     spawn(cancel_download(dm.clone()));
     spawn(delete_download(dm.clone()));
     spawn(handle_update_download_url(dm.clone()));
-    spawn(utils::database::start_database_manager(dm.clone()));
+    spawn(utils::database::start_database_manager(dm.clone(), shutdown_signal.clone(), db_done_signal.clone()));
     spawn(handle_ytdl_query());
 
     // Keep the main function running until Dart shutdown.
     dart_shutdown().await;
+    
+    // Signal database to save and exit
+    shutdown_signal.notify_waiters();
+    
+    // Wait for database to finish saving (with timeout)
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(2), db_done_signal.notified()).await;
 }
 
 
