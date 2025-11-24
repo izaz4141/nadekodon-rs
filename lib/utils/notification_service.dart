@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui';
+import 'dart:isolate';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:nadekodon/utils/helper.dart';
 import 'package:nadekodon/src/bindings/bindings.dart';
@@ -8,29 +10,41 @@ import 'package:flutter_local_notifications_linux/src/model/hint.dart';
 
 @pragma('vm:entry-point')
 void notificationTapBackground(NotificationResponse details) {
-  // Initialize Rust for background isolate
-  initializeRust(assignRustSignal);
-
   final actionId = details.actionId;
   final payload = details.payload;
 
   if (payload != null && actionId != null) {
-    final id = payload;
-    switch (actionId) {
-      case 'pause':
-        PauseDownload(id: id).sendSignalToRust();
-        break;
-      case 'resume':
-        ResumeDownload(id: id).sendSignalToRust();
-        break;
-      case 'cancel':
-        CancelDownload(id: id).sendSignalToRust();
-        break;
+    final SendPort? sendPort = IsolateNameServer.lookupPortByName(
+      NotificationService.notificationPortName,
+    );
+
+    if (sendPort != null) {
+      // Main isolate is alive, send action to it
+      sendPort.send([actionId, payload]);
+    } else {
+      // Main isolate is dead, initialize Rust and handle directly
+      initializeRust(assignRustSignal);
+      _handleAction(actionId, payload);
     }
   }
 }
 
+void _handleAction(String actionId, String id) {
+  switch (actionId) {
+    case 'pause':
+      PauseDownload(id: id).sendSignalToRust();
+      break;
+    case 'resume':
+      ResumeDownload(id: id).sendSignalToRust();
+      break;
+    case 'cancel':
+      CancelDownload(id: id).sendSignalToRust();
+      break;
+  }
+}
+
 class NotificationService {
+  static const String notificationPortName = 'notification_action_port';
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
   NotificationService._internal();
@@ -41,12 +55,28 @@ class NotificationService {
   bool _isInitialized = false;
   Timer? _pollTimer;
   StreamSubscription? _signalSubscription;
+  ReceivePort? _port;
 
   final Map<String, String> _runningDownloads = {};
   final Set<String> _stoppedDownloads = {};
 
   Future<void> init() async {
     if (_isInitialized) return;
+
+    // Register port for background communication
+    IsolateNameServer.removePortNameMapping(notificationPortName);
+    _port = ReceivePort();
+    IsolateNameServer.registerPortWithName(
+      _port!.sendPort,
+      notificationPortName,
+    );
+    _port!.listen((dynamic data) {
+      if (data is List && data.length == 2) {
+        final actionId = data[0] as String;
+        final id = data[1] as String;
+        _handleAction(actionId, id);
+      }
+    });
 
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/launcher_icon');
@@ -79,18 +109,7 @@ class NotificationService {
         final payload = details.payload;
 
         if (payload != null && actionId != null) {
-          final id = payload;
-          switch (actionId) {
-            case 'pause':
-              PauseDownload(id: id).sendSignalToRust();
-              break;
-            case 'resume':
-              ResumeDownload(id: id).sendSignalToRust();
-              break;
-            case 'cancel':
-              CancelDownload(id: id).sendSignalToRust();
-              break;
-          }
+          _handleAction(actionId, payload);
         }
       },
     );
@@ -143,6 +162,9 @@ class NotificationService {
   }
 
   void stopListening() {
+    IsolateNameServer.removePortNameMapping(notificationPortName);
+    _port?.close();
+    _port = null;
     _pollTimer?.cancel();
     _pollTimer = null;
     _signalSubscription?.cancel();
@@ -297,9 +319,9 @@ class NotificationService {
           category: LinuxNotificationCategory.transfer,
           urgency: LinuxNotificationUrgency.low,
           suppressSound: true,
-          transient: isRunning, // Transient if running (updates frequently)
+          transient: isRunning,
           customHints: [
-            LinuxNotificationCustomHint('value', LinuxHintInt16Value(progress)),
+            LinuxNotificationCustomHint('value', LinuxHintInt32Value(progress)),
           ],
           actions: <LinuxNotificationAction>[
             if (isRunning)
