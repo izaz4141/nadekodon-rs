@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:permission_handler/permission_handler.dart';
 
-Future<void> checkAndRequestStoragePermission() async {
+Future<void> checkAndRequestPermission() async {
   if (!Platform.isAndroid) return;
 
   // This permission grants "All files access".

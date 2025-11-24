@@ -8,6 +8,7 @@ import 'package:rinf/rinf.dart';
 import 'src/bindings/bindings.dart';
 
 import 'app.dart';
+import 'utils/notification_service.dart';
 import 'utils/log_service.dart';
 import 'utils/settings.dart';
 import 'utils/logger.dart';
@@ -22,14 +23,16 @@ Future<void> main() async {
       WidgetsFlutterBinding.ensureInitialized();
 
       await SettingsManager.init();
-      await checkAndRequestStoragePermission();
 
       await initializeRust(assignRustSignal);
       initRustSignalLogger();
-      await SettingsManager.sendAllSettings();
 
+      await SettingsManager.sendAllSettings();
       final dbPath = await SettingsManager.getDatabasePath();
       InitDatabase(path: dbPath).sendSignalToRust();
+
+      NotificationService().startListening();
+      await checkAndRequestPermission();
 
       if (!Platform.isAndroid && !Platform.isIOS && !Platform.isFuchsia) {
         await windowManager.ensureInitialized();
@@ -91,6 +94,7 @@ class _WindowListener extends WindowListener {
     if (SettingsManager.retreatToTray.value) {
       await windowManager.hide();
     } else {
+      NotificationService().stopListening();
       await windowManager.destroy();
     }
   }
@@ -108,6 +112,7 @@ class _TrayListener extends TrayListener {
       await windowManager.show();
       await windowManager.focus();
     } else if (menuItem.key == 'exit') {
+      NotificationService().stopListening();
       await windowManager.destroy();
     }
   }

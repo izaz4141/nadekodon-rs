@@ -88,6 +88,7 @@ class _DownloadPageState extends State<DownloadPage>
     final tag = message.tag; // 0 for active, 1 for completed
 
     if (tag == null) return;
+    if (tag != 0 && tag != 1) return;
     if (!mounted) return;
 
     final state = tag == 0 ? _activeState : _completedState;
