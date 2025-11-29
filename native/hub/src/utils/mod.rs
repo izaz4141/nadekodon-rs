@@ -5,3 +5,4 @@ pub mod settings;
 pub mod types;
 pub mod ytdlp;
 pub mod url;
+pub mod server;

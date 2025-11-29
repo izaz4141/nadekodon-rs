@@ -7,20 +7,27 @@ const double kDesktopWidthBreakpoint = 640;
 class AppTheme {
   static ({ColorScheme light, ColorScheme dark}) getColorSchemes(
     ColorScheme? lightDynamic,
-    ColorScheme? darkDynamic,
-  ) {
-    final light =
-        lightDynamic?.harmonized() ??
-        ColorScheme.fromSeed(
-          seedColor: fallbackSeed,
-          brightness: Brightness.light,
-        );
-    final dark =
-        darkDynamic?.harmonized() ??
-        ColorScheme.fromSeed(
-          seedColor: fallbackSeed,
-          brightness: Brightness.dark,
-        );
+    ColorScheme? darkDynamic, {
+    required Color customSeed,
+    required bool useDynamicColor,
+  }) {
+    ColorScheme? light;
+    ColorScheme? dark;
+
+    if (useDynamicColor && lightDynamic != null && darkDynamic != null) {
+      light = lightDynamic.harmonized();
+      dark = darkDynamic.harmonized();
+    } else {
+      light = ColorScheme.fromSeed(
+        seedColor: customSeed,
+        brightness: Brightness.light,
+      );
+      dark = ColorScheme.fromSeed(
+        seedColor: customSeed,
+        brightness: Brightness.dark,
+      );
+    }
+
     return (light: light, dark: dark);
   }
 
@@ -148,6 +155,40 @@ class AppTheme {
             vertical: spaceSM * spaceScale,
           ),
         ),
+      ),
+
+      tooltipTheme: TooltipThemeData(
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(radiusSM * radiusScale),
+        ),
+        textStyle: TextStyle(
+          fontSize: textSM * textScale,
+          color: scheme.onSurface,
+        ),
+        padding: EdgeInsets.symmetric(
+          horizontal: spaceSM * spaceScale,
+          vertical: spaceXS * spaceScale,
+        ),
+        margin: EdgeInsets.all(spaceXS * spaceScale),
+        waitDuration: const Duration(milliseconds: 200),
+        showDuration: const Duration(seconds: 2),
+        verticalOffset: spaceMD * spaceScale,
+        preferBelow: false,
+      ),
+      scrollbarTheme: ScrollbarThemeData(
+        thumbVisibility: WidgetStateProperty.all(true),
+        thickness: WidgetStateProperty.all(spaceXS * spaceScale),
+        radius: Radius.circular(radiusSM * radiusScale),
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.dragged)) {
+            return scheme.primary.withAlpha(200);
+          }
+          if (states.contains(WidgetState.hovered)) {
+            return scheme.primary.withAlpha(150);
+          }
+          return scheme.onSurfaceVariant.withAlpha(100);
+        }),
       ),
     );
   }

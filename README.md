@@ -1,57 +1,55 @@
-# nadekodon
+# NadekoDon
 
-A new Flutter project.
+**NadekoDon** is a modern, cross-platform Download Manager built with Flutter and Rust. It leverages the performance of Rust for backend operations (downloading, file management) and the flexibility of Flutter for a beautiful user interface.
+
+## Key Features
+
+- **High Performance**: Powered by a Rust backend for efficient download handling.
+- **Cross-Platform**: Runs on Linux, Windows, and Android.
+- **Browser Integration**: Includes a local server to communicate with browser extensions for seamless download capture.
+- **System Tray Support**: Minimizes to the system tray for background operation.
 
 ## Getting Started
 
-This project is a starting point for a Flutter application.
+To run and build this app, you need to have:
+- [Flutter SDK](https://docs.flutter.dev/get-started/install)
+- [Rust toolchain](https://www.rust-lang.org/tools/install)
+- [Rinf CLI](https://pub.dev/packages/rinf)
 
-A few resources to get you started if this is your first Flutter project:
+### Prerequisites
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
-
-## Using Rust Inside Flutter
-
-This project leverages Flutter for GUI and Rust for the backend logic,
-utilizing the capabilities of the
-[Rinf](https://pub.dev/packages/rinf) framework.
-
-To run and build this app, you need to have
-[Flutter SDK](https://docs.flutter.dev/get-started/install)
-and [Rust toolchain](https://www.rust-lang.org/tools/install)
-installed on your system.
-You can check that your system is ready with the commands below.
-Note that all the Flutter subcomponents should be installed.
+Check your system readiness:
 
 ```shell
 rustc --version
-flutter doctor
-```
-
-You also need to have the CLI tool for Rinf ready.
-
-```shell
+fvm flutter doctor
 cargo install rinf_cli
 ```
 
-Signals sent between Dart and Rust are implemented using signal attributes.
-If you've modified the signal structs, run the following command
-to generate the corresponding Dart classes:
+### Build Commands
 
+**Generate Rust-Dart Signals:**
 ```shell
 rinf gen
 ```
 
-Now you can run and build this app just like any other Flutter projects.
-
+**Run the App:**
 ```shell
-flutter run
+fvm flutter run
 ```
 
-For detailed instructions on writing Rust and Flutter together,
-please refer to Rinf's [documentation](https://rinf.cunarist.com).
+**Build for Production:**
+```shell
+fvm flutter build <platform>
+```
+
+## Development
+
+### Code Style
+- **Dart**: Follows `flutter_lints`.
+- **Rust**: Follows standard `rustfmt` conventions.
+
+### Linting
+- Dart: `fvm flutter analyze`
+- Rust: `cargo clippy -- -D warnings`
+

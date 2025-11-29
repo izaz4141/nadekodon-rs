@@ -154,3 +154,25 @@ pub struct UpdateDownloadUrl {
     pub id: String,
     pub new_url: String,
 }
+
+#[derive(Serialize, RustSignal)]
+pub struct RequestAddDownload {
+    pub url: String,
+    pub filename: Option<String>,
+    pub user_agent: Option<String>,
+    pub cookie: Option<String>,
+}
+
+#[derive(Deserialize, DartSignal)]
+pub struct StartServer {
+    pub port: u16,
+    pub api_key: String,
+}
+
+#[derive(Deserialize, DartSignal)]
+pub struct RequestNewApiKey {}
+
+#[derive(Serialize, RustSignal)]
+pub struct NewApiKey {
+    pub key: String,
+}

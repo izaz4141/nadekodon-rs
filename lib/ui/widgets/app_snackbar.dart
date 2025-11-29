@@ -78,7 +78,6 @@ class _OverlaySnack extends StatefulWidget {
     required this.icon,
     required this.duration,
     required this.onRequestClose,
-    super.key,
   });
 
   @override

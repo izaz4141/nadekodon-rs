@@ -34,6 +34,13 @@ Future<void> main() async {
       NotificationService().startListening();
       await checkAndRequestPermission();
 
+      if (!Platform.isAndroid) {
+        StartServer(
+          port: SettingsManager.serverPort.value,
+          apiKey: SettingsManager.serverApiKey.value,
+        ).sendSignalToRust();
+      }
+
       if (!Platform.isAndroid && !Platform.isIOS && !Platform.isFuchsia) {
         await windowManager.ensureInitialized();
         await windowManager.setPreventClose(true);
@@ -45,26 +52,16 @@ Future<void> main() async {
         );
 
         if (SettingsManager.retreatToTray.value) {
-          await trayManager.setIcon('assets/icons/nadeko-don.png');
-          if (!Platform.isLinux) {
-            await trayManager.setToolTip(
-              'Nadeko~don',
-            ); // tooltip works only on supported platforms
-          }
-          await trayManager.setContextMenu(
-            Menu(
-              items: [
-                MenuItem(
-                  key: 'show',
-                  label: 'Show App',
-                  icon: 'assets/icons/nadeko-don.png',
-                ),
-                MenuItem(key: 'exit', label: 'Close App'),
-              ],
-            ),
-          );
+          await _initTray();
         }
-        trayManager.addListener(_trayListener);
+
+        SettingsManager.retreatToTray.addListener(() async {
+          if (SettingsManager.retreatToTray.value) {
+            await _initTray();
+          } else {
+            await _removeTray();
+          }
+        });
 
         windowManager.addListener(_windowListener);
         windowManager.waitUntilReadyToShow(windowOptions, () async {
@@ -116,4 +113,31 @@ class _TrayListener extends TrayListener {
       await windowManager.destroy();
     }
   }
+}
+
+Future<void> _initTray() async {
+  await trayManager.setIcon('assets/icons/nadeko-don.png');
+  if (!Platform.isLinux) {
+    await trayManager.setToolTip(
+      'Nadeko~don',
+    ); // tooltip works only on supported platforms
+  }
+  await trayManager.setContextMenu(
+    Menu(
+      items: [
+        MenuItem(
+          key: 'show',
+          label: 'Show App',
+          icon: 'assets/icons/nadeko-don.png',
+        ),
+        MenuItem(key: 'exit', label: 'Close App'),
+      ],
+    ),
+  );
+  trayManager.addListener(_trayListener);
+}
+
+Future<void> _removeTray() async {
+  trayManager.removeListener(_trayListener);
+  await trayManager.destroy();
 }

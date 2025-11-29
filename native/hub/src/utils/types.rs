@@ -68,7 +68,7 @@ pub struct DownloadInfo {
     pub updated_at: u64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum WorkerEvent {
     Completed(Uuid),
     Error(Uuid, String),

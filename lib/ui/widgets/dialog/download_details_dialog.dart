@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:nadekodon/src/bindings/bindings.dart';
 import 'package:nadekodon/theme/app_theme.dart';
 import 'package:nadekodon/utils/helper.dart';
+import 'package:nadekodon/ui/widgets/app_snackbar.dart';
 
 class DownloadDetailsDialog extends StatefulWidget {
   final DownloadItem item;
@@ -109,7 +111,27 @@ class _DownloadDetailsDialogState extends State<DownloadDetailsDialog> {
       children: [
         _buildDetailRow('Name', details.name, textTheme),
         const SizedBox(height: AppTheme.spaceSM),
-        _buildDetailRow('URL', details.url, textTheme),
+        _buildDetailRow(
+          'URL',
+          details.url,
+          textTheme,
+          trailing: IconButton(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: details.url));
+              if (mounted) {
+                AppSnackBar.show(context, 'URL copied to clipboard');
+              }
+            },
+            icon: const Icon(Icons.copy),
+            tooltip: 'Copy URL',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            style: IconButton.styleFrom(
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              iconSize: AppTheme.iconMD * AppTheme.iconScale(context),
+            ),
+          ),
+        ),
         const SizedBox(height: AppTheme.spaceSM),
         _buildDetailRow('Destination', details.dest, textTheme),
         const SizedBox(height: AppTheme.spaceSM),
@@ -152,7 +174,12 @@ class _DownloadDetailsDialogState extends State<DownloadDetailsDialog> {
     );
   }
 
-  Widget _buildDetailRow(String label, String value, TextTheme textTheme) {
+  Widget _buildDetailRow(
+    String label,
+    String value,
+    TextTheme textTheme, {
+    Widget? trailing,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -163,12 +190,22 @@ class _DownloadDetailsDialogState extends State<DownloadDetailsDialog> {
             color: Theme.of(context).colorScheme.secondary,
           ),
         ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: textTheme.bodyMedium,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
+        const SizedBox(height: AppTheme.spaceXS),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                value,
+                style: textTheme.bodyMedium,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (trailing != null) ...[
+              const SizedBox(width: AppTheme.spaceXS),
+              trailing,
+            ],
+          ],
         ),
       ],
     );

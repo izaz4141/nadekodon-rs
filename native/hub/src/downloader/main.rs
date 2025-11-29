@@ -11,7 +11,7 @@ use std::{
 use tokio::{
     fs::File as TokioFile,
     io::{AsyncSeekExt, AsyncWriteExt, SeekFrom},
-    sync::{mpsc, Mutex, Notify, RwLock},
+    sync::{mpsc, Mutex, Notify, RwLock, broadcast},
     task::JoinHandle,
     time::{timeout, interval, Interval, Instant, sleep_until},
 };
@@ -253,9 +253,10 @@ impl DownloadWorker {
             let mut info = self.info.lock().await;
             if info.parts.is_empty() {
                 if is_single_thread {
+                    let end_pos = if size == 0 { u64::MAX } else { size.saturating_sub(1) };
                     info.parts.push(PartInfo {
                         start: 0,
-                        end: size.saturating_sub(1),
+                        end: end_pos,
                         current: 0,
                     });
                 } else {
@@ -333,11 +334,16 @@ impl DownloadWorker {
 
         // Resume from where we left off
         let mut segment_progress = progress.load(Ordering::SeqCst);
-        let mut attempt = 1u8;
+        let mut attempt = 0u8;
         
-        let (download_timeout, download_retries) = {
+        let (timeout_duration, download_retries) = {
             let s = self.settings.read().await;
-            (s.download_timeout, s.download_retries)
+            let t = if s.download_timeout == 0 {
+                Duration::from_secs(3153600000) // 100 years
+            } else {
+                Duration::from_secs(s.download_timeout)
+            };
+            (t, s.download_retries)
         };
 
         loop {
@@ -352,7 +358,7 @@ impl DownloadWorker {
 
 
             let current_start = start + segment_progress;
-            if current_start >= end {
+            if end != u64::MAX && current_start >= end {
                 return Ok(());
             }
 
@@ -368,7 +374,7 @@ impl DownloadWorker {
                 },
                 Err(e) => {
                     logger::error(&format!("Segment {} request failed: {:?}", i, e));
-                    if attempt > download_retries {
+                    if attempt >= download_retries {
                         self.cancel().await?;
                         return Err(anyhow::anyhow!("Segment {} request failed: {:?}", i, e))
                     }
@@ -384,7 +390,7 @@ impl DownloadWorker {
             let mut stream = resp.bytes_stream();
 
             while let Ok(next_chunk) = timeout(
-                Duration::from_secs(download_timeout),
+                timeout_duration,
                 stream.next(),
             ).await {
                 while self.paused.load(Ordering::SeqCst) {
@@ -406,7 +412,7 @@ impl DownloadWorker {
 
                     Some(Err(e)) => {
                         logger::error(&format!("Segment {}: stream error {:?}", i, e));
-                        if attempt > download_retries {
+                        if attempt >= download_retries {
                             self.cancel().await?;
                             return Err(anyhow::anyhow!("Segment {} stream error: {}", i, e));
                         }
@@ -421,10 +427,10 @@ impl DownloadWorker {
                     }
 
                     None => {
-                        if is_single_thread || start + segment_progress >= end {
+                        if is_single_thread || (end != u64::MAX && start + segment_progress >= end) {
                             break;
                         }
-                        if attempt > download_retries {
+                        if attempt >= download_retries {
                             self.cancel().await?;
                             return Err(anyhow::anyhow!("Segment {}: stream ended unexpectedly", i));
                         }
@@ -440,7 +446,7 @@ impl DownloadWorker {
 
                 if let Err(e) = file.write_all(&next_chunk).await {
                     logger::error(&format!("Segment {}: file write error {:?}", i, e));
-                    if attempt > download_retries {
+                    if attempt >= download_retries {
                         self.cancel().await?;
                         return Err(anyhow::anyhow!("Segment {} file write failed: {}", i, e));
                     }
@@ -458,13 +464,13 @@ impl DownloadWorker {
                 self.downloaded.fetch_add(len, Ordering::SeqCst);
                 progress.store(segment_progress, Ordering::SeqCst);
 
-                if start + segment_progress >= end {
+                if end != u64::MAX && start + segment_progress >= end {
                     break;
                 }
                 worker.limit_speed().await;
             }
 
-            if is_single_thread || start + segment_progress >= end {
+            if is_single_thread || (end != u64::MAX && start + segment_progress >= end) {
                 return Ok(());
             }
         }
@@ -546,35 +552,114 @@ impl DownloadWorker {
         tokio::fs::create_dir_all(&temp_dir).await?;
 
         let mut segment_paths = Vec::new();
+        let (timeout_duration, download_retries) = {
+            let s = self.settings.read().await;
+            let t = if s.download_timeout == 0 {
+                Duration::from_secs(3153600000) // 100 years
+            } else {
+                Duration::from_secs(s.download_timeout)
+            };
+            (t, s.download_retries)
+        };
+
         for (i, segment_url) in segment_urls.iter().enumerate() {
             if self.cancel.load(Ordering::SeqCst) {
                 return Ok(());
             }
-            while self.paused.load(Ordering::SeqCst) {
-                self.notify_resume.notified().await;
-            }
 
+            let mut attempt = 0u8;
             let segment_path = temp_dir.join(format!("segment_{}.ts", i));
-            let mut file = TokioFile::create(&segment_path).await?;
-            
-            let resp = client.get(segment_url).send().await?;
-            let mut stream = resp.bytes_stream();
 
-            while let Some(chunk) = stream.next().await {
+            loop {
                 while self.paused.load(Ordering::SeqCst) {
                     self.notify_resume.notified().await;
                 }
-                if self.cancel.load(Ordering::SeqCst) {
-                    logger::debug(&format!("Segment {} cancelled", i));
-                    return Ok(());
+
+                let mut file = match TokioFile::create(&segment_path).await {
+                    Ok(f) => f,
+                    Err(e) => {
+                        logger::error(&format!("HLS Segment {} file creation error: {:?}", i, e));
+                        if attempt >= download_retries {
+                            return Err(anyhow::anyhow!("HLS Segment {} file creation failed: {}", i, e));
+                        }
+                        attempt += 1;
+                        continue;
+                    }
+                };
+                
+                let resp = match client.get(segment_url).send().await {
+                    Ok(r) => match r.error_for_status() {
+                        Ok(v) => v,
+                        Err(e) => {
+                            logger::error(&format!("HLS Segment {} request failed: {:?}", i, e));
+                            if attempt >= download_retries {
+                                return Err(anyhow::anyhow!("HLS Segment {} request failed: {:?}", i, e));
+                            }
+                            attempt += 1;
+                            continue;
+                        }
+                    },
+                    Err(e) => {
+                        logger::error(&format!("HLS Segment {} connection failed: {:?}", i, e));
+                        if attempt >= download_retries {
+                            return Err(anyhow::anyhow!("HLS Segment {} connection failed: {:?}", i, e));
+                        }
+                        attempt += 1;
+                        continue;
+                    }
+                };
+
+                let mut stream = resp.bytes_stream();
+                let mut success = true;
+                let mut stream_finished = false;
+
+                while let Ok(next_chunk) = timeout(
+                    timeout_duration,
+                    stream.next(),
+                ).await {
+                    while self.paused.load(Ordering::SeqCst) {
+                        self.notify_resume.notified().await;
+                    }
+                    if self.cancel.load(Ordering::SeqCst) {
+                        logger::debug(&format!("Segment {} cancelled", i));
+                        return Ok(());
+                    }
+
+                    match next_chunk {
+                        Some(Ok(chunk)) => {
+                            if let Err(e) = file.write_all(&chunk).await {
+                                logger::error(&format!("HLS Segment {} write error: {:?}", i, e));
+                                success = false;
+                                break; 
+                            }
+                            let len = chunk.len() as u64;
+                            self.downloaded.fetch_add(len, Ordering::SeqCst);
+                            progress.fetch_add(len, Ordering::SeqCst);
+                            self.limit_speed().await;
+                        }
+                        Some(Err(e)) => {
+                            logger::error(&format!("HLS Segment {} stream error: {:?}", i, e));
+                            success = false;
+                            break;
+                        }
+                        None => {
+                            stream_finished = true;
+                            break;
+                        }
+                    }
                 }
 
-                let chunk = chunk?;
-                file.write_all(&chunk).await?;
-                let len = chunk.len() as u64;
-                self.downloaded.fetch_add(len, Ordering::SeqCst);
-                progress.fetch_add(len, Ordering::SeqCst);
-                self.limit_speed().await;
+                if success && stream_finished {
+                    break; 
+                } else {
+                    if attempt >= download_retries {
+                        if !stream_finished && success {
+                             return Err(anyhow::anyhow!("HLS Segment {} timed out", i));
+                        }
+                        return Err(anyhow::anyhow!("HLS Segment {} failed after retries", i));
+                    }
+                    attempt += 1;
+                }
             }
             segment_paths.push(segment_path);
         }
@@ -813,6 +898,7 @@ pub struct DownloadManager {
     active: Arc<Mutex<HashSet<Uuid>>>,
     concurrency: Arc<AtomicU8>,
     sender: mpsc::Sender<WorkerEvent>,
+    pub broadcast_tx: broadcast::Sender<WorkerEvent>,
     pending_deletions: Arc<Mutex<Vec<Uuid>>>,
 }
 
@@ -826,6 +912,7 @@ impl DownloadManager {
             active: Arc::new(Mutex::new(HashSet::new())),
             concurrency: Arc::new(AtomicU8::new(0)),
             sender: tx.clone(),
+            broadcast_tx: broadcast::channel(100).0,
             pending_deletions: Arc::new(Mutex::new(Vec::new())),
         });
 
@@ -864,6 +951,7 @@ impl DownloadManager {
                 logger::debug(&format!("Worker {:?} finished event: {:?}", id, event));
             }
         }
+        let _ = self.broadcast_tx.send(event.clone());
         self.process_queue().await;
     }
 

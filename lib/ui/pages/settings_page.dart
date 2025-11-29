@@ -1,14 +1,12 @@
 // lib/ui/pages/settings_page.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
-import '../widgets/settings/download_folder_tile.dart';
-import '../widgets/settings/server_port_spinbox.dart';
-import '../widgets/settings/speed_limit_spinbox.dart';
-import '../widgets/settings/download_thread_spinbox.dart';
-import '../widgets/settings/concurrency_limit_spinbox.dart';
-import '../widgets/settings/tray_switch_tile.dart';
-import '../widgets/settings/actions_bar.dart';
+import 'package:nadekodon/ui/widgets/view/settings_dm.dart';
+import 'package:nadekodon/ui/widgets/view/settings_ui.dart';
+import 'package:nadekodon/ui/widgets/view/settings_ws.dart';
+import 'package:nadekodon/ui/widgets/components/settings_actions_bar.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -29,14 +27,11 @@ class SettingsPage extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: AppTheme.spaceSM),
             child: ListView(
               children: [
-                DownloadFolderTile(),
-                PortSpinBox(),
-                SpeedLimitSpinBox(),
-                DownloadThreadBox(),
-                ConcurrencyLimitBox(),
+                SettingsDM(),
                 Divider(),
-                TraySwitchTile(),
-                SizedBox(height: 420 * AppTheme.heightScale(context)),
+                SettingsUI(),
+                if (!Platform.isAndroid) ...[Divider(), SettingsWS()],
+                SizedBox(height: 120 * AppTheme.heightScale(context)),
               ],
             ),
           ),

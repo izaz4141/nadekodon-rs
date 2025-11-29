@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'package:nadekodon/src/bindings/bindings.dart';
@@ -19,6 +19,7 @@ class SettingsManager {
   );
   static final downloadFolder = ValueNotifier<String>('');
   static final serverPort = ValueNotifier<int>(DefaultSettings.serverPort);
+  static final serverApiKey = ValueNotifier<String>('');
   static final speedLimit = ValueNotifier<double>(DefaultSettings.speedLimit);
   static final downloadThreads = ValueNotifier<int>(
     DefaultSettings.downloadThreads,
@@ -33,10 +34,28 @@ class SettingsManager {
     DefaultSettings.downloadRetries,
   );
 
+  // Theme Settings
+  static final themeMode = ValueNotifier<ThemeMode>(DefaultSettings.themeMode);
+  static final useDynamicColor = ValueNotifier<bool>(
+    DefaultSettings.useDynamicColor,
+  );
+  static final customColor = ValueNotifier<int>(
+    DefaultSettings.customColor,
+  ); // PinkAccent default
+
   /// Init config system (call at app startup)
   static Future<void> init() async {
-    downloadsDir = await getDownloadsDirectory();
-    DefaultSettings.downloadFolder = downloadsDir?.path ?? '';
+    // On Android, use the public Downloads directory via external storage
+    if (Platform.isAndroid) {
+      final dirs = await getExternalStorageDirectories(
+        type: StorageDirectory.downloads,
+      );
+      downloadsDir = dirs?.firstOrNull;
+      DefaultSettings.downloadFolder = downloadsDir?.path ?? '';
+    } else {
+      downloadsDir = await getDownloadsDirectory();
+      DefaultSettings.downloadFolder = downloadsDir?.path ?? '';
+    }
     configDir = await getApplicationSupportDirectory();
     configPath = '${configDir!.path}/config.json';
     _file = File(configPath);
@@ -47,7 +66,8 @@ class SettingsManager {
       log(configPath);
     } else {
       log("Initial Config");
-      downloadFolder.value = '';
+      applyDefaultSettings();
+      regenerateApiKey();
       await _saveAll();
     }
 
@@ -60,6 +80,10 @@ class SettingsManager {
     downloadFolder.value =
         json['download_folder'] ?? DefaultSettings.downloadFolder;
     serverPort.value = json['server_port'] ?? DefaultSettings.serverPort;
+    serverApiKey.value = json['server_api_key'] ?? '';
+    if (serverApiKey.value.isEmpty) {
+      regenerateApiKey();
+    }
     speedLimit.value = (json['speed_limit'] ?? DefaultSettings.speedLimit)
         .toDouble();
     downloadThreads.value =
@@ -70,17 +94,28 @@ class SettingsManager {
         json['download_timeout'] ?? DefaultSettings.downloadTimeout;
     downloadRetries.value =
         json['download_retries'] ?? DefaultSettings.downloadRetries;
+
+    // Theme Settings
+    if (json['theme_mode'] != null) {
+      themeMode.value = ThemeMode.values[json['theme_mode']];
+    }
+    useDynamicColor.value = json['use_dynamic_color'] ?? true;
+    customColor.value = json['custom_color'] ?? 0xFFFF4081;
   }
 
   static Map<String, dynamic> _toJson() => {
     'retreat_to_tray': retreatToTray.value,
     'download_folder': downloadFolder.value,
     'server_port': serverPort.value,
+    'server_api_key': serverApiKey.value,
     'speed_limit': speedLimit.value,
     'download_threads': downloadThreads.value,
     'concurrency_limit': concurrencyLimit.value,
     'download_timeout': downloadTimeout.value,
     'download_retries': downloadRetries.value,
+    'theme_mode': themeMode.value.index,
+    'use_dynamic_color': useDynamicColor.value,
+    'custom_color': customColor.value,
   };
 
   /// Save entire config (initial only)
@@ -112,6 +147,9 @@ class SettingsManager {
       () => _saveChanged('download_folder', downloadFolder.value),
     );
     serverPort.addListener(() => _saveChanged('server_port', serverPort.value));
+    serverApiKey.addListener(
+      () => _saveChanged('server_api_key', serverApiKey.value),
+    );
     speedLimit.addListener(() => _saveChanged('speed_limit', speedLimit.value));
     downloadThreads.addListener(
       () => _saveChanged('download_threads', downloadThreads.value),
@@ -124,6 +162,16 @@ class SettingsManager {
     );
     downloadRetries.addListener(
       () => _saveChanged('download_retries', downloadRetries.value),
+    );
+
+    themeMode.addListener(
+      () => _saveChanged('theme_mode', themeMode.value.index),
+    );
+    useDynamicColor.addListener(
+      () => _saveChanged('use_dynamic_color', useDynamicColor.value),
+    );
+    customColor.addListener(
+      () => _saveChanged('custom_color', customColor.value),
     );
   }
 
@@ -165,8 +213,35 @@ class SettingsManager {
     ).sendSignalToRust();
   }
 
+  static void applyDefaultSettings() {
+    retreatToTray.value = DefaultSettings.retreatToTray;
+    downloadFolder.value = DefaultSettings.downloadFolder;
+    serverPort.value = DefaultSettings.serverPort;
+    speedLimit.value = DefaultSettings.speedLimit;
+    downloadThreads.value = DefaultSettings.downloadThreads;
+    concurrencyLimit.value = DefaultSettings.concurrencyLimit;
+    downloadTimeout.value = DefaultSettings.downloadTimeout;
+    downloadRetries.value = DefaultSettings.downloadRetries;
+    themeMode.value = DefaultSettings.themeMode;
+    useDynamicColor.value = DefaultSettings.useDynamicColor;
+    customColor.value = DefaultSettings.customColor;
+  }
+
   static Future<String> getDatabasePath() async {
     final dir = await getApplicationSupportDirectory();
     return '${dir.path}/nadekodon.db';
+  }
+
+  static Future<void> regenerateApiKey() async {
+    RequestNewApiKey().sendSignalToRust();
+    final signal = await NewApiKey.rustSignalStream.first;
+    serverApiKey.value = signal.message.key;
+  }
+
+  static void restartServer() {
+    StartServer(
+      port: serverPort.value,
+      apiKey: serverApiKey.value,
+    ).sendSignalToRust();
   }
 }

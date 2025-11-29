@@ -35,6 +35,9 @@ async fn main() {
     let rclient = utils::url::build_browser_client().await;
     let dm = start_download_manager(rclient.clone()).await;
     spawn(utils::settings::update_settings(dm.clone()));
+    spawn(utils::database::start_database_manager(dm.clone(), shutdown_signal.clone(), db_done_signal.clone()));
+    spawn(utils::server::handle_api_key_generation());
+    spawn(utils::server::start_server_listener(dm.clone()));
     spawn(query_url_info(rclient.clone()));
     spawn(spawn_download_worker(dm.clone()));
     spawn(get_download_list(dm.clone()));
@@ -44,7 +47,6 @@ async fn main() {
     spawn(cancel_download(dm.clone()));
     spawn(delete_download(dm.clone()));
     spawn(handle_update_download_url(dm.clone()));
-    spawn(utils::database::start_database_manager(dm.clone(), shutdown_signal.clone(), db_done_signal.clone()));
     spawn(handle_ytdl_query());
 
     // Keep the main function running until Dart shutdown.

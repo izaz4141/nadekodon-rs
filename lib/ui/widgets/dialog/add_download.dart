@@ -29,7 +29,7 @@ Future<void> showAddDownloadDialog(
 class _AddDownloadDialog extends StatefulWidget {
   final String? initialUrl;
 
-  const _AddDownloadDialog({super.key, this.initialUrl});
+  const _AddDownloadDialog({this.initialUrl});
 
   @override
   State<_AddDownloadDialog> createState() => _AddDownloadDialogState();

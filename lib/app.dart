@@ -5,14 +5,17 @@ import 'package:flutter/material.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:file_share_intent/file_share_intent.dart';
 import 'package:app_links/app_links.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'theme/app_theme.dart';
 import 'ui/pages/home_page.dart';
 import 'ui/widgets/dialog/add_download.dart';
 import 'utils/helper.dart';
 import 'utils/logger.dart';
+import 'utils/settings.dart';
 
 import 'package:rinf/rinf.dart';
+import 'package:nadekodon/src/bindings/bindings.dart';
 
 // Global navigator key for accessing context from intent handlers
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -49,6 +52,38 @@ class _NadekoDonState extends State<NadekoDon> {
     if (Platform.isAndroid) {
       _initAppLinks();
       _initFileShareIntent();
+    }
+    _initExtSignals();
+  }
+
+  void _initExtSignals() {
+    RequestAddDownload.rustSignalStream.listen((signal) async {
+      final message = signal.message;
+      await _focusWindow();
+      final context = navigatorKey.currentContext;
+      if (context != null) {
+        // ignore: use_build_context_synchronously
+        showAddDownloadDialog(context, initialUrl: message.url);
+      }
+    });
+  }
+
+  /// Brings the window to focus on desktop platforms
+  Future<void> _focusWindow() async {
+    // Only focus window on desktop platforms
+    if (!Platform.isLinux && !Platform.isWindows && !Platform.isMacOS) {
+      return;
+    }
+
+    try {
+      await windowManager.show();
+      await windowManager.restore();
+      await windowManager.focus();
+      // Temporarily set always on top to ensure window pops to front
+      await windowManager.setAlwaysOnTop(true);
+      await windowManager.setAlwaysOnTop(false);
+    } catch (e) {
+      // Silently handle errors
     }
   }
 
@@ -107,6 +142,7 @@ class _NadekoDonState extends State<NadekoDon> {
     Future.delayed(const Duration(milliseconds: 500), () {
       final context = navigatorKey.currentContext;
       if (context != null) {
+        // ignore: use_build_context_synchronously
         showAddDownloadDialog(context, initialUrl: uri.toString());
       }
     });
@@ -134,6 +170,7 @@ class _NadekoDonState extends State<NadekoDon> {
     // Get the navigator context and open the dialog
     final context = navigatorKey.currentContext;
     if (context != null) {
+      // ignore: use_build_context_synchronously
       showAddDownloadDialog(context, initialUrl: sharedUrl);
     }
   }
@@ -148,17 +185,39 @@ class _NadekoDonState extends State<NadekoDon> {
 
   @override
   Widget build(BuildContext context) {
-    return DynamicColorBuilder(
-      builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
-        final schemes = AppTheme.getColorSchemes(lightDynamic, darkDynamic);
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: SettingsManager.themeMode,
+      builder: (context, themeMode, _) {
+        return ValueListenableBuilder<bool>(
+          valueListenable: SettingsManager.useDynamicColor,
+          builder: (context, useDynamicColor, _) {
+            return ValueListenableBuilder<int>(
+              valueListenable: SettingsManager.customColor,
+              builder: (context, customColorValue, _) {
+                return DynamicColorBuilder(
+                  builder:
+                      (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
+                        final schemes = AppTheme.getColorSchemes(
+                          lightDynamic,
+                          darkDynamic,
+                          customSeed: Color(customColorValue),
+                          useDynamicColor: useDynamicColor,
+                        );
 
-        return MaterialApp(
-          navigatorKey: navigatorKey,
-          title: 'Nadeko~don',
-          theme: AppTheme.buildTheme(schemes.light, context),
-          darkTheme: AppTheme.buildTheme(schemes.dark, context),
-          home: const HomePage(),
-          debugShowCheckedModeBanner: false,
+                        return MaterialApp(
+                          navigatorKey: navigatorKey,
+                          title: 'Nadeko~don',
+                          theme: AppTheme.buildTheme(schemes.light, context),
+                          darkTheme: AppTheme.buildTheme(schemes.dark, context),
+                          themeMode: themeMode,
+                          home: const HomePage(),
+                          debugShowCheckedModeBanner: false,
+                        );
+                      },
+                );
+              },
+            );
+          },
         );
       },
     );
