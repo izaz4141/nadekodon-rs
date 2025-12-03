@@ -164,6 +164,7 @@ jobs:
           wget -O appimage-builder-x86_64.AppImage https://github.com/AppImageCrafters/appimage-builder/releases/download/v1.1.0/appimage-builder-1.1.0-x86_64.AppImage
           chmod +x appimage-builder-x86_64.AppImage
           sudo mv appimage-builder-x86_64.AppImage /usr/local/bin/appimage-builder
+          sed -i "s/version: latest/version: ${{ needs.setup.outputs.version_name }}/g" AppImageBuilder.yml
           appimage-builder --recipe AppImageBuilder.yml --skip-test
           chmod +x ${{ matrix.artifact_path }}
 
@@ -171,7 +172,8 @@ jobs:
         if: matrix.target == 'windows'
         run: |
           echo "Creating portable Windows ZIP..."
-          7z a ./${{ matrix.artifact_path }} build/windows/x64/runner/Release/*
+          cd build/windows/x64/runner/Release
+          7z a "../../../../../${{ matrix.artifact_path }}" *
 
       - name: Move Android artifact
         if: matrix.target == 'android-arm64'
