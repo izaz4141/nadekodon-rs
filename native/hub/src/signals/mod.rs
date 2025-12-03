@@ -11,6 +11,8 @@ pub struct UpdateSettings {
     pub concurrency_limit: Option<u8>,
     pub download_timeout: Option<u64>,
     pub download_retries: Option<u8>,
+    pub seeding_ratio: Option<f32>,
+    pub seeding_time: Option<u64>,
 }
 
 #[derive(Deserialize, DartSignal)]
@@ -109,6 +111,13 @@ pub struct DownloadDetails {
     pub speed: f64,
     pub state: String,
     pub part_info: Vec<PartInfo>,
+    pub uploaded: Option<u64>,
+    pub upload_speed: Option<f64>,
+    pub peers: Option<u64>,
+    pub seeds: Option<u64>,
+    pub leechers: Option<u64>,
+    pub ratio: Option<f64>,
+    pub eta: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, SignalPiece)]
@@ -135,13 +144,19 @@ pub struct CancelDownload {
 
 #[derive(Deserialize, DartSignal)]
 pub struct DeleteDownload {
-    pub id: String
+    pub id: String,
+    pub delete_file: bool,
 }
 
 #[derive(Serialize, RustSignal)]
 pub struct LogSignal {
     pub level: String,
     pub message: String,
+}
+
+#[derive(Deserialize, DartSignal)]
+pub struct InitTorrentPersistence {
+    pub path: String,
 }
 
 #[derive(Deserialize, DartSignal)]

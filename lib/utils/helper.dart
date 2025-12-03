@@ -4,7 +4,15 @@ import 'package:open_filex/open_filex.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:nadekodon/utils/logger.dart';
 
-enum DownloadStatus { queued, running, paused, completed, cancelled, failed }
+enum DownloadStatus {
+  queued,
+  running,
+  seeding,
+  paused,
+  completed,
+  cancelled,
+  failed,
+}
 
 DownloadStatus parseDownloadStatus(String state) {
   final s = state.toLowerCase();
@@ -14,6 +22,8 @@ DownloadStatus parseDownloadStatus(String state) {
       return DownloadStatus.queued;
     case 'running':
       return DownloadStatus.running;
+    case 'seeding':
+      return DownloadStatus.seeding;
     case 'paused':
       return DownloadStatus.paused;
     case 'completed':
@@ -78,6 +88,7 @@ String camelToSnake(String input) {
 }
 
 bool isUrl(String url) {
+  if (url.toLowerCase().startsWith('magnet:?')) return true;
   final regex = RegExp(
     r'^(?:http|https)://'
     r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'
@@ -91,17 +102,8 @@ bool isUrl(String url) {
 }
 
 Future<bool> fileExist(String path) async {
-  final file = File(path);
-  return await file.exists();
-}
-
-Future<void> deleteDownloadFile(String filePath) async {
-  final file = File(filePath);
-  if (await file.exists()) {
-    await file.delete();
-  } else {
-    throw Exception('File not found: $filePath');
-  }
+  final type = await FileSystemEntity.type(path);
+  return type != FileSystemEntityType.notFound;
 }
 
 Future<ResultType> openFile(String filePath) async {

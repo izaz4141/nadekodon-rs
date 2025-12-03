@@ -41,6 +41,8 @@ class _DownloadCardState extends State<DownloadCard> {
         return colors.tertiary;
       case DownloadStatus.running:
         return colors.primary;
+      case DownloadStatus.seeding:
+        return colors.primary;
       case DownloadStatus.paused:
         return colors.secondary;
       case DownloadStatus.completed:
@@ -189,6 +191,8 @@ class _DownloadCardState extends State<DownloadCard> {
                             IconButton(
                               icon: Icon(
                                 (widget.item.status == DownloadStatus.running ||
+                                        widget.item.status ==
+                                            DownloadStatus.seeding ||
                                         widget.item.status ==
                                             DownloadStatus.queued)
                                     ? Icons.pause

@@ -33,6 +33,10 @@ class SettingsManager {
   static final downloadRetries = ValueNotifier<int>(
     DefaultSettings.downloadRetries,
   );
+  static final seedingRatio = ValueNotifier<double>(
+    DefaultSettings.seedingRatio,
+  );
+  static final seedingTime = ValueNotifier<int>(DefaultSettings.seedingTime);
 
   // Theme Settings
   static final themeMode = ValueNotifier<ThemeMode>(DefaultSettings.themeMode);
@@ -95,6 +99,9 @@ class SettingsManager {
     downloadRetries.value =
         json['download_retries'] ?? DefaultSettings.downloadRetries;
 
+    seedingRatio.value = json['seeding_ratio'] ?? DefaultSettings.seedingRatio;
+    seedingTime.value = json['seeding_time'] ?? DefaultSettings.seedingTime;
+
     // Theme Settings
     if (json['theme_mode'] != null) {
       themeMode.value = ThemeMode.values[json['theme_mode']];
@@ -113,6 +120,8 @@ class SettingsManager {
     'concurrency_limit': concurrencyLimit.value,
     'download_timeout': downloadTimeout.value,
     'download_retries': downloadRetries.value,
+    'seeding_ratio': seedingRatio.value,
+    'seeding_time': seedingTime.value,
     'theme_mode': themeMode.value.index,
     'use_dynamic_color': useDynamicColor.value,
     'custom_color': customColor.value,
@@ -164,6 +173,13 @@ class SettingsManager {
       () => _saveChanged('download_retries', downloadRetries.value),
     );
 
+    seedingRatio.addListener(
+      () => _saveChanged('seeding_ratio', seedingRatio.value),
+    );
+    seedingTime.addListener(
+      () => _saveChanged('seeding_time', seedingTime.value),
+    );
+
     themeMode.addListener(
       () => _saveChanged('theme_mode', themeMode.value.index),
     );
@@ -198,6 +214,14 @@ class SettingsManager {
           downloadTimeout: Uint64.fromBigInt(BigInt.from(value)),
         ).sendSignalToRust();
         break;
+      case 'seeding_ratio':
+        UpdateSettings(seedingRatio: value).sendSignalToRust();
+        break;
+      case 'seeding_time':
+        UpdateSettings(
+          seedingTime: Uint64.fromBigInt(BigInt.from(value)),
+        ).sendSignalToRust();
+        break;
     }
   }
 
@@ -210,6 +234,8 @@ class SettingsManager {
       concurrencyLimit: concurrencyLimit.value,
       downloadRetries: downloadRetries.value,
       downloadTimeout: Uint64.fromBigInt(BigInt.from(downloadTimeout.value)),
+      seedingRatio: seedingRatio.value,
+      seedingTime: Uint64.fromBigInt(BigInt.from(seedingTime.value)),
     ).sendSignalToRust();
   }
 
@@ -222,6 +248,9 @@ class SettingsManager {
     concurrencyLimit.value = DefaultSettings.concurrencyLimit;
     downloadTimeout.value = DefaultSettings.downloadTimeout;
     downloadRetries.value = DefaultSettings.downloadRetries;
+    seedingRatio.value = DefaultSettings.seedingRatio;
+    seedingTime.value = DefaultSettings.seedingTime;
+
     themeMode.value = DefaultSettings.themeMode;
     useDynamicColor.value = DefaultSettings.useDynamicColor;
     customColor.value = DefaultSettings.customColor;
@@ -230,6 +259,11 @@ class SettingsManager {
   static Future<String> getDatabasePath() async {
     final dir = await getApplicationSupportDirectory();
     return '${dir.path}/nadekodon.db';
+  }
+
+  static Future<String> getTorrentPersistencePath() async {
+    final dir = await getApplicationSupportDirectory();
+    return '${dir.path}/torrent_data';
   }
 
   static Future<void> regenerateApiKey() async {

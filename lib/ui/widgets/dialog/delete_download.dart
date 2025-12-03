@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'package:nadekodon/utils/logger.dart';
-
 import '../../../utils/helper.dart';
 import '../app_snackbar.dart';
 import '../../../src/bindings/bindings.dart';
@@ -67,32 +65,9 @@ Future<void> showDeleteDownloadDialog(
 
   if (result != true || !context.mounted) return;
 
-  // Delete file if requested
-  if (deleteFile) {
-    try {
-      await deleteDownloadFile(item.dest);
-      if (context.mounted) {
-        AppSnackBar.show(
-          context,
-          "File deleted successfully",
-          type: SnackType.success,
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        AppSnackBar.show(
-          context,
-          "Failed to delete file",
-          type: SnackType.error,
-        );
-        log('Failed to delete file: $e');
-      }
-    }
-  }
-
   // Remove from list if requested
   if (deleteFromList) {
-    DeleteDownload(id: item.id).sendSignalToRust();
+    DeleteDownload(id: item.id, deleteFile: deleteFile).sendSignalToRust();
     if (context.mounted) {
       AppSnackBar.show(
         context,

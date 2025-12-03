@@ -16,6 +16,7 @@ class DownloadPage extends StatefulWidget {
   static const activeStatuses = {
     DownloadStatus.queued,
     DownloadStatus.running,
+    DownloadStatus.seeding,
     DownloadStatus.paused,
   };
 
@@ -170,6 +171,8 @@ class _DownloadPageState extends State<DownloadPage>
           return "Queued";
         case DownloadStatus.running:
           return "Running";
+        case DownloadStatus.seeding:
+          return "Seeding";
         case DownloadStatus.paused:
           return "Paused";
         case DownloadStatus.completed:
@@ -667,6 +670,7 @@ class _DownloadListTabState extends State<_DownloadListTab>
                 },
                 onPauseResume: () {
                   if (item.status == DownloadStatus.running ||
+                      item.status == DownloadStatus.seeding ||
                       item.status == DownloadStatus.queued) {
                     PauseDownload(id: item.id).sendSignalToRust();
                   } else {

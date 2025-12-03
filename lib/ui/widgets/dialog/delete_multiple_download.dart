@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:nadekodon/utils/logger.dart';
 
 import '../../../utils/helper.dart';
 import '../app_snackbar.dart';
@@ -74,15 +73,8 @@ Future<void> showDeleteMultipleDownloadsDialog(
 
   int successCount = 0;
   for (final item in items) {
-    if (deleteFile) {
-      try {
-        await deleteDownloadFile(item.dest);
-      } catch (e) {
-        log('Failed to delete file: ${item.dest}, error: $e');
-      }
-    }
     if (deleteFromList) {
-      DeleteDownload(id: item.id).sendSignalToRust();
+      DeleteDownload(id: item.id, deleteFile: deleteFile).sendSignalToRust();
     }
     successCount++;
   }

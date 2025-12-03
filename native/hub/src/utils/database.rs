@@ -7,7 +7,7 @@ use crate::signals::InitDatabase;
 use crate::utils::logger;
 use rinf::DartSignal;
 
-use crate::utils::types::{DownloadInfo, DownloadState, PartInfo};
+use crate::utils::types::{DownloadInfo, DownloadState, PartInfo, DownloadType};
 use std::path::PathBuf;
 use uuid::Uuid;
 
@@ -52,7 +52,7 @@ use sqlx::Row;
 async fn load_downloads(pool: &Pool<Sqlite>) -> Result<Vec<DownloadInfo>, sqlx::Error> {
     let rows = sqlx::query(
         r#"
-        SELECT id, url, dest, total_size, downloaded, state, parts, added_at, updated_at
+        SELECT id, url, dest, total_size, downloaded, uploaded, state, parts, added_at, updated_at, download_type, torrent_hash
         FROM downloads
         "#
     )
@@ -70,10 +70,14 @@ async fn load_downloads(pool: &Pool<Sqlite>) -> Result<Vec<DownloadInfo>, sqlx::
         let total_size = total_size.map(|s| s as u64);
         let downloaded: i64 = row.get("downloaded");
         let downloaded = downloaded as u64;
+        let uploaded: i64 = row.get("uploaded");
+        let uploaded = uploaded as u64;
         
         let state_str: String = row.get("state");
         let state = if state_str.contains("Completed") {
             DownloadState::Completed
+        } else if state_str.contains("Seeding") {
+            DownloadState::Seeding
         } else if state_str.contains("Cancelled") {
             DownloadState::Cancelled
         } else if state_str.contains("Error") {
@@ -94,17 +98,29 @@ async fn load_downloads(pool: &Pool<Sqlite>) -> Result<Vec<DownloadInfo>, sqlx::
         let updated_at: i64 = row.get("updated_at");
         let updated_at = updated_at as u64;
 
+        let download_type_str: Option<String> = row.get("download_type");
+        let download_type = if let Some(dt) = download_type_str {
+            serde_json::from_str(&format!("\"{}\"", dt)).unwrap_or(DownloadType::Normal)
+        } else {
+            DownloadType::Normal
+        };
+
+        let torrent_hash: Option<String> = row.get("torrent_hash");
+
         downloads.push(DownloadInfo {
             id,
             url,
             dest,
             total_size,
             downloaded,
+            uploaded,
             state,
             history: Vec::new(),
             parts,
             added_at,
             updated_at,
+            download_type,
+            torrent_hash,
         });
     }
 
@@ -135,15 +151,32 @@ async fn init_db(path: &str) -> Result<Pool<Sqlite>, sqlx::Error> {
             dest TEXT NOT NULL,
             total_size INTEGER,
             downloaded INTEGER NOT NULL,
+            uploaded INTEGER NOT NULL DEFAULT 0,
             state TEXT NOT NULL,
             parts TEXT,
             added_at INTEGER NOT NULL DEFAULT 0,
-            updated_at INTEGER NOT NULL
+            added_at INTEGER NOT NULL DEFAULT 0,
+            updated_at INTEGER NOT NULL,
+            download_type TEXT,
+            torrent_hash TEXT
         );
         "#
     )
     .execute(&pool)
     .await?;
+
+    // Migration for existing tables
+    let _ = sqlx::query("ALTER TABLE downloads ADD COLUMN uploaded INTEGER NOT NULL DEFAULT 0")
+        .execute(&pool)
+        .await;
+
+    let _ = sqlx::query("ALTER TABLE downloads ADD COLUMN download_type TEXT")
+        .execute(&pool)
+        .await;
+
+    let _ = sqlx::query("ALTER TABLE downloads ADD COLUMN torrent_hash TEXT")
+        .execute(&pool)
+        .await;
 
     Ok(pool)
 }
@@ -156,6 +189,10 @@ async fn start_db_loop(pool: Pool<Sqlite>, dm: Arc<DownloadManager>, shutdown_si
                 logger::debug("Database shutdown signal received, saving...");
                 dm.sync_active_workers().await;
                 save_downloads(&pool, &dm).await;
+                let session_guard = dm.torrent_session.write().await;
+                if let Some(session) = session_guard.as_ref() {
+                    let _ = session.stop().await;
+                }
                 db_done_signal.notify_waiters();
                 break;
             }
@@ -168,6 +205,7 @@ async fn start_db_loop(pool: Pool<Sqlite>, dm: Arc<DownloadManager>, shutdown_si
 async fn save_downloads(pool: &Pool<Sqlite>, dm: &Arc<DownloadManager>) {
     // Process pending deletions
     let deletions = dm.drain_pending_deletions().await;
+    let mut failed_deletions = Vec::new();
     for id in deletions {
         let id_str = id.to_string();
         if let Err(e) = sqlx::query("DELETE FROM downloads WHERE id = ?")
@@ -176,7 +214,12 @@ async fn save_downloads(pool: &Pool<Sqlite>, dm: &Arc<DownloadManager>) {
             .await
         {
             logger::error(&format!("Failed to delete download {} from DB: {:?}", id, e));
+            failed_deletions.push(id);
         }
+    }
+
+    if !failed_deletions.is_empty() {
+        dm.requeue_pending_deletions(failed_deletions).await;
     }
 
     let downloads = match dm.list_all().await {
@@ -192,21 +235,28 @@ async fn save_downloads(pool: &Pool<Sqlite>, dm: &Arc<DownloadManager>) {
         let dest = download.dest.to_string_lossy().to_string();
         let total_size = download.total_size.map(|s| s as i64);
         let downloaded = download.downloaded as i64;
+        let uploaded = download.uploaded as i64;
         let state = format!("{:?}", download.state);
         let added_at = download.added_at as i64;
         let updated_at = download.updated_at as i64;
+        let download_type = format!("{:?}", download.download_type);
+        let torrent_hash = download.torrent_hash;
 
         let parts = serde_json::to_string(&download.parts).unwrap_or_default();
 
         let result = sqlx::query(
             r#"
-            INSERT INTO downloads (id, url, dest, total_size, downloaded, state, parts, added_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO downloads (id, url, dest, total_size, downloaded, uploaded, state, parts, added_at, updated_at, download_type, torrent_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
+                total_size = excluded.total_size,
                 downloaded = excluded.downloaded,
+                uploaded = excluded.uploaded,
                 state = excluded.state,
                 parts = excluded.parts,
-                updated_at = excluded.updated_at;
+                updated_at = excluded.updated_at,
+                download_type = excluded.download_type,
+                torrent_hash = excluded.torrent_hash;
             "#
         )
         .bind(id)
@@ -214,10 +264,13 @@ async fn save_downloads(pool: &Pool<Sqlite>, dm: &Arc<DownloadManager>) {
         .bind(dest)
         .bind(total_size)
         .bind(downloaded)
+        .bind(uploaded)
         .bind(state)
         .bind(parts)
         .bind(added_at)
         .bind(updated_at)
+        .bind(download_type)
+        .bind(torrent_hash)
         .execute(pool)
         .await;
 

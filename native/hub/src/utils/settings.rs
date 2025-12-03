@@ -23,6 +23,8 @@ pub async fn update_settings(dm: Arc<DownloadManager>) {
             download_threads: data_clone.download_threads.unwrap_or(dm_old.download_threads),
             download_timeout: data_clone.download_timeout.unwrap_or(dm_old.download_timeout),
             download_retries: data_clone.download_retries.unwrap_or(dm_old.download_retries),
+            seeding_ratio: data_clone.seeding_ratio.unwrap_or(dm_old.seeding_ratio),
+            seeding_time: data_clone.seeding_time.unwrap_or(dm_old.seeding_time),
         };
         drop(dm_old);
 

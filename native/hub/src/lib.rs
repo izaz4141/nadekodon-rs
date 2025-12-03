@@ -8,7 +8,8 @@ use downloader::{
     start_download_manager, spawn_download_worker,
     query_url_info, get_download_details,
     pause_download, resume_download, cancel_download, delete_download,
-    handle_update_download_url, get_download_list
+    handle_update_download_url, get_download_list,
+    handle_init_torrent_persistence
 };
 use rinf::{dart_shutdown, write_interface};
 use tokio::spawn;
@@ -34,7 +35,10 @@ async fn main() {
 
     let rclient = utils::url::build_browser_client().await;
     let dm = start_download_manager(rclient.clone()).await;
+
+    
     spawn(utils::settings::update_settings(dm.clone()));
+    spawn(handle_init_torrent_persistence(dm.clone()));
     spawn(utils::database::start_database_manager(dm.clone(), shutdown_signal.clone(), db_done_signal.clone()));
     spawn(utils::server::handle_api_key_generation());
     spawn(utils::server::start_server_listener(dm.clone()));

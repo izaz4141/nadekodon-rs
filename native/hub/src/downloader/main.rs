@@ -21,17 +21,25 @@ use crate::utils::logger;
 use crate::utils::{
     types::{
         HeadData, DownloadState, DownloadInfo,
-        WorkerEvent, DMSettings, PartInfo,
+        WorkerEvent, DMSettings, PartInfo, DownloadType,
     },
     helper::calc_speed,
-    url::is_hls_url,
+    url::{is_hls_url, is_magnet_url, is_torrent_file},
 };
+use librqbit::{
+    AddTorrent, Session, SessionOptions,
+    AddTorrentOptions, AddTorrentResponse, TorrentStatsState,
+    SessionPersistenceConfig
+};
+
+
 
 
 const HISTORY_SAMPLE_INTERVAL_SECS: u64 = 1;
 const MAX_HISTORY: usize = 15;
 
-#[derive(Debug)]
+
+
 pub struct DownloadWorker {
     info: Mutex<DownloadInfo>,
     client: reqwest::Client,
@@ -43,7 +51,10 @@ pub struct DownloadWorker {
     speed_limit:AtomicU64,
     notify_resume: Notify,
     downloaded: AtomicU64,
+    uploaded: AtomicU64,
+    seeding_start: AtomicU64,
     history: RwLock<Vec<(u128, u64)>>,
+    pub torrent_session: Arc<tokio::sync::RwLock<Option<Arc<Session>>>>,
     handles: Mutex<Vec<JoinHandle<anyhow::Result<()>>>>,
     part_progress: RwLock<Vec<Arc<AtomicU64>>>,
     pub event_tx: mpsc::Sender<WorkerEvent>,
@@ -57,6 +68,7 @@ impl DownloadWorker {
         url: String,
         dest: PathBuf,
         event_tx: mpsc::Sender<WorkerEvent>,
+        torrent_session: Arc<tokio::sync::RwLock<Option<Arc<Session>>>>,
     ) -> Arc<Self> {
         let speed_limit = settings.read().await.speed_limit;
         Arc::new(Self {
@@ -66,11 +78,14 @@ impl DownloadWorker {
                 dest,
                 total_size: None,
                 downloaded: 0,
+                uploaded: 0,
                 state: DownloadState::Queued,
                 history: Vec::new(),
                 parts: Vec::new(),
                 added_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,
                 updated_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,
+                download_type: DownloadType::Normal,
+                torrent_hash: None,
             }),
             client: client,
             threads: settings.clone().read().await.download_threads as u64,
@@ -81,10 +96,13 @@ impl DownloadWorker {
             speed_limit: AtomicU64::new(speed_limit),
             notify_resume: Notify::new(),
             downloaded: AtomicU64::new(0),
+            uploaded: AtomicU64::new(0),
+            seeding_start: AtomicU64::new(0),
             history: RwLock::new(Vec::new()),
             handles: Mutex::new(Vec::new()),
             part_progress: RwLock::new(Vec::new()),
             event_tx,
+            torrent_session,
         })
     }
 
@@ -93,9 +111,11 @@ impl DownloadWorker {
         client: reqwest::Client,
         settings: Arc<RwLock<DMSettings>>,
         event_tx: mpsc::Sender<WorkerEvent>,
+        torrent_session: Arc<tokio::sync::RwLock<Option<Arc<Session>>>>,
     ) -> Arc<Self> {
         let speed_limit = settings.read().await.speed_limit;
         let downloaded = info.downloaded;
+        let uploaded = info.uploaded;
         let mut parts_progress = Vec::new();
         for part in &info.parts {
             parts_progress.push(Arc::new(AtomicU64::new(part.current)));
@@ -104,7 +124,7 @@ impl DownloadWorker {
         // Reset state to Paused if it was Running or Queued, to avoid auto-start issues
         let mut safe_info = info.clone();
         match safe_info.state {
-            DownloadState::Running | DownloadState::Queued => {
+            DownloadState::Running | DownloadState::Queued | DownloadState::Seeding => {
                 safe_info.state = DownloadState::Paused;
             }
             _ => {}
@@ -123,10 +143,13 @@ impl DownloadWorker {
             speed_limit: AtomicU64::new(speed_limit),
             notify_resume: Notify::new(),
             downloaded: AtomicU64::new(downloaded),
+            uploaded: AtomicU64::new(uploaded),
+            seeding_start: AtomicU64::new(0),
             history: RwLock::new(safe_info.history),
             handles: Mutex::new(Vec::new()),
             part_progress: RwLock::new(parts_progress),
             event_tx,
+            torrent_session,
         })
     }
 
@@ -139,11 +162,30 @@ impl DownloadWorker {
 
         let threads = self.threads;
         let (url, dest) = self.extract_info().await;
+
+        if is_magnet_url(&url) {
+            {
+                let mut info = self.info.lock().await;
+                info.download_type = DownloadType::Torrent;
+            }
+            self.spawn_torrent_download_task(&url, &dest, None).await?;
+            self.spawn_sampler_and_monitor().await?;
+            return Ok(());
+        }
+
         let head_data = self.fetch_head(&url).await?;
 
-        let is_hls = is_hls_url(&url, &head_data.content_type);
-
-        if is_hls {
+        if is_torrent_file(&url, &head_data.content_type){
+             {
+                let mut info = self.info.lock().await;
+                info.download_type = DownloadType::Torrent;
+             }
+             self.spawn_torrent_download_task(&url, &dest, Some(head_data)).await?;
+        } else if is_hls_url(&url, &head_data.content_type) {
+             {
+                let mut info = self.info.lock().await;
+                info.download_type = DownloadType::HLS;
+             }
             self.spawn_hls_download_task(&url, &dest).await?;
         } else {
             self.update_total_size(head_data.total_size).await;
@@ -230,6 +272,10 @@ impl DownloadWorker {
         if let Some(s) = size {
             let mut info = self.info.lock().await;
             info.total_size = Some(s);
+            // If we have a single part with unknown size (end == 0), update it
+            if info.parts.len() == 1 && info.parts[0].end == 0 {
+                info.parts[0].end = s.saturating_sub(1);
+            }
         }
     }
 
@@ -695,6 +741,266 @@ impl DownloadWorker {
         Ok(())
     }
 
+    async fn spawn_torrent_download_task(self: &Arc<Self>, url: &str, dest: &std::path::Path, head_data: Option<HeadData>) -> Result<()> {
+        logger::debug(&format!("Starting Torrent download for {}", url));
+
+        let client = self.client.clone();
+        let worker = Arc::clone(self);
+        let url = url.to_string();
+        let dest = dest.to_path_buf();
+
+        let h = tokio::spawn(async move {
+            worker.download_torrent_task(&client, &url, &dest, head_data).await
+        });
+
+        let mut handles = self.handles.lock().await;
+        handles.push(h);
+        Ok(())
+    }
+
+    async fn download_torrent_task(
+        self: &Arc<Self>,
+        client: &reqwest::Client,
+        url: &str,
+        dest: &std::path::Path,
+        head_data: Option<HeadData>,
+    ) -> Result<()> {
+        let output_dir = if let Some(stem) = dest.file_stem() {
+            let parent = dest.parent().unwrap_or(std::path::Path::new("."));
+            parent.join(stem)
+        } else {
+            dest.to_path_buf()
+        };
+
+        if !output_dir.exists() {
+            tokio::fs::create_dir_all(&output_dir).await?;
+        }
+
+        // Update info dest to finalized output dir
+        {
+            let mut info = self.info.lock().await;
+            info.dest = output_dir.clone();
+        }
+        
+        let session_guard = self.torrent_session.read().await;
+        let session = match session_guard.as_ref() {
+            Some(s) => s.clone(),
+            None => return Err(anyhow::anyhow!("Torrent session not initialized")),
+        };
+
+        let existing_handle = if let Some(hash) = { self.info.lock().await.torrent_hash.clone() } {
+             session.with_torrents(|torrents| {
+                 for (_, handle) in torrents {
+                     if hex::encode(handle.info_hash().0) == hash {
+                         return Some(handle.clone());
+                     }
+                 }
+                 None
+             })
+        } else {
+            None
+        };
+
+        let handle = if let Some(h) = existing_handle {
+            h
+        } else {
+            let add_torrent = if is_magnet_url(url) {
+                AddTorrent::from_url(url)
+            } else {
+                // It's a torrent file, download it first
+                let bytes = client.get(url).send().await?.bytes().await?;
+                AddTorrent::from_bytes(bytes)
+            };
+
+            let response = session.add_torrent(add_torrent, Some(AddTorrentOptions {
+                overwrite: true,
+                output_folder: Some(output_dir.to_string_lossy().to_string()),
+                ..Default::default()
+            })).await?;
+
+            match response {
+                AddTorrentResponse::Added(_, h) => h,
+                AddTorrentResponse::AlreadyManaged(_, h) => h,
+                _ => return Err(anyhow::anyhow!("Failed to add torrent: unknown response")),
+            }
+        };
+
+        // Store torrent hash
+        {
+            let mut info = self.info.lock().await;
+            info.torrent_hash = Some(hex::encode(handle.info_hash().0));
+        }
+
+        handle.wait_until_initialized().await?;
+        if handle.is_paused() {
+            session.unpause(&handle).await?;
+        }
+
+        // Populate parts from torrent files
+        {
+            let metadata_guard = handle.metadata.load();
+            let info = metadata_guard.as_ref().expect("Torrent metadata not initialized");
+            let mut parts = Vec::new();
+            let mut current_pos = 0;
+            for file in &info.file_infos {
+                let len = file.len;
+                parts.push(PartInfo {
+                    start: current_pos,
+                    end: current_pos + len - 1,
+                    current: 0,
+                });
+                current_pos += len;
+            }
+            
+            let mut dl_info = self.info.lock().await;
+            if dl_info.parts.is_empty() {
+                dl_info.parts = parts;
+            }
+
+            // Initialize part_progress
+            let mut pp = self.part_progress.write().await;
+            pp.clear();
+            for _ in 0..info.file_infos.len() {
+                pp.push(Arc::new(AtomicU64::new(0)));
+            }
+        }
+
+        // Update total size once
+        let stats = handle.stats();
+        let total = stats.total_bytes;
+        if total > 0 {
+             self.update_total_size(Some(total)).await;
+        }
+
+        // Downloading Loop
+        loop {
+            // Properly pause/unpause using Session methods
+            if self.paused.load(Ordering::SeqCst) {
+                session.pause(&handle).await?;
+                while self.paused.load(Ordering::SeqCst) {
+                    self.notify_resume.notified().await;
+                }
+                session.unpause(&handle).await?;
+            }
+            
+            if self.cancel.load(Ordering::SeqCst) {
+                // Pause the torrent instead of deleting it
+                session.pause(&handle).await?;
+                logger::debug("Torrent download cancelled (paused)");
+                return Ok(());
+            }
+
+            // Limit speed
+            let limit = self.speed_limit.load(Ordering::SeqCst);
+            if limit > 0 {
+                if let Some(nz_limit) = std::num::NonZeroU32::new(limit as u32) {
+                    session.ratelimits.set_download_bps(Some(nz_limit));
+                }
+            } else {
+                session.ratelimits.set_download_bps(None);
+            }
+
+            let stats = handle.stats();
+            if let TorrentStatsState::Error = stats.state {
+                let msg = stats.error.as_deref().unwrap_or("Unknown error");
+                return Err(anyhow::anyhow!("Torrent error: {}", msg));
+            }
+
+            let downloaded = stats.progress_bytes;
+            let total = stats.total_bytes;
+            let uploaded = stats.uploaded_bytes;
+            
+            self.downloaded.store(downloaded, Ordering::SeqCst);
+            self.uploaded.store(uploaded, Ordering::SeqCst);
+            let file_progress = &stats.file_progress;
+            let pp = self.part_progress.read().await;
+            if pp.len() == file_progress.len() {
+                for (i, bytes) in file_progress.iter().enumerate() {
+                    pp[i].store(*bytes, Ordering::SeqCst);
+                }
+            }
+
+            if total > 0 && downloaded >= total {
+                break;
+            }
+            
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+
+        // Transition to Seeding if not already
+        {
+            let mut info = self.info.lock().await;
+            if !matches!(info.state, DownloadState::Seeding) {
+                 info.state = DownloadState::Seeding;
+                 self.seeding_start.store(SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64, Ordering::SeqCst);
+                 logger::debug(&format!("Download {} completed, starting seeding", info.id));
+            }
+        }
+
+        // Seeding Loop
+        loop {
+            // Properly pause/unpause using Session methods
+            if self.paused.load(Ordering::SeqCst) {
+                session.pause(&handle).await?;
+                while self.paused.load(Ordering::SeqCst) {
+                    self.notify_resume.notified().await;
+                }
+                session.unpause(&handle).await?;
+            }
+            
+            if self.cancel.load(Ordering::SeqCst) {
+                // Delete the torrent (stop download and cleanup)
+                session.delete(handle.id().into(), false).await?;
+                logger::debug("Torrent seeding cancelled");
+                return Ok(());
+            }
+
+             // Limit speed
+            let limit = self.speed_limit.load(Ordering::SeqCst);
+            if limit > 0 {
+                if let Some(nz_limit) = std::num::NonZeroU32::new(limit as u32) {
+                    session.ratelimits.set_download_bps(Some(nz_limit));
+                }
+            } else {
+                session.ratelimits.set_download_bps(None);
+            }
+
+            let stats = handle.stats();
+            if let TorrentStatsState::Error = stats.state {
+                let msg = stats.error.as_deref().unwrap_or("Unknown error");
+                return Err(anyhow::anyhow!("Torrent error: {}", msg));
+            }
+
+            let downloaded = stats.progress_bytes;
+            let uploaded = stats.uploaded_bytes;
+            
+            self.downloaded.store(downloaded, Ordering::SeqCst);
+            self.uploaded.store(uploaded, Ordering::SeqCst);
+
+            // Check limits
+            let settings = self.settings.read().await;
+            let ratio_limit = settings.seeding_ratio;
+            let time_limit = settings.seeding_time;
+            
+            let ratio = if downloaded > 0 { uploaded as f32 / downloaded as f32 } else { 0.0 };
+            
+            let seeding_start = self.seeding_start.load(Ordering::SeqCst);
+            let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
+            let elapsed_mins = if seeding_start > 0 { (now - seeding_start) / 1000 / 60 } else { 0 };
+
+            if ratio >= ratio_limit || elapsed_mins >= time_limit {
+                logger::debug(&format!("Seeding limit reached: ratio {:.2}/{}, time {}/{}m", 
+                    ratio, ratio_limit, elapsed_mins, time_limit));
+                session.delete(handle.id().into(), false).await?;
+                break;
+            }
+
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+
+        Ok(())
+    }
+
     async fn spawn_sampler_and_monitor(self: &Arc<Self>) -> Result<()> {
         let stop_flag = Arc::new(Notify::new());
         let stop_clone = stop_flag.clone();
@@ -852,6 +1158,7 @@ impl DownloadWorker {
     pub async fn sync_to_info(&self) {
         let mut info = self.info.lock().await;
         info.downloaded = self.downloaded.load(Ordering::SeqCst);
+        info.uploaded = self.uploaded.load(Ordering::SeqCst);
         info.history = self.history.read().await.clone();
         info.updated_at = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
         
@@ -867,6 +1174,8 @@ impl DownloadWorker {
         let mut meta = self.info.lock().await.clone();
         let d = self.downloaded.load(Ordering::SeqCst);
         meta.downloaded = d;
+        let u = self.uploaded.load(Ordering::SeqCst);
+        meta.uploaded = u;
         let hist = self.history.read().await;
         meta.history = hist.clone();
         
@@ -890,7 +1199,21 @@ impl DownloadWorker {
     }
 }
 
-#[derive(Debug)]
+impl std::fmt::Debug for DownloadWorker {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DownloadWorker")
+         .field("info", &self.info)
+         .field("paused", &self.paused)
+         .field("started", &self.started)
+         .field("cancel", &self.cancel)
+         .field("threads", &self.threads)
+         .field("speed_limit", &self.speed_limit)
+         .field("downloaded", &self.downloaded)
+         .field("uploaded", &self.uploaded)
+         .finish()
+    }
+}
+
 pub struct DownloadManager {
     client: reqwest::Client,
     pub settings: Arc<RwLock<DMSettings>>,
@@ -900,38 +1223,81 @@ pub struct DownloadManager {
     sender: mpsc::Sender<WorkerEvent>,
     pub broadcast_tx: broadcast::Sender<WorkerEvent>,
     pending_deletions: Arc<Mutex<Vec<Uuid>>>,
+    pub torrent_session: Arc<tokio::sync::RwLock<Option<Arc<Session>>>>,
 }
 
 impl DownloadManager {
-    pub fn new(client: reqwest::Client, settings: DMSettings) -> Arc<Self> {
+    pub async fn new(client: reqwest::Client, settings: DMSettings) -> Arc<Self> {
         let (tx, mut rx) = mpsc::channel::<WorkerEvent>(64);
-        let mgr = Arc::new(Self {
+
+        // Initialize torrent session as None
+        let torrent_session = Arc::new(tokio::sync::RwLock::new(None));
+
+        let (broadcast_tx, _) = broadcast::channel(64);
+        let dm = Arc::new(Self {
             client,
             settings: Arc::new(RwLock::new(settings)),
             workers: Arc::new(Mutex::new(IndexMap::new())),
             active: Arc::new(Mutex::new(HashSet::new())),
             concurrency: Arc::new(AtomicU8::new(0)),
             sender: tx.clone(),
-            broadcast_tx: broadcast::channel(100).0,
+            broadcast_tx,
             pending_deletions: Arc::new(Mutex::new(Vec::new())),
+            torrent_session,
         });
 
-        let mgr1 = Arc::clone(&mgr);
-        let mgr2 = mgr1.clone();
-
-        // event loop
+        let dm_clone = dm.clone();
         tokio::spawn(async move {
-            while let Some(event) = rx.recv().await {
-                mgr1.handle_event(event).await;
-            }
+            dm_clone.event_loop(rx).await;
         });
 
-        // updater
+        let dm_clone2 = dm.clone();
         tokio::spawn(async move {
-            mgr2.updater().await;
+            dm_clone2.updater().await;
         });
 
-        mgr
+        dm
+    }
+
+    pub async fn init_torrent_session(&self, persistence_path: PathBuf) {
+        tokio::fs::create_dir_all(&persistence_path).await.ok();
+
+        let session = Session::new_with_opts(persistence_path.clone(), SessionOptions {
+            disable_dht: true,
+            disable_dht_persistence: true,
+            fastresume: false,
+            persistence: Some(SessionPersistenceConfig::Json {
+                folder: Some(persistence_path),
+            }),
+            ..Default::default()
+        }).await.expect("Failed to initialize torrent session");
+
+        // Pause all torrents on startup
+        let handles_to_pause = session.with_torrents(|torrents| {
+            torrents.filter_map(|(_, h)| {
+                if !h.is_paused() {
+                    Some(h.clone())
+                } else {
+                    None
+                }
+            }).collect::<Vec<_>>()
+        });
+        for h in handles_to_pause {
+            h.wait_until_initialized().await;
+            let _ = session.pause(&h).await;
+            logger::debug(&format!("Paused torrent: {}", h.info_hash().as_string()));
+        }
+
+        let mut session_guard = self.torrent_session.write().await;
+        *session_guard = Some(session);
+        
+        logger::debug("Torrent session initialized with persistence");
+    }
+
+    pub async fn event_loop(self: &Arc<Self>, mut rx: mpsc::Receiver<WorkerEvent>) {
+        while let Some(event) = rx.recv().await {
+            self.handle_event(event).await;
+        }
     }
 
     /// Called when a worker completes / cancels / errors
@@ -1018,7 +1384,8 @@ impl DownloadManager {
     pub async fn add_download(&self, url: String, dest: PathBuf) -> Result<Uuid> {
         let id = Uuid::new_v4();
         let worker = DownloadWorker::new(
-            id, self.client.clone(), self.settings.clone(), url, dest, self.sender.clone()
+            id, self.client.clone(), self.settings.clone(), url, dest, self.sender.clone(),
+            self.torrent_session.clone()
         ).await;
         self.workers.lock().await.insert(id, worker);
         self.process_queue().await;
@@ -1054,6 +1421,7 @@ impl DownloadManager {
                 self.client.clone(),
                 self.settings.clone(),
                 self.sender.clone(),
+                self.torrent_session.clone()
             ).await;
             
             workers.insert(id, worker);
@@ -1144,9 +1512,19 @@ impl DownloadManager {
         Ok(())
     }
 
-    pub async fn delete_worker(&self, id: Uuid) -> Result<()> {
+    pub async fn delete_worker(&self, id: Uuid, delete_file: bool) -> Result<()> {
         // First cancel if it exists (this handles stopping, active set, concurrency)
         let _ = self.cancel(id).await;
+
+        // Retrieve info before removing worker to check type and paths
+        let info_opt = {
+            let workers = self.workers.lock().await;
+            if let Some(w) = workers.get(&id) {
+                Some(w.info().await)
+            } else {
+                None
+            }
+        };
 
         // Then remove from workers map
         self.workers.lock().await.swap_remove(&id);
@@ -1154,6 +1532,58 @@ impl DownloadManager {
         // Add to pending deletions for DB
         self.pending_deletions.lock().await.push(id);
         
+        if let Some(info) = info_opt {
+            if matches!(info.download_type, DownloadType::Torrent) {
+                let session_guard = self.torrent_session.read().await;
+                if let Some(session) = session_guard.as_ref() {
+                    // Try to delete using torrent_hash if available
+                    if let Some(hash) = &info.torrent_hash {
+                        let hash_to_delete = session.with_torrents(|torrents| {
+                            for (id, torrent_handle) in torrents {
+                                if hex::encode(torrent_handle.info_hash().0) == *hash {
+                                    return Some(id);
+                                }
+                            }
+                            None
+                        });
+
+                        if let Some(id) = hash_to_delete {
+                            let _ = session.delete(librqbit::api::TorrentIdOrHash::Id(id), delete_file).await;
+                        }
+                    }
+                }
+                 
+                 // Fallback
+                 if delete_file {
+                     if info.dest.exists() {
+                        if info.dest.is_dir() {
+                            tokio::fs::remove_dir_all(&info.dest).await.ok();
+                        } else {
+                            tokio::fs::remove_file(&info.dest).await.ok();
+                        }
+                     }
+                 }
+            } else {
+                // Normal or HLS
+                if delete_file {
+                    if info.dest.exists() {
+                        if info.dest.is_dir() {
+                            tokio::fs::remove_dir_all(&info.dest).await.ok();
+                        } else {
+                            tokio::fs::remove_file(&info.dest).await.ok();
+                        }
+                    }
+                    // Cleanup HLS temp dir
+                    if matches!(info.download_type, DownloadType::HLS) {
+                        let temp_dir = info.dest.parent().unwrap().join(format!("temp_{}", info.id));
+                        if temp_dir.exists() {
+                            tokio::fs::remove_dir_all(&temp_dir).await.ok();
+                        }
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 
@@ -1162,6 +1592,11 @@ impl DownloadManager {
         let drained = pending.clone();
         pending.clear();
         drained
+    }
+
+    pub async fn requeue_pending_deletions(&self, ids: Vec<Uuid>) {
+        let mut pending = self.pending_deletions.lock().await;
+        pending.extend(ids);
     }
 
     pub async fn info(&self, id: Uuid) -> Result<DownloadInfo> {
@@ -1262,6 +1697,8 @@ impl DownloadManager {
             settings.concurrency_limit = new.concurrency_limit;
             settings.download_timeout = new.download_timeout;
             settings.download_retries = new.download_retries;
+            settings.seeding_ratio = new.seeding_ratio;
+            settings.seeding_time = new.seeding_time;
         }
 
         if concurrency_changed {
@@ -1269,5 +1706,16 @@ impl DownloadManager {
         }
 
         Ok(())
+    }
+}
+
+impl std::fmt::Debug for DownloadManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DownloadManager")
+         .field("settings", &self.settings)
+         .field("workers", &self.workers)
+         .field("active", &self.active)
+         .field("concurrency", &self.concurrency)
+         .finish()
     }
 }

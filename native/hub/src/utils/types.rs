@@ -20,6 +20,8 @@ pub struct DMSettings {
     pub concurrency_limit: u8,
     pub download_timeout: u64,
     pub download_retries: u8,
+    pub seeding_ratio: f32,
+    pub seeding_time: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -34,12 +36,26 @@ pub struct HeadData {
     pub content_type: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum DownloadType {
+    Normal,
+    Torrent,
+    HLS,
+}
+
+impl Default for DownloadType {
+    fn default() -> Self {
+        Self::Normal
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum DownloadState {
     Queued,
     Running,
     Paused,
     Completed,
+    Seeding,
     Cancelled,
     Error(String),
 }
@@ -60,12 +76,14 @@ pub struct DownloadInfo {
     pub dest: PathBuf,
     pub total_size: Option<u64>,
     pub downloaded: u64, 
+    pub uploaded: u64,
     pub state: DownloadState,
-    // history is a list of (timestamp_millis, downloaded_bytes) samples
     pub history: Vec<(u128, u64)>,
     pub parts: Vec<PartInfo>,
     pub added_at: u64,
     pub updated_at: u64,
+    pub download_type: DownloadType,
+    pub torrent_hash: Option<String>,
 }
 
 #[derive(Debug, Clone)]

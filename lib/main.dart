@@ -28,6 +28,8 @@ Future<void> main() async {
       initRustSignalLogger();
 
       await SettingsManager.sendAllSettings();
+      final torrentPath = await SettingsManager.getTorrentPersistencePath();
+      InitTorrentPersistence(path: torrentPath).sendSignalToRust();
       final dbPath = await SettingsManager.getDatabasePath();
       InitDatabase(path: dbPath).sendSignalToRust();
 

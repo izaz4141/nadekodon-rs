@@ -7,7 +7,7 @@ use uuid::Uuid;
 use main::{DownloadManager};
 use crate::utils::{
     types::{
-        DMSettings, DownloadState, DownloadInfo
+        DMSettings, DownloadState, DownloadInfo, DownloadType
     },
     url::get_url_info,
     helper::calc_speed,
@@ -21,6 +21,7 @@ use crate::signals::{
     GetDownloadList, DownloadList, DownloadGlance,
     GetDownloadDetails, DownloadDetails, PartInfo,
     PauseDownload, ResumeDownload, CancelDownload, DeleteDownload,
+    InitTorrentPersistence,
 };
 
 /// Function to spawn the single global DownloadManager at startup
@@ -31,8 +32,10 @@ pub async fn start_download_manager(client: Client) -> Arc<DownloadManager> {
         download_threads: 8,
         download_timeout: 30,
         download_retries: 5,
+        seeding_ratio: 1.0,
+        seeding_time: 30,
     };
-    let manager = DownloadManager::new(client, settings);
+    let manager = DownloadManager::new(client, settings).await;
     manager
 }
 
@@ -216,13 +219,13 @@ pub async fn spawn_download_worker(manager: Arc<DownloadManager>) {
                                     if let Ok(info) = manager.info(vid).await {
                                         total_size += info.downloaded;
                                     }
-                                    let _ = manager.delete_worker(vid).await;
+                                    let _ = manager.delete_worker(vid, true).await;
                                 }
                                 if let Some(aid) = audio_id {
                                     if let Ok(info) = manager.info(aid).await {
                                         total_size += info.downloaded;
                                     }
-                                    let _ = manager.delete_worker(aid).await;
+                                    let _ = manager.delete_worker(aid, true).await;
                                 }
 
                                 let final_info = DownloadInfo {
@@ -231,11 +234,14 @@ pub async fn spawn_download_worker(manager: Arc<DownloadManager>) {
                                     dest: dest.clone(),
                                     total_size: Some(total_size),
                                     downloaded: total_size,
+                                    uploaded: 0,
                                     state: DownloadState::Completed,
                                     history: Vec::new(),
                                     parts: Vec::new(),
                                     added_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,
                                     updated_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,
+                                    download_type: DownloadType::Normal,
+                                    torrent_hash: None,
                                 };
                                 
                                 manager.load_snapshot(vec![final_info]).await;
@@ -291,10 +297,53 @@ pub async fn get_download_details(manager: Arc<DownloadManager>) {
                     DownloadState::Running => "Running".to_string(),
                     DownloadState::Paused => "Paused".to_string(),
                     DownloadState::Completed => "Completed".to_string(),
+                    DownloadState::Seeding => "Seeding".to_string(),
                     DownloadState::Cancelled => "Cancelled".to_string(),
                     DownloadState::Error(e) => format!("Error: {}", e),
                 };
                 let speed = calc_speed(info.history);
+                let mut uploaded = None;
+                let mut upload_speed = None;
+                let mut peers = None;
+                let mut seeds = None;
+                let mut leechers = None;
+                let mut ratio = None;
+                let mut eta = None;
+
+                if matches!(info.download_type, DownloadType::Torrent) {
+                    uploaded = Some(info.uploaded);
+                    if let Some(hash) = &info.torrent_hash {
+                         let session_guard = manager.torrent_session.read().await;
+                         if let Some(session) = session_guard.as_ref() {
+                             let handle_opt = session.with_torrents(|torrents| {
+                                 for (_, handle) in torrents {
+                                     if hex::encode(handle.info_hash().0) == *hash {
+                                         return Some(handle.clone());
+                                     }
+                                 }
+                                 None
+                             });
+
+                             if let Some(handle) = handle_opt {
+                                 let stats = handle.stats();
+                                 if let Some(live_stats) = stats.live {
+                                     upload_speed = Some((live_stats.upload_speed.mbps * 125_000.0) as f64);
+                                     if let Some(duration) = live_stats.time_remaining {
+                                         eta = Some(duration.to_string());
+                                     }
+                                     peers = Some(live_stats.snapshot.peer_stats.live as u64);
+                                 }
+                                 
+                                 if stats.progress_bytes > 0 {
+                                     ratio = Some(stats.uploaded_bytes as f64 / stats.progress_bytes as f64);
+                                 } else {
+                                     ratio = Some(0.0);
+                                 }
+                             }
+                         }
+                    }
+                }
+
                 DownloadDetails {
                     id: info.id.to_string(),
                     name: info.dest
@@ -312,6 +361,13 @@ pub async fn get_download_details(manager: Arc<DownloadManager>) {
                         end: p.end,
                         current: p.current,
                     }).collect(),
+                    uploaded,
+                    upload_speed,
+                    peers,
+                    seeds,
+                    leechers,
+                    ratio,
+                    eta,
                 }.send_signal_to_dart();
             }
             Err(e) => {
@@ -398,7 +454,7 @@ pub async fn delete_download(manager: Arc<DownloadManager>) {
         };
 
         let manager = Arc::clone(&manager);
-        manager.delete_worker(id).await;
+        let _ = manager.delete_worker(id, data.delete_file).await;
         logger::debug(&format!("Deleted worker with id {}", id));
     }
 }
@@ -439,6 +495,7 @@ pub async fn get_download_list(manager: Arc<DownloadManager>) {
                             DownloadState::Running => "Running",
                             DownloadState::Paused => "Paused",
                             DownloadState::Completed => "Completed",
+                            DownloadState::Seeding => "Seeding",
                             DownloadState::Cancelled => "Cancelled",
                             DownloadState::Error(_) => "Error",
                         };
@@ -544,6 +601,7 @@ pub async fn get_download_list(manager: Arc<DownloadManager>) {
                         DownloadState::Running => "Running".to_string(),
                         DownloadState::Paused => "Paused".to_string(),
                         DownloadState::Completed => "Completed".to_string(),
+                        DownloadState::Seeding => "Seeding".to_string(),
                         DownloadState::Cancelled => "Cancelled".to_string(),
                         DownloadState::Error(_) => "Error".to_string(),
                     };
@@ -575,5 +633,13 @@ pub async fn get_download_list(manager: Arc<DownloadManager>) {
                 logger::error(&format!("Failed to get download list: {:?}", e));
             }
         }
+    }
+}
+
+pub async fn handle_init_torrent_persistence(manager: Arc<DownloadManager>) {
+    let receiver = InitTorrentPersistence::get_dart_signal_receiver();
+    while let Some(signal) = receiver.recv().await {
+        let persistence_path = std::path::PathBuf::from(signal.message.path);
+        manager.init_torrent_session(persistence_path).await;
     }
 }

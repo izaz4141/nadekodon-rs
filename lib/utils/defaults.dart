@@ -9,6 +9,9 @@ class DefaultSettings {
   static const int concurrencyLimit = 3;
   static const int downloadTimeout = 30;
   static const int downloadRetries = 5;
+  static const double seedingRatio = 1.0;
+  static const int seedingTime = 30;
+
   static const ThemeMode themeMode = ThemeMode.system;
   static const bool useDynamicColor = true;
   static const int customColor = 0xFFFF4081;

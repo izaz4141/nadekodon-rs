@@ -87,6 +87,22 @@ class SettingsDM extends StatelessWidget {
           min: 0,
           max: 10,
         ),
+        DoubleSpinBox(
+          title: "Seeding Ratio",
+          subtitle: "Ratio of uploaded to downloaded data",
+          valueListenable: SettingsManager.seedingRatio,
+          min: 0.00,
+          max: 999999,
+          step: 0.1,
+          decimalPlaces: 2,
+        ),
+        SpinBox(
+          title: "Seeding Time",
+          subtitle: "Maximum seeding time (Minutes)",
+          valueListenable: SettingsManager.seedingTime,
+          min: 0,
+          max: 999999,
+        ),
       ],
     );
   }

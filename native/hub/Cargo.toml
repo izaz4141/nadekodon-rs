@@ -20,26 +20,18 @@ wildcard_imports = "deny"
 rinf = "8.7.2"
 serde = { version = "1.0.219", features = ["derive"] }
 tokio = { version = "1.45.0", features = ["full"] }
-async-trait = "0.1.87"
-messages = "0.3.1"
 reqwest = { version = "0.12.23", features = ["json", "stream", "gzip", "brotli", "deflate", "http2", "rustls-tls", "blocking"] }
 uuid = { version = "1.18.0", features = ["v4"] }
 time = { version = "0.3.41", features = ["macros", "formatting", "parsing"] }
-bytes = "1.10.1"
 futures = "0.3.31"
 anyhow = "1.0.99"
-thiserror = "2.0.16"
-governor = "0.10.1"
-nonzero_ext = "0.3.0"
-dashmap = "6.1.0"
 openssl = { version = "0.10.74", features = ["vendored"] }
 indexmap = { version = "2.2.6", features = ["serde"] }
-chrono = "0.4"
 serde_json = "1.0"
 sqlx = { version = "0.8.2", features = ["sqlite", "runtime-tokio"] }
 axum = { version = "0.7.5", features = ["ws"] }
-tower-http = { version = "0.5.2", features = ["cors"] }
-dirs = "5.0.1"
+librqbit = "8.1.1"
+hex = "0.4.3"
 
 # Uncomment below to target the web.
 # tokio_with_wasm = { version = "0.8.5", features = ["rt", "macros", "time"] }

@@ -73,19 +73,24 @@ class _DownloadDetailsDialogState extends State<DownloadDetailsDialog> {
             }
 
             return SingleChildScrollView(
-              child: SelectionArea(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildInfoSection(details, textTheme, colorScheme),
-                    const SizedBox(height: AppTheme.spaceMD),
-                    const Divider(),
-                    const SizedBox(height: AppTheme.spaceMD),
-                    Text('Parts Progress', style: textTheme.titleSmall),
-                    const SizedBox(height: AppTheme.spaceSM),
-                    _buildPartsList(details.partInfo, colorScheme),
-                  ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppTheme.spaceLG,
+                ),
+                child: SelectionArea(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildInfoSection(details, textTheme, colorScheme),
+                      const SizedBox(height: AppTheme.spaceMD),
+                      const Divider(),
+                      const SizedBox(height: AppTheme.spaceMD),
+                      Text('Parts Progress', style: textTheme.titleSmall),
+                      const SizedBox(height: AppTheme.spaceSM),
+                      _buildPartsList(details.partInfo, colorScheme),
+                    ],
+                  ),
                 ),
               ),
             );
@@ -106,6 +111,8 @@ class _DownloadDetailsDialogState extends State<DownloadDetailsDialog> {
     TextTheme textTheme,
     ColorScheme colorScheme,
   ) {
+    final hasTorrentDetails = details.uploaded != null || details.peers != null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -170,6 +177,54 @@ class _DownloadDetailsDialogState extends State<DownloadDetailsDialog> {
             ),
           ],
         ),
+        if (hasTorrentDetails) ...[
+          const SizedBox(height: AppTheme.spaceSM),
+          Row(
+            children: [
+              if (details.uploaded != null)
+                Expanded(
+                  child: _buildDetailRow(
+                    'Uploaded',
+                    formatBytes(details.uploaded!.toInt()),
+                    textTheme,
+                  ),
+                ),
+              if (details.uploadSpeed != null)
+                Expanded(
+                  child: _buildDetailRow(
+                    'Upload Speed',
+                    '${formatBytes(details.uploadSpeed!.toInt())}/s',
+                    textTheme,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: AppTheme.spaceSM),
+          Row(
+            children: [
+              if (details.peers != null)
+                Expanded(
+                  child: _buildDetailRow(
+                    'Peers',
+                    '${details.peers}',
+                    textTheme,
+                  ),
+                ),
+              if (details.ratio != null)
+                Expanded(
+                  child: _buildDetailRow(
+                    'Ratio',
+                    details.ratio!.toStringAsFixed(2),
+                    textTheme,
+                  ),
+                ),
+            ],
+          ),
+          if (details.eta != null) ...[
+            const SizedBox(height: AppTheme.spaceSM),
+            _buildDetailRow('ETA', details.eta!, textTheme),
+          ],
+        ],
       ],
     );
   }
