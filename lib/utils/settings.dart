@@ -66,7 +66,6 @@ class SettingsManager {
       _applyFromJson(data);
       log(configPath);
     } else {
-      log("Initial Config");
       applyDefaultSettings();
       regenerateApiKey();
       await _saveAll();

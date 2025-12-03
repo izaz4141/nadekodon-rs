@@ -1,5 +1,5 @@
-use rinf::{DartSignal, RustSignal, SignalPiece};
 use crate::signals::LogSignal;
+use rinf::RustSignal;
 
 fn _log(level: &str, message: &str) {
     LogSignal {

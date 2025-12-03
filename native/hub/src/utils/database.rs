@@ -1,31 +1,35 @@
-use std::sync::Arc;
-use std::time::Duration;
-use sqlx::{sqlite::SqlitePoolOptions, Pool, Sqlite};
-use tokio::time::sleep;
 use crate::downloader::main::DownloadManager;
 use crate::signals::InitDatabase;
 use crate::utils::logger;
 use rinf::DartSignal;
+use sqlx::{Pool, Sqlite, sqlite::SqlitePoolOptions};
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::time::sleep;
 
-use crate::utils::types::{DownloadInfo, DownloadState, PartInfo, DownloadType};
+use crate::utils::types::{DownloadInfo, DownloadState, DownloadType, PartInfo};
 use std::path::PathBuf;
 use uuid::Uuid;
 
 use tokio::sync::Notify;
 
-pub async fn start_database_manager(dm: Arc<DownloadManager>, shutdown_signal: Arc<Notify>, db_done_signal: Arc<Notify>) {
+pub async fn start_database_manager(
+    dm: Arc<DownloadManager>,
+    shutdown_signal: Arc<Notify>,
+    db_done_signal: Arc<Notify>,
+) {
     let receiver = InitDatabase::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
         let path = signal_pack.message.path;
         let dm = dm.clone();
         let shutdown_signal = shutdown_signal.clone();
         let db_done_signal = db_done_signal.clone();
-        
+
         tokio::spawn(async move {
             match init_db(&path).await {
                 Ok(pool) => {
                     logger::debug(&format!("Database initialized at {}", path));
-                    
+
                     // Load existing downloads
                     match load_downloads(&pool).await {
                         Ok(downloads) => {
@@ -72,7 +76,7 @@ async fn load_downloads(pool: &Pool<Sqlite>) -> Result<Vec<DownloadInfo>, sqlx::
         let downloaded = downloaded as u64;
         let uploaded: i64 = row.get("uploaded");
         let uploaded = uploaded as u64;
-        
+
         let state_str: String = row.get("state");
         let state = if state_str.contains("Completed") {
             DownloadState::Completed
@@ -92,7 +96,7 @@ async fn load_downloads(pool: &Pool<Sqlite>) -> Result<Vec<DownloadInfo>, sqlx::
         } else {
             Vec::new()
         };
-        
+
         let added_at: i64 = row.get("added_at");
         let added_at = added_at as u64;
         let updated_at: i64 = row.get("updated_at");
@@ -129,7 +133,7 @@ async fn load_downloads(pool: &Pool<Sqlite>) -> Result<Vec<DownloadInfo>, sqlx::
 
 async fn init_db(path: &str) -> Result<Pool<Sqlite>, sqlx::Error> {
     let db_url = format!("sqlite://{}", path);
-    
+
     // Create database file if it doesn't exist
     if !std::path::Path::new(path).exists() {
         if let Some(parent) = std::path::Path::new(path).parent() {
@@ -160,7 +164,7 @@ async fn init_db(path: &str) -> Result<Pool<Sqlite>, sqlx::Error> {
             download_type TEXT,
             torrent_hash TEXT
         );
-        "#
+        "#,
     )
     .execute(&pool)
     .await?;
@@ -181,7 +185,12 @@ async fn init_db(path: &str) -> Result<Pool<Sqlite>, sqlx::Error> {
     Ok(pool)
 }
 
-async fn start_db_loop(pool: Pool<Sqlite>, dm: Arc<DownloadManager>, shutdown_signal: Arc<Notify>, db_done_signal: Arc<Notify>) {
+async fn start_db_loop(
+    pool: Pool<Sqlite>,
+    dm: Arc<DownloadManager>,
+    shutdown_signal: Arc<Notify>,
+    db_done_signal: Arc<Notify>,
+) {
     loop {
         tokio::select! {
             _ = sleep(Duration::from_secs(5)) => {},
@@ -197,7 +206,7 @@ async fn start_db_loop(pool: Pool<Sqlite>, dm: Arc<DownloadManager>, shutdown_si
                 break;
             }
         }
-        
+
         save_downloads(&pool, &dm).await;
     }
 }
@@ -213,7 +222,10 @@ async fn save_downloads(pool: &Pool<Sqlite>, dm: &Arc<DownloadManager>) {
             .execute(pool)
             .await
         {
-            logger::error(&format!("Failed to delete download {} from DB: {:?}", id, e));
+            logger::error(&format!(
+                "Failed to delete download {} from DB: {:?}",
+                id, e
+            ));
             failed_deletions.push(id);
         }
     }

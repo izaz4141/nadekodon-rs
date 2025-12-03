@@ -4,41 +4,38 @@ use futures::future::join_all;
 use indexmap::IndexMap;
 use reqwest::header::{ACCEPT_RANGES, CONTENT_LENGTH, RANGE};
 use std::{
-    collections::HashSet, path::PathBuf, sync::{
-        Arc, atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering}
-    }, time::{Duration, SystemTime, UNIX_EPOCH}
+    collections::HashSet,
+    path::PathBuf,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering},
+    },
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::{
     fs::File as TokioFile,
     io::{AsyncSeekExt, AsyncWriteExt, SeekFrom},
-    sync::{mpsc, Mutex, Notify, RwLock, broadcast},
+    sync::{Mutex, Notify, RwLock, broadcast, mpsc},
     task::JoinHandle,
-    time::{timeout, interval, Interval, Instant, sleep_until},
+    time::{Instant, Interval, interval, sleep_until, timeout},
 };
 use uuid::Uuid;
 
 use crate::utils::logger;
 use crate::utils::{
-    types::{
-        HeadData, DownloadState, DownloadInfo,
-        WorkerEvent, DMSettings, PartInfo, DownloadType,
-    },
     helper::calc_speed,
+    types::{
+        DMSettings, DownloadInfo, DownloadState, DownloadType, HeadData, PartInfo, WorkerEvent,
+    },
     url::{is_hls_url, is_magnet_url, is_torrent_file},
 };
 use librqbit::{
-    AddTorrent, Session, SessionOptions,
-    AddTorrentOptions, AddTorrentResponse, TorrentStatsState,
-    SessionPersistenceConfig
+    AddTorrent, AddTorrentOptions, AddTorrentResponse, Session, SessionOptions,
+    SessionPersistenceConfig, TorrentStatsState,
 };
-
-
-
 
 const HISTORY_SAMPLE_INTERVAL_SECS: u64 = 1;
 const MAX_HISTORY: usize = 15;
-
-
 
 pub struct DownloadWorker {
     info: Mutex<DownloadInfo>,
@@ -48,7 +45,7 @@ pub struct DownloadWorker {
     started: AtomicBool,
     cancel: AtomicBool,
     threads: u64,
-    speed_limit:AtomicU64,
+    speed_limit: AtomicU64,
     notify_resume: Notify,
     downloaded: AtomicU64,
     uploaded: AtomicU64,
@@ -82,8 +79,14 @@ impl DownloadWorker {
                 state: DownloadState::Queued,
                 history: Vec::new(),
                 parts: Vec::new(),
-                added_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,
-                updated_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,
+                added_at: SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis() as u64,
+                updated_at: SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis() as u64,
                 download_type: DownloadType::Normal,
                 torrent_hash: None,
             }),
@@ -137,7 +140,7 @@ impl DownloadWorker {
             client: client,
             threads: settings.clone().read().await.download_threads as u64,
             settings: settings,
-            paused: AtomicBool::new(is_paused), 
+            paused: AtomicBool::new(is_paused),
             started: AtomicBool::new(false),
             cancel: AtomicBool::new(false),
             speed_limit: AtomicU64::new(speed_limit),
@@ -168,40 +171,49 @@ impl DownloadWorker {
                 let mut info = self.info.lock().await;
                 info.download_type = DownloadType::Torrent;
             }
-            self.spawn_torrent_download_task(&url, &dest, None).await?;
+            self.spawn_torrent_download_task(&url, &dest).await?;
             self.spawn_sampler_and_monitor().await?;
             return Ok(());
         }
 
         let head_data = self.fetch_head(&url).await?;
 
-        if is_torrent_file(&url, &head_data.content_type){
-             {
+        if is_torrent_file(&url, &head_data.content_type) {
+            {
                 let mut info = self.info.lock().await;
                 info.download_type = DownloadType::Torrent;
-             }
-             self.spawn_torrent_download_task(&url, &dest, Some(head_data)).await?;
+            }
+            self.spawn_torrent_download_task(&url, &dest).await?;
         } else if is_hls_url(&url, &head_data.content_type) {
-             {
+            {
                 let mut info = self.info.lock().await;
                 info.download_type = DownloadType::HLS;
-             }
+            }
             self.spawn_hls_download_task(&url, &dest).await?;
         } else {
             self.update_total_size(head_data.total_size).await;
-            let is_single_thread = !head_data.accept_ranges || head_data.total_size.is_none() || threads <= 1;
+            let is_single_thread =
+                !head_data.accept_ranges || head_data.total_size.is_none() || threads <= 1;
             let size = head_data.total_size.unwrap_or(0);
-            
+
             let has_existing_parts = {
                 let info = self.info.lock().await;
                 !info.parts.is_empty()
             };
-            
+
             if !has_existing_parts {
                 self.prepare_file(&dest, size, is_single_thread)?;
             }
-            
-            self.spawn_download_tasks(&url, &dest, size, threads, is_single_thread, head_data.accept_ranges).await?;
+
+            self.spawn_download_tasks(
+                &url,
+                &dest,
+                size,
+                threads,
+                is_single_thread,
+                head_data.accept_ranges,
+            )
+            .await?;
         }
 
         self.spawn_sampler_and_monitor().await?;
@@ -240,7 +252,7 @@ impl DownloadWorker {
     async fn fetch_head(&self, url: &str) -> Result<HeadData> {
         let client = self.client.clone();
         let head = client.head(url).send().await?;
-        let status = head.status();
+        // let status = head.status();
 
         let total_size = head
             .headers()
@@ -284,22 +296,41 @@ impl DownloadWorker {
         (info.url.clone(), info.dest.clone())
     }
 
-    fn prepare_file(&self, dest: &std::path::Path, size: u64, is_single_thread: bool) -> Result<()> {
+    fn prepare_file(
+        &self,
+        dest: &std::path::Path,
+        size: u64,
+        is_single_thread: bool,
+    ) -> Result<()> {
         let f = std::fs::File::create(dest)?;
-        if !is_single_thread {f.set_len(size)?};
+        if !is_single_thread {
+            f.set_len(size)?
+        };
         Ok(())
     }
 
-    async fn spawn_download_tasks(self: &Arc<Self>, url: &str, dest: &std::path::Path, size: u64, threads: u64, is_single_thread: bool, accept_ranges: bool) -> Result<()> {
+    async fn spawn_download_tasks(
+        self: &Arc<Self>,
+        url: &str,
+        dest: &std::path::Path,
+        size: u64,
+        threads: u64,
+        is_single_thread: bool,
+        accept_ranges: bool,
+    ) -> Result<()> {
         let client = self.client.clone();
         let mut handles = Vec::new();
-        
+
         // Initialize parts if empty
         {
             let mut info = self.info.lock().await;
             if info.parts.is_empty() {
                 if is_single_thread {
-                    let end_pos = if size == 0 { u64::MAX } else { size.saturating_sub(1) };
+                    let end_pos = if size == 0 {
+                        u64::MAX
+                    } else {
+                        size.saturating_sub(1)
+                    };
                     info.parts.push(PartInfo {
                         start: 0,
                         end: end_pos,
@@ -309,7 +340,11 @@ impl DownloadWorker {
                     let part_size = size / threads;
                     for i in 0..threads {
                         let start = i as u64 * part_size;
-                        let end = if i == threads - 1 { size - 1 } else { start + part_size - 1 };
+                        let end = if i == threads - 1 {
+                            size - 1
+                        } else {
+                            start + part_size - 1
+                        };
                         info.parts.push(PartInfo {
                             start,
                             end,
@@ -330,7 +365,7 @@ impl DownloadWorker {
             if pp.len() == parts.len() && !pp.is_empty() {
                 pp.clone()
             } else {
-                drop(pp); 
+                drop(pp);
                 let mut new_progress = Vec::new();
                 for part in &parts {
                     new_progress.push(Arc::new(AtomicU64::new(part.current)));
@@ -347,14 +382,26 @@ impl DownloadWorker {
             let url = url.to_string();
             let dest = dest.to_path_buf();
             let progress = progress_vec[i].clone();
-            
+
             progress.store(part.current, Ordering::SeqCst);
 
             let start = part.start;
             let end = part.end;
 
             let h = tokio::spawn(async move {
-                worker.download_task(i as u64, &client, &url, &dest, start, end, is_single_thread, accept_ranges, progress).await
+                worker
+                    .download_task(
+                        i as u64,
+                        &client,
+                        &url,
+                        &dest,
+                        start,
+                        end,
+                        is_single_thread,
+                        accept_ranges,
+                        progress,
+                    )
+                    .await
             });
             handles.push(h);
         }
@@ -381,7 +428,7 @@ impl DownloadWorker {
         // Resume from where we left off
         let mut segment_progress = progress.load(Ordering::SeqCst);
         let mut attempt = 0u8;
-        
+
         let (timeout_duration, download_retries) = {
             let s = self.settings.read().await;
             let t = if s.download_timeout == 0 {
@@ -393,7 +440,6 @@ impl DownloadWorker {
         };
 
         loop {
-            
             while self.paused.load(std::sync::atomic::Ordering::SeqCst) {
                 self.notify_resume.notified().await;
             }
@@ -401,7 +447,6 @@ impl DownloadWorker {
                 logger::debug(&format!("Segment {} canceled early", i));
                 return Ok(());
             }
-
 
             let current_start = start + segment_progress;
             if end != u64::MAX && current_start >= end {
@@ -422,7 +467,7 @@ impl DownloadWorker {
                     logger::error(&format!("Segment {} request failed: {:?}", i, e));
                     if attempt >= download_retries {
                         self.cancel().await?;
-                        return Err(anyhow::anyhow!("Segment {} request failed: {:?}", i, e))
+                        return Err(anyhow::anyhow!("Segment {} request failed: {:?}", i, e));
                     }
                     attempt += 1;
                     continue;
@@ -435,14 +480,11 @@ impl DownloadWorker {
             }
             let mut stream = resp.bytes_stream();
 
-            while let Ok(next_chunk) = timeout(
-                timeout_duration,
-                stream.next(),
-            ).await {
+            while let Ok(next_chunk) = timeout(timeout_duration, stream.next()).await {
                 while self.paused.load(Ordering::SeqCst) {
                     self.notify_resume.notified().await;
                 }
-                
+
                 if self.cancel.load(Ordering::SeqCst) {
                     logger::debug(&format!("Segment {} cancelled", i));
                     return Ok(());
@@ -473,12 +515,16 @@ impl DownloadWorker {
                     }
 
                     None => {
-                        if is_single_thread || (end != u64::MAX && start + segment_progress >= end) {
+                        if is_single_thread || (end != u64::MAX && start + segment_progress >= end)
+                        {
                             break;
                         }
                         if attempt >= download_retries {
                             self.cancel().await?;
-                            return Err(anyhow::anyhow!("Segment {}: stream ended unexpectedly", i));
+                            return Err(anyhow::anyhow!(
+                                "Segment {}: stream ended unexpectedly",
+                                i
+                            ));
                         }
                         if !accept_ranges {
                             self.downloaded.store(0, Ordering::SeqCst);
@@ -523,9 +569,13 @@ impl DownloadWorker {
         // Err(anyhow::anyhow!("Segment {} failed after retries", i))
     }
 
-    async fn spawn_hls_download_task(self: &Arc<Self>, url: &str, dest: &std::path::Path) -> Result<()> {
+    async fn spawn_hls_download_task(
+        self: &Arc<Self>,
+        url: &str,
+        dest: &std::path::Path,
+    ) -> Result<()> {
         logger::debug(&format!("Starting HLS download for {}", url));
-        
+
         {
             let mut info = self.info.lock().await;
             if info.parts.is_empty() {
@@ -549,7 +599,7 @@ impl DownloadWorker {
                 pp[0].clone()
             }
         };
-        
+
         let client = self.client.clone();
         let worker = Arc::clone(self);
 
@@ -557,7 +607,9 @@ impl DownloadWorker {
         let dest = dest.to_path_buf();
 
         let h = tokio::spawn(async move {
-            worker.download_hls_stream(&client, &url, &dest, progress).await
+            worker
+                .download_hls_stream(&client, &url, &dest, progress)
+                .await
         });
 
         let mut handles = self.handles.lock().await;
@@ -566,11 +618,12 @@ impl DownloadWorker {
     }
 
     async fn download_hls_stream(
-        self: &Arc<Self>, 
-        client: &reqwest::Client, 
-        url: &str, 
+        self: &Arc<Self>,
+        client: &reqwest::Client,
+        url: &str,
         dest: &std::path::Path,
-        progress: Arc<AtomicU64>) -> Result<()> {
+        progress: Arc<AtomicU64>,
+    ) -> Result<()> {
         let playlist_content = client.get(url).send().await?.text().await?;
 
         let base_url = {
@@ -594,7 +647,10 @@ impl DownloadWorker {
             return Err(anyhow::anyhow!("No segments found in HLS playlist"));
         }
 
-        let temp_dir = dest.parent().unwrap().join(format!("temp_{}", self.info.lock().await.id));
+        let temp_dir = dest
+            .parent()
+            .unwrap()
+            .join(format!("temp_{}", self.info.lock().await.id));
         tokio::fs::create_dir_all(&temp_dir).await?;
 
         let mut segment_paths = Vec::new();
@@ -626,20 +682,28 @@ impl DownloadWorker {
                     Err(e) => {
                         logger::error(&format!("HLS Segment {} file creation error: {:?}", i, e));
                         if attempt >= download_retries {
-                            return Err(anyhow::anyhow!("HLS Segment {} file creation failed: {}", i, e));
+                            return Err(anyhow::anyhow!(
+                                "HLS Segment {} file creation failed: {}",
+                                i,
+                                e
+                            ));
                         }
                         attempt += 1;
                         continue;
                     }
                 };
-                
+
                 let resp = match client.get(segment_url).send().await {
                     Ok(r) => match r.error_for_status() {
                         Ok(v) => v,
                         Err(e) => {
                             logger::error(&format!("HLS Segment {} request failed: {:?}", i, e));
                             if attempt >= download_retries {
-                                return Err(anyhow::anyhow!("HLS Segment {} request failed: {:?}", i, e));
+                                return Err(anyhow::anyhow!(
+                                    "HLS Segment {} request failed: {:?}",
+                                    i,
+                                    e
+                                ));
                             }
                             attempt += 1;
                             continue;
@@ -648,7 +712,11 @@ impl DownloadWorker {
                     Err(e) => {
                         logger::error(&format!("HLS Segment {} connection failed: {:?}", i, e));
                         if attempt >= download_retries {
-                            return Err(anyhow::anyhow!("HLS Segment {} connection failed: {:?}", i, e));
+                            return Err(anyhow::anyhow!(
+                                "HLS Segment {} connection failed: {:?}",
+                                i,
+                                e
+                            ));
                         }
                         attempt += 1;
                         continue;
@@ -659,10 +727,7 @@ impl DownloadWorker {
                 let mut success = true;
                 let mut stream_finished = false;
 
-                while let Ok(next_chunk) = timeout(
-                    timeout_duration,
-                    stream.next(),
-                ).await {
+                while let Ok(next_chunk) = timeout(timeout_duration, stream.next()).await {
                     while self.paused.load(Ordering::SeqCst) {
                         self.notify_resume.notified().await;
                     }
@@ -676,7 +741,7 @@ impl DownloadWorker {
                             if let Err(e) = file.write_all(&chunk).await {
                                 logger::error(&format!("HLS Segment {} write error: {:?}", i, e));
                                 success = false;
-                                break; 
+                                break;
                             }
                             let len = chunk.len() as u64;
                             self.downloaded.fetch_add(len, Ordering::SeqCst);
@@ -696,11 +761,11 @@ impl DownloadWorker {
                 }
 
                 if success && stream_finished {
-                    break; 
+                    break;
                 } else {
                     if attempt >= download_retries {
                         if !stream_finished && success {
-                             return Err(anyhow::anyhow!("HLS Segment {} timed out", i));
+                            return Err(anyhow::anyhow!("HLS Segment {} timed out", i));
                         }
                         return Err(anyhow::anyhow!("HLS Segment {} failed after retries", i));
                     }
@@ -719,12 +784,17 @@ impl DownloadWorker {
         list_file.flush().await?;
 
         let mut command = tokio::process::Command::new("ffmpeg");
-        command.arg("-f").arg("concat")
-               .arg("-safe").arg("0")
-               .arg("-i").arg(&list_path)
-               .arg("-c").arg("copy")
-               .arg("-y")
-               .arg(dest);
+        command
+            .arg("-f")
+            .arg("concat")
+            .arg("-safe")
+            .arg("0")
+            .arg("-i")
+            .arg(&list_path)
+            .arg("-c")
+            .arg("copy")
+            .arg("-y")
+            .arg(dest);
 
         match command.output().await {
             Ok(output) => {
@@ -741,7 +811,11 @@ impl DownloadWorker {
         Ok(())
     }
 
-    async fn spawn_torrent_download_task(self: &Arc<Self>, url: &str, dest: &std::path::Path, head_data: Option<HeadData>) -> Result<()> {
+    async fn spawn_torrent_download_task(
+        self: &Arc<Self>,
+        url: &str,
+        dest: &std::path::Path,
+    ) -> Result<()> {
         logger::debug(&format!("Starting Torrent download for {}", url));
 
         let client = self.client.clone();
@@ -749,9 +823,8 @@ impl DownloadWorker {
         let url = url.to_string();
         let dest = dest.to_path_buf();
 
-        let h = tokio::spawn(async move {
-            worker.download_torrent_task(&client, &url, &dest, head_data).await
-        });
+        let h =
+            tokio::spawn(async move { worker.download_torrent_task(&client, &url, &dest).await });
 
         let mut handles = self.handles.lock().await;
         handles.push(h);
@@ -763,7 +836,6 @@ impl DownloadWorker {
         client: &reqwest::Client,
         url: &str,
         dest: &std::path::Path,
-        head_data: Option<HeadData>,
     ) -> Result<()> {
         let output_dir = if let Some(stem) = dest.file_stem() {
             let parent = dest.parent().unwrap_or(std::path::Path::new("."));
@@ -781,7 +853,7 @@ impl DownloadWorker {
             let mut info = self.info.lock().await;
             info.dest = output_dir.clone();
         }
-        
+
         let session_guard = self.torrent_session.read().await;
         let session = match session_guard.as_ref() {
             Some(s) => s.clone(),
@@ -789,14 +861,14 @@ impl DownloadWorker {
         };
 
         let existing_handle = if let Some(hash) = { self.info.lock().await.torrent_hash.clone() } {
-             session.with_torrents(|torrents| {
-                 for (_, handle) in torrents {
-                     if hex::encode(handle.info_hash().0) == hash {
-                         return Some(handle.clone());
-                     }
-                 }
-                 None
-             })
+            session.with_torrents(|torrents| {
+                for (_, handle) in torrents {
+                    if hex::encode(handle.info_hash().0) == hash {
+                        return Some(handle.clone());
+                    }
+                }
+                None
+            })
         } else {
             None
         };
@@ -812,11 +884,16 @@ impl DownloadWorker {
                 AddTorrent::from_bytes(bytes)
             };
 
-            let response = session.add_torrent(add_torrent, Some(AddTorrentOptions {
-                overwrite: true,
-                output_folder: Some(output_dir.to_string_lossy().to_string()),
-                ..Default::default()
-            })).await?;
+            let response = session
+                .add_torrent(
+                    add_torrent,
+                    Some(AddTorrentOptions {
+                        overwrite: true,
+                        output_folder: Some(output_dir.to_string_lossy().to_string()),
+                        ..Default::default()
+                    }),
+                )
+                .await?;
 
             match response {
                 AddTorrentResponse::Added(_, h) => h,
@@ -839,7 +916,9 @@ impl DownloadWorker {
         // Populate parts from torrent files
         {
             let metadata_guard = handle.metadata.load();
-            let info = metadata_guard.as_ref().expect("Torrent metadata not initialized");
+            let info = metadata_guard
+                .as_ref()
+                .expect("Torrent metadata not initialized");
             let mut parts = Vec::new();
             let mut current_pos = 0;
             for file in &info.file_infos {
@@ -851,7 +930,7 @@ impl DownloadWorker {
                 });
                 current_pos += len;
             }
-            
+
             let mut dl_info = self.info.lock().await;
             if dl_info.parts.is_empty() {
                 dl_info.parts = parts;
@@ -869,7 +948,7 @@ impl DownloadWorker {
         let stats = handle.stats();
         let total = stats.total_bytes;
         if total > 0 {
-             self.update_total_size(Some(total)).await;
+            self.update_total_size(Some(total)).await;
         }
 
         // Downloading Loop
@@ -882,7 +961,7 @@ impl DownloadWorker {
                 }
                 session.unpause(&handle).await?;
             }
-            
+
             if self.cancel.load(Ordering::SeqCst) {
                 // Pause the torrent instead of deleting it
                 session.pause(&handle).await?;
@@ -909,7 +988,7 @@ impl DownloadWorker {
             let downloaded = stats.progress_bytes;
             let total = stats.total_bytes;
             let uploaded = stats.uploaded_bytes;
-            
+
             self.downloaded.store(downloaded, Ordering::SeqCst);
             self.uploaded.store(uploaded, Ordering::SeqCst);
             let file_progress = &stats.file_progress;
@@ -923,7 +1002,7 @@ impl DownloadWorker {
             if total > 0 && downloaded >= total {
                 break;
             }
-            
+
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
 
@@ -931,9 +1010,15 @@ impl DownloadWorker {
         {
             let mut info = self.info.lock().await;
             if !matches!(info.state, DownloadState::Seeding) {
-                 info.state = DownloadState::Seeding;
-                 self.seeding_start.store(SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64, Ordering::SeqCst);
-                 logger::debug(&format!("Download {} completed, starting seeding", info.id));
+                info.state = DownloadState::Seeding;
+                self.seeding_start.store(
+                    SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_millis() as u64,
+                    Ordering::SeqCst,
+                );
+                logger::debug(&format!("Download {} completed, starting seeding", info.id));
             }
         }
 
@@ -947,7 +1032,7 @@ impl DownloadWorker {
                 }
                 session.unpause(&handle).await?;
             }
-            
+
             if self.cancel.load(Ordering::SeqCst) {
                 // Delete the torrent (stop download and cleanup)
                 session.delete(handle.id().into(), false).await?;
@@ -955,7 +1040,7 @@ impl DownloadWorker {
                 return Ok(());
             }
 
-             // Limit speed
+            // Limit speed
             let limit = self.speed_limit.load(Ordering::SeqCst);
             if limit > 0 {
                 if let Some(nz_limit) = std::num::NonZeroU32::new(limit as u32) {
@@ -973,7 +1058,7 @@ impl DownloadWorker {
 
             let downloaded = stats.progress_bytes;
             let uploaded = stats.uploaded_bytes;
-            
+
             self.downloaded.store(downloaded, Ordering::SeqCst);
             self.uploaded.store(uploaded, Ordering::SeqCst);
 
@@ -981,16 +1066,29 @@ impl DownloadWorker {
             let settings = self.settings.read().await;
             let ratio_limit = settings.seeding_ratio;
             let time_limit = settings.seeding_time;
-            
-            let ratio = if downloaded > 0 { uploaded as f32 / downloaded as f32 } else { 0.0 };
-            
+
+            let ratio = if downloaded > 0 {
+                uploaded as f32 / downloaded as f32
+            } else {
+                0.0
+            };
+
             let seeding_start = self.seeding_start.load(Ordering::SeqCst);
-            let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
-            let elapsed_mins = if seeding_start > 0 { (now - seeding_start) / 1000 / 60 } else { 0 };
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as u64;
+            let elapsed_mins = if seeding_start > 0 {
+                (now - seeding_start) / 1000 / 60
+            } else {
+                0
+            };
 
             if ratio >= ratio_limit || elapsed_mins >= time_limit {
-                logger::debug(&format!("Seeding limit reached: ratio {:.2}/{}, time {}/{}m", 
-                    ratio, ratio_limit, elapsed_mins, time_limit));
+                logger::debug(&format!(
+                    "Seeding limit reached: ratio {:.2}/{}, time {}/{}m",
+                    ratio, ratio_limit, elapsed_mins, time_limit
+                ));
                 session.delete(handle.id().into(), false).await?;
                 break;
             }
@@ -1029,8 +1127,8 @@ impl DownloadWorker {
                         let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
                         sampler_worker.history.write().await.push((ts, snapshot));
                         let hist_len = sampler_worker.history.read().await.len();
-                        if hist_len > MAX_HISTORY { 
-                            let remove = hist_len - MAX_HISTORY; 
+                        if hist_len > MAX_HISTORY {
+                            let remove = hist_len - MAX_HISTORY;
                             sampler_worker.history.write().await.drain(0..remove);
                         }
                     }
@@ -1052,10 +1150,10 @@ impl DownloadWorker {
         tokio::spawn(async move {
             let results = join_all(handles).await;
             stop_flag.notify_waiters();
-            
+
             for (i, res) in results.into_iter().enumerate() {
                 match res {
-                    Ok(Ok(())) => {},
+                    Ok(Ok(())) => {}
                     Ok(Err(e)) => {
                         let err_str = format!("Monitor: segment {} failed {:?}", i, e);
                         logger::error(&err_str);
@@ -1064,7 +1162,10 @@ impl DownloadWorker {
                         let id = info.id.clone();
                         drop(info);
                         monitor_worker.sync_to_info().await;
-                        let _ = monitor_worker.event_tx.send(WorkerEvent::Error(id,err_str)).await;
+                        let _ = monitor_worker
+                            .event_tx
+                            .send(WorkerEvent::Error(id, err_str))
+                            .await;
                         return;
                     }
                     Err(e) => {
@@ -1075,7 +1176,10 @@ impl DownloadWorker {
                         let id = info.id.clone();
                         drop(info);
                         monitor_worker.sync_to_info().await;
-                        let _ = monitor_worker.event_tx.send(WorkerEvent::Error(id,err_str)).await;
+                        let _ = monitor_worker
+                            .event_tx
+                            .send(WorkerEvent::Error(id, err_str))
+                            .await;
                         return;
                     }
                 }
@@ -1089,7 +1193,10 @@ impl DownloadWorker {
                 let id = info.id.clone();
                 drop(info);
                 monitor_worker.sync_to_info().await;
-                let _ = monitor_worker.event_tx.send(WorkerEvent::Completed(id)).await;
+                let _ = monitor_worker
+                    .event_tx
+                    .send(WorkerEvent::Completed(id))
+                    .await;
             }
         });
 
@@ -1104,7 +1211,7 @@ impl DownloadWorker {
         let limit = self.speed_limit.load(Ordering::SeqCst) as f64;
         if limit > 0.0 {
             let speed = calc_speed(self.history.read().await.to_vec());
-            let sleep_dur = (speed/limit) - 1.0;
+            let sleep_dur = (speed / limit) - 1.0;
 
             if sleep_dur > 0.0 {
                 tokio::select! {
@@ -1114,7 +1221,6 @@ impl DownloadWorker {
             }
         }
     }
-
 
     pub async fn pause(&self) -> Result<()> {
         self.paused.store(true, Ordering::SeqCst);
@@ -1160,8 +1266,11 @@ impl DownloadWorker {
         info.downloaded = self.downloaded.load(Ordering::SeqCst);
         info.uploaded = self.uploaded.load(Ordering::SeqCst);
         info.history = self.history.read().await.clone();
-        info.updated_at = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
-        
+        info.updated_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+
         let pp = self.part_progress.read().await.clone();
         if info.parts.len() == pp.len() {
             for (i, p) in pp.iter().enumerate() {
@@ -1178,7 +1287,7 @@ impl DownloadWorker {
         meta.uploaded = u;
         let hist = self.history.read().await;
         meta.history = hist.clone();
-        
+
         // Sync part progress
         let pp = self.part_progress.read().await.clone();
         if meta.parts.len() == pp.len() {
@@ -1202,15 +1311,15 @@ impl DownloadWorker {
 impl std::fmt::Debug for DownloadWorker {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DownloadWorker")
-         .field("info", &self.info)
-         .field("paused", &self.paused)
-         .field("started", &self.started)
-         .field("cancel", &self.cancel)
-         .field("threads", &self.threads)
-         .field("speed_limit", &self.speed_limit)
-         .field("downloaded", &self.downloaded)
-         .field("uploaded", &self.uploaded)
-         .finish()
+            .field("info", &self.info)
+            .field("paused", &self.paused)
+            .field("started", &self.started)
+            .field("cancel", &self.cancel)
+            .field("threads", &self.threads)
+            .field("speed_limit", &self.speed_limit)
+            .field("downloaded", &self.downloaded)
+            .field("uploaded", &self.uploaded)
+            .finish()
     }
 }
 
@@ -1228,7 +1337,7 @@ pub struct DownloadManager {
 
 impl DownloadManager {
     pub async fn new(client: reqwest::Client, settings: DMSettings) -> Arc<Self> {
-        let (tx, mut rx) = mpsc::channel::<WorkerEvent>(64);
+        let (tx, rx) = mpsc::channel::<WorkerEvent>(64);
 
         // Initialize torrent session as None
         let torrent_session = Arc::new(tokio::sync::RwLock::new(None));
@@ -1262,35 +1371,42 @@ impl DownloadManager {
     pub async fn init_torrent_session(&self, persistence_path: PathBuf) {
         tokio::fs::create_dir_all(&persistence_path).await.ok();
 
-        let session = Session::new_with_opts(persistence_path.clone(), SessionOptions {
-            disable_dht: true,
-            disable_dht_persistence: true,
-            fastresume: false,
-            persistence: Some(SessionPersistenceConfig::Json {
-                folder: Some(persistence_path),
-            }),
-            ..Default::default()
-        }).await.expect("Failed to initialize torrent session");
+        let session = Session::new_with_opts(
+            persistence_path.clone(),
+            SessionOptions {
+                disable_dht: true,
+                disable_dht_persistence: true,
+                fastresume: false,
+                persistence: Some(SessionPersistenceConfig::Json {
+                    folder: Some(persistence_path),
+                }),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("Failed to initialize torrent session");
 
         // Pause all torrents on startup
         let handles_to_pause = session.with_torrents(|torrents| {
-            torrents.filter_map(|(_, h)| {
-                if !h.is_paused() {
-                    Some(h.clone())
-                } else {
-                    None
-                }
-            }).collect::<Vec<_>>()
+            torrents
+                .filter_map(|(_, h)| {
+                    if !h.is_paused() {
+                        Some(h.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
         });
         for h in handles_to_pause {
-            h.wait_until_initialized().await;
+            let _ = h.wait_until_initialized().await;
             let _ = session.pause(&h).await;
             logger::debug(&format!("Paused torrent: {}", h.info_hash().as_string()));
         }
 
         let mut session_guard = self.torrent_session.write().await;
         *session_guard = Some(session);
-        
+
         logger::debug("Torrent session initialized with persistence");
     }
 
@@ -1303,14 +1419,12 @@ impl DownloadManager {
     /// Called when a worker completes / cancels / errors
     async fn handle_event(self: &Arc<Self>, event: WorkerEvent) {
         match event {
-            WorkerEvent::Completed(id)
-            | WorkerEvent::Cancelled(id)
-            | WorkerEvent::Error(id, _) => {
+            WorkerEvent::Completed(id) | WorkerEvent::Cancelled(id) | WorkerEvent::Error(id, _) => {
                 self.active.lock().await.remove(&id);
                 {
                     let conc = self.concurrency.load(Ordering::SeqCst).clone();
                     if conc > 0 {
-                        self.concurrency.store(conc-1, Ordering::SeqCst);
+                        self.concurrency.store(conc - 1, Ordering::SeqCst);
                     };
                 }
 
@@ -1333,7 +1447,8 @@ impl DownloadManager {
             let workers_to_pause = {
                 let active = self.active.lock().await;
                 let workers = self.workers.lock().await;
-                active.iter()
+                active
+                    .iter()
                     .take(to_pause_count as usize)
                     .map(|id| (*id, workers.get(id).cloned()))
                     .filter_map(|(id, w_opt)| w_opt.map(|w| (id, w)))
@@ -1354,7 +1469,8 @@ impl DownloadManager {
         let slots = limit - active_count;
         let mut to_start = Vec::new();
         let workers_map = self.workers.lock().await;
-        let queued_workers = workers_map.iter()
+        let queued_workers = workers_map
+            .iter()
             .map(|(id, w)| (*id, w.clone()))
             .collect::<Vec<_>>();
         drop(workers_map);
@@ -1368,7 +1484,7 @@ impl DownloadManager {
                 to_start.push(id);
             }
         }
-        
+
         for id in to_start {
             // It's possible another task already started a worker, so we check again.
             let current_active = self.concurrency.load(Ordering::SeqCst);
@@ -1384,9 +1500,15 @@ impl DownloadManager {
     pub async fn add_download(&self, url: String, dest: PathBuf) -> Result<Uuid> {
         let id = Uuid::new_v4();
         let worker = DownloadWorker::new(
-            id, self.client.clone(), self.settings.clone(), url, dest, self.sender.clone(),
-            self.torrent_session.clone()
-        ).await;
+            id,
+            self.client.clone(),
+            self.settings.clone(),
+            url,
+            dest,
+            self.sender.clone(),
+            self.torrent_session.clone(),
+        )
+        .await;
         self.workers.lock().await.insert(id, worker);
         self.process_queue().await;
         Ok(id)
@@ -1398,13 +1520,13 @@ impl DownloadManager {
             Some(w) => w,
             None => return Err(anyhow::anyhow!("Worker not found")),
         };
-        
+
         {
             self.active.lock().await.insert(id);
         }
-        
+
         let w = Arc::clone(&worker);
-        
+
         tokio::spawn(async move {
             let _ = w.start().await;
         });
@@ -1413,7 +1535,7 @@ impl DownloadManager {
 
     pub async fn load_snapshot(&self, downloads: Vec<DownloadInfo>) {
         let mut workers = self.workers.lock().await;
-        
+
         for info in downloads {
             let id = info.id;
             let worker = DownloadWorker::from_info(
@@ -1421,9 +1543,10 @@ impl DownloadManager {
                 self.client.clone(),
                 self.settings.clone(),
                 self.sender.clone(),
-                self.torrent_session.clone()
-            ).await;
-            
+                self.torrent_session.clone(),
+            )
+            .await;
+
             workers.insert(id, worker);
         }
     }
@@ -1475,7 +1598,7 @@ impl DownloadManager {
                 self.active.lock().await.remove(&id);
                 let conc = self.concurrency.load(Ordering::SeqCst).clone();
                 if conc > 0 {
-                    self.concurrency.store(conc-1, Ordering::SeqCst);
+                    self.concurrency.store(conc - 1, Ordering::SeqCst);
                 };
                 self.process_queue().await;
                 Ok(())
@@ -1492,14 +1615,14 @@ impl DownloadManager {
 
         if let Some(worker) = worker {
             let was_running = worker.started.load(Ordering::SeqCst);
-            
+
             if was_running {
                 let safe_info = worker.info.lock().await.clone();
                 self.cancel(safe_info.id).await?;
                 tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
                 worker.started.store(false, Ordering::SeqCst);
             }
-            
+
             worker.update_url(new_url).await?;
 
             if was_running {
@@ -1528,10 +1651,10 @@ impl DownloadManager {
 
         // Then remove from workers map
         self.workers.lock().await.swap_remove(&id);
-        
+
         // Add to pending deletions for DB
         self.pending_deletions.lock().await.push(id);
-        
+
         if let Some(info) = info_opt {
             if matches!(info.download_type, DownloadType::Torrent) {
                 let session_guard = self.torrent_session.read().await;
@@ -1548,21 +1671,23 @@ impl DownloadManager {
                         });
 
                         if let Some(id) = hash_to_delete {
-                            let _ = session.delete(librqbit::api::TorrentIdOrHash::Id(id), delete_file).await;
+                            let _ = session
+                                .delete(librqbit::api::TorrentIdOrHash::Id(id), delete_file)
+                                .await;
                         }
                     }
                 }
-                 
-                 // Fallback
-                 if delete_file {
-                     if info.dest.exists() {
+
+                // Fallback
+                if delete_file {
+                    if info.dest.exists() {
                         if info.dest.is_dir() {
                             tokio::fs::remove_dir_all(&info.dest).await.ok();
                         } else {
                             tokio::fs::remove_file(&info.dest).await.ok();
                         }
-                     }
-                 }
+                    }
+                }
             } else {
                 // Normal or HLS
                 if delete_file {
@@ -1575,7 +1700,11 @@ impl DownloadManager {
                     }
                     // Cleanup HLS temp dir
                     if matches!(info.download_type, DownloadType::HLS) {
-                        let temp_dir = info.dest.parent().unwrap().join(format!("temp_{}", info.id));
+                        let temp_dir = info
+                            .dest
+                            .parent()
+                            .unwrap()
+                            .join(format!("temp_{}", info.id));
                         if temp_dir.exists() {
                             tokio::fs::remove_dir_all(&temp_dir).await.ok();
                         }
@@ -1605,7 +1734,7 @@ impl DownloadManager {
             map.get(&id).cloned()
         };
         match w {
-            Some(worker) => {Ok(worker.info().await)},
+            Some(worker) => Ok(worker.info().await),
             None => Err(anyhow::anyhow!("Worker not found")),
         }
     }
@@ -1644,14 +1773,18 @@ impl DownloadManager {
             let worker_refs = {
                 let active = self.active.lock().await;
                 let workers = self.workers.lock().await;
-                active.iter()
+                active
+                    .iter()
                     .filter_map(|id| workers.get(id).cloned())
                     .collect::<Vec<_>>()
             };
 
-            let histories = join_all(worker_refs.iter().map(|w| async {
-                w.history.read().await.clone()
-            })).await;
+            let histories = join_all(
+                worker_refs
+                    .iter()
+                    .map(|w| async { w.history.read().await.clone() }),
+            )
+            .await;
 
             let mut worker_speeds = Vec::new();
             let mut total_speed = 0u64;
@@ -1672,16 +1805,17 @@ impl DownloadManager {
 
             for (w, speed) in worker_speeds {
                 let share = ((speed as f64 / total_speed as f64) * global_limit as f64) as u64;
-                w.change_speed_limit(share.max((global_limit as f64 * 0.05) as u64)).await;
+                w.change_speed_limit(share.max((global_limit as f64 * 0.05) as u64))
+                    .await;
             }
         }
     }
 
     pub async fn updater(self: &Arc<Self>) {
-        let mut interval2 = interval(Duration::from_secs(1));
+        let interval2 = interval(Duration::from_secs(1));
         let mgr2 = self.clone();
 
-        tokio::spawn( async move {
+        tokio::spawn(async move {
             mgr2.recalculate_speed_limits(interval2).await;
         });
     }
@@ -1712,10 +1846,10 @@ impl DownloadManager {
 impl std::fmt::Debug for DownloadManager {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DownloadManager")
-         .field("settings", &self.settings)
-         .field("workers", &self.workers)
-         .field("active", &self.active)
-         .field("concurrency", &self.concurrency)
-         .finish()
+            .field("settings", &self.settings)
+            .field("workers", &self.workers)
+            .field("active", &self.active)
+            .field("concurrency", &self.concurrency)
+            .finish()
     }
 }

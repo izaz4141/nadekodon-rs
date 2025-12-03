@@ -5,5 +5,9 @@ class LogEntry {
   final DateTime timestamp;
   final String message;
 
-  LogEntry({required this.level, required this.timestamp, required this.message});
+  LogEntry({
+    required this.level,
+    required this.timestamp,
+    required this.message,
+  });
 }

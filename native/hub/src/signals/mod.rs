@@ -1,11 +1,8 @@
 use rinf::{DartSignal, RustSignal, SignalPiece};
 use serde::{Deserialize, Serialize};
 
-
-
 #[derive(Deserialize, DartSignal)]
 pub struct UpdateSettings {
-    pub server_port: Option<u16>,
     pub speed_limit: Option<u64>,
     pub download_threads: Option<u8>,
     pub concurrency_limit: Option<u8>,
@@ -97,7 +94,7 @@ pub struct DownloadGlance {
 
 #[derive(Deserialize, DartSignal)]
 pub struct GetDownloadDetails {
-    pub id: String
+    pub id: String,
 }
 
 #[derive(Serialize, RustSignal)]
@@ -114,8 +111,6 @@ pub struct DownloadDetails {
     pub uploaded: Option<u64>,
     pub upload_speed: Option<f64>,
     pub peers: Option<u64>,
-    pub seeds: Option<u64>,
-    pub leechers: Option<u64>,
     pub ratio: Option<f64>,
     pub eta: Option<String>,
 }
@@ -129,17 +124,17 @@ pub struct PartInfo {
 
 #[derive(Deserialize, DartSignal)]
 pub struct PauseDownload {
-    pub id: String
+    pub id: String,
 }
 
 #[derive(Deserialize, DartSignal)]
 pub struct ResumeDownload {
-    pub id: String
+    pub id: String,
 }
 
 #[derive(Deserialize, DartSignal)]
 pub struct CancelDownload {
-    pub id: String
+    pub id: String,
 }
 
 #[derive(Deserialize, DartSignal)]

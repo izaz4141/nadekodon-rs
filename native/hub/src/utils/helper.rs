@@ -1,11 +1,3 @@
-use time::{OffsetDateTime};
-
-
-#[inline]
-pub fn now_unix() -> i64 {
-    OffsetDateTime::now_utc().unix_timestamp()
-}
-
 pub fn calc_speed(hist: Vec<(u128, u64)>) -> f64 {
     if hist.len() < 2 {
         return 0.0;

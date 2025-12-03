@@ -4,7 +4,7 @@ use tokio::process::Command;
 
 use crate::utils::logger;
 
-use crate::signals::{QueryYtdl, YtdlQueryOutput, YtdlFormat};
+use crate::signals::{QueryYtdl, YtdlFormat, YtdlQueryOutput};
 
 async fn get_ytdl_info(url: &str) -> Result<YtdlQueryOutput, String> {
     let output = Command::new("yt-dlp")
@@ -17,13 +17,13 @@ async fn get_ytdl_info(url: &str) -> Result<YtdlQueryOutput, String> {
     if !output.status.success() {
         return Err(String::from_utf8_lossy(&output.stderr).to_string());
     }
-    
+
     let json_str = String::from_utf8(output.stdout).map_err(|e| e.to_string())?;
     let video_info: Value = serde_json::from_str(&json_str).map_err(|e| e.to_string())?;
-    
+
     let name = video_info["title"].as_str().unwrap_or_default().to_string();
     let thumbnail = video_info["thumbnail"].as_str().map(|s| s.to_string());
-    
+
     let mut videos = Vec::new();
     let mut audios = Vec::new();
 
@@ -37,7 +37,10 @@ async fn get_ytdl_info(url: &str) -> Result<YtdlQueryOutput, String> {
                 url: format["url"].as_str().unwrap_or_default().to_string(),
                 vcodec: format["vcodec"].as_str().map(|s| s.to_string()),
                 acodec: format["acodec"].as_str().map(|s| s.to_string()),
-                note: format["format_note"].as_str().unwrap_or_default().to_string(),
+                note: format["format_note"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_string(),
             };
 
             if format["vcodec"].as_str() != Some("none") {
@@ -58,7 +61,7 @@ async fn get_ytdl_info(url: &str) -> Result<YtdlQueryOutput, String> {
 }
 
 pub async fn handle_ytdl_query() {
-    let mut receiver = QueryYtdl::get_dart_signal_receiver();
+    let receiver = QueryYtdl::get_dart_signal_receiver();
     while let Some(signal) = receiver.recv().await {
         let url = signal.message.url;
         let result = get_ytdl_info(&url).await;
@@ -66,7 +69,7 @@ pub async fn handle_ytdl_query() {
             Ok(output) => {
                 logger::debug(&format!("YT-DLP url queried OK!"));
                 output
-            },
+            }
             Err(e) => {
                 logger::error(&format!("YT-DLP url not supported: {:?}", e));
                 YtdlQueryOutput {
@@ -76,7 +79,7 @@ pub async fn handle_ytdl_query() {
                     audios: vec![],
                     error: Some(e),
                 }
-            },
+            }
         };
         signal_to_send.send_signal_to_dart();
     }

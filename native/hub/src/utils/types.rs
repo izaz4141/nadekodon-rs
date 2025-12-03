@@ -1,16 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::{HashMap, HashSet},
-    path::PathBuf,
-    sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
-        Arc,
-    },
-};
-use tokio::{
-    sync::{mpsc, Mutex, Notify, Semaphore},
-    task::JoinHandle,
-};
+use std::path::PathBuf;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -22,11 +11,6 @@ pub struct DMSettings {
     pub download_retries: u8,
     pub seeding_ratio: f32,
     pub seeding_time: u64,
-}
-
-#[derive(Debug, Clone)]
-pub struct ServerSettings {
-    pub port: Option<u16>,
 }
 
 #[derive(Debug)]
@@ -60,8 +44,6 @@ pub enum DownloadState {
     Error(String),
 }
 
-
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PartInfo {
     pub start: u64,
@@ -75,7 +57,7 @@ pub struct DownloadInfo {
     pub url: String,
     pub dest: PathBuf,
     pub total_size: Option<u64>,
-    pub downloaded: u64, 
+    pub downloaded: u64,
     pub uploaded: u64,
     pub state: DownloadState,
     pub history: Vec<(u128, u64)>,

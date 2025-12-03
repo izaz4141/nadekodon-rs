@@ -17,7 +17,6 @@ class AppSnackBar {
     Duration duration = const Duration(seconds: 3),
   }) {
     final colors = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
 
     // Colors & icons based on type
     Color bgColor;

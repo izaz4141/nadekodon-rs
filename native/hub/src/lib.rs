@@ -1,21 +1,17 @@
 //! This `hub` crate is the
 //! entry point of the Rust logic.
-mod signals;
 mod downloader;
+mod signals;
 mod utils;
 
 use downloader::{
-    start_download_manager, spawn_download_worker,
-    query_url_info, get_download_details,
-    pause_download, resume_download, cancel_download, delete_download,
-    handle_update_download_url, get_download_list,
-    handle_init_torrent_persistence
+    cancel_download, delete_download, get_download_details, get_download_list,
+    handle_init_torrent_persistence, handle_update_download_url, pause_download, query_url_info,
+    resume_download, spawn_download_worker, start_download_manager,
 };
 use rinf::{dart_shutdown, write_interface};
 use tokio::spawn;
 use utils::ytdlp::handle_ytdl_query;
-
-
 
 // Uncomment below to target the web.
 // use tokio_with_wasm::alias as tokio;
@@ -36,10 +32,13 @@ async fn main() {
     let rclient = utils::url::build_browser_client().await;
     let dm = start_download_manager(rclient.clone()).await;
 
-    
     spawn(utils::settings::update_settings(dm.clone()));
     spawn(handle_init_torrent_persistence(dm.clone()));
-    spawn(utils::database::start_database_manager(dm.clone(), shutdown_signal.clone(), db_done_signal.clone()));
+    spawn(utils::database::start_database_manager(
+        dm.clone(),
+        shutdown_signal.clone(),
+        db_done_signal.clone(),
+    ));
     spawn(utils::server::handle_api_key_generation());
     spawn(utils::server::start_server_listener(dm.clone()));
     spawn(query_url_info(rclient.clone()));
@@ -55,12 +54,11 @@ async fn main() {
 
     // Keep the main function running until Dart shutdown.
     dart_shutdown().await;
-    
+
     // Signal database to save and exit
     shutdown_signal.notify_waiters();
-    
+
     // Wait for database to finish saving (with timeout)
-    let _ = tokio::time::timeout(std::time::Duration::from_secs(2), db_done_signal.notified()).await;
+    let _ =
+        tokio::time::timeout(std::time::Duration::from_secs(2), db_done_signal.notified()).await;
 }
-
-

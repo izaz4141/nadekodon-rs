@@ -1,28 +1,26 @@
 pub mod main;
 
-use std::{str::from_utf8, sync::Arc, time::{Duration, SystemTime, UNIX_EPOCH}};
 use reqwest::Client;
+use std::{
+    sync::Arc,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 use uuid::Uuid;
 
-use main::{DownloadManager};
 use crate::utils::{
-    types::{
-        DMSettings, DownloadState, DownloadInfo, DownloadType
-    },
-    url::get_url_info,
     helper::calc_speed,
+    types::{DMSettings, DownloadInfo, DownloadState, DownloadType},
+    url::get_url_info,
 };
+use main::DownloadManager;
 
+use crate::signals::{
+    CancelDownload, DeleteDownload, DoDownload, DownloadDetails, DownloadGlance, DownloadList,
+    GetDownloadDetails, GetDownloadList, InitTorrentPersistence, PartInfo, PauseDownload, QueryUrl,
+    ResumeDownload, UrlQueryOutput,
+};
 use crate::utils::logger;
 use rinf::{DartSignal, RustSignal};
-use crate::signals::{
-    UpdateSettings,
-    QueryUrl, UrlQueryOutput, DoDownload, 
-    GetDownloadList, DownloadList, DownloadGlance,
-    GetDownloadDetails, DownloadDetails, PartInfo,
-    PauseDownload, ResumeDownload, CancelDownload, DeleteDownload,
-    InitTorrentPersistence,
-};
 
 /// Function to spawn the single global DownloadManager at startup
 pub async fn start_download_manager(client: Client) -> Arc<DownloadManager> {
@@ -50,8 +48,7 @@ pub async fn query_url_info(client: Client) {
                 let is_webpage = match &info.content_type {
                     Some(ct) => {
                         let ct_lower = ct.to_ascii_lowercase();
-                        ct_lower.contains("text/html")
-                            || ct_lower.contains("application/xhtml+xml")
+                        ct_lower.contains("text/html") || ct_lower.contains("application/xhtml+xml")
                     }
                     None => false,
                 };
@@ -63,7 +60,8 @@ pub async fn query_url_info(client: Client) {
                     content_type: info.content_type,
                     is_webpage: is_webpage,
                     error: false,
-                }.send_signal_to_dart();
+                }
+                .send_signal_to_dart();
             }
             Err(e) => {
                 logger::error(&format!("Failed to query info for {}: {:?}", url, e));
@@ -75,12 +73,12 @@ pub async fn query_url_info(client: Client) {
                     content_type: None,
                     is_webpage: false,
                     error: true,
-                }.send_signal_to_dart();
-            },
+                }
+                .send_signal_to_dart();
+            }
         }
     }
 }
-
 
 async fn wait_for_download(manager: Arc<DownloadManager>, id: Uuid) -> Result<(), String> {
     loop {
@@ -108,8 +106,8 @@ pub async fn spawn_download_worker(manager: Arc<DownloadManager>) {
                 let video_format = data.video_format;
                 let audio_format = data.audio_format;
 
-                let mut temp_dest_base = dest.clone(); 
-                
+                let temp_dest_base = dest.clone();
+
                 let mut video_dest: Option<std::path::PathBuf> = None;
                 let mut audio_dest: Option<std::path::PathBuf> = None;
 
@@ -117,22 +115,26 @@ pub async fn spawn_download_worker(manager: Arc<DownloadManager>) {
                 let mut video_path_base = temp_dest_base.clone();
 
                 if audio_format.is_some() && video_format.is_some() {
-                    if let Some(mut file_name) = audio_path_base.file_name()
-                        .and_then(|s| s.to_string_lossy().into_owned().into()) {
-                            file_name.push_str("_audio"); 
-                            audio_path_base.set_file_name(file_name); 
+                    if let Some(mut file_name) = audio_path_base
+                        .file_name()
+                        .and_then(|s| s.to_string_lossy().into_owned().into())
+                    {
+                        file_name.push_str("_audio");
+                        audio_path_base.set_file_name(file_name);
                     }
-                    if let Some(mut file_name) = video_path_base.file_name()
-                        .and_then(|s| s.to_string_lossy().into_owned().into()) {
-                            file_name.push_str("_video"); 
-                            video_path_base.set_file_name(file_name); 
+                    if let Some(mut file_name) = video_path_base
+                        .file_name()
+                        .and_then(|s| s.to_string_lossy().into_owned().into())
+                    {
+                        file_name.push_str("_video");
+                        video_path_base.set_file_name(file_name);
                     }
 
                     if let Some(format) = &video_format {
                         dest = dest.with_extension(format.ext.clone());
                     }
                 }
-                
+
                 let audio_id = if let Some(format) = audio_format {
                     let path = audio_path_base.with_extension(format.ext);
                     audio_dest = Some(path.clone());
@@ -185,30 +187,31 @@ pub async fn spawn_download_worker(manager: Arc<DownloadManager>) {
                 if video_id.is_some() && audio_id.is_some() {
                     logger::debug("Downloads complete, starting merge");
                     let mut command = tokio::process::Command::new("ffmpeg");
-                    if let Some(v_path) = video_dest.as_ref() { 
+                    if let Some(v_path) = video_dest.as_ref() {
                         command.arg("-i").arg(v_path);
                     }
-                    if let Some(a_path) = audio_dest.as_ref() { 
+                    if let Some(a_path) = audio_dest.as_ref() {
                         command.arg("-i").arg(a_path);
                     }
-                    
-                    let is_webm = dest.extension()
+
+                    let is_webm = dest
+                        .extension()
                         .and_then(|ext| ext.to_str())
                         .map(|ext| ext.eq_ignore_ascii_case("webm"))
                         .unwrap_or(false);
-                    
+
                     if is_webm {
                         command.arg("-c:v").arg("copy");
                         command.arg("-c:a").arg("libopus");
                     } else {
                         command.arg("-c").arg("copy");
                     }
-                    
+
                     command.arg("-map").arg("0:v:0");
                     command.arg("-map").arg("1:a:0");
                     command.arg("-y");
                     command.arg(&dest);
-    
+
                     match command.output().await {
                         Ok(output) => {
                             if output.status.success() {
@@ -238,18 +241,26 @@ pub async fn spawn_download_worker(manager: Arc<DownloadManager>) {
                                     state: DownloadState::Completed,
                                     history: Vec::new(),
                                     parts: Vec::new(),
-                                    added_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,
-                                    updated_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,
+                                    added_at: SystemTime::now()
+                                        .duration_since(UNIX_EPOCH)
+                                        .unwrap()
+                                        .as_millis()
+                                        as u64,
+                                    updated_at: SystemTime::now()
+                                        .duration_since(UNIX_EPOCH)
+                                        .unwrap()
+                                        .as_millis()
+                                        as u64,
                                     download_type: DownloadType::Normal,
                                     torrent_hash: None,
                                 };
-                                
+
                                 manager.load_snapshot(vec![final_info]).await;
 
-                                if let Some(v_path) = video_dest.as_ref() { 
+                                if let Some(v_path) = video_dest.as_ref() {
                                     let _ = tokio::fs::remove_file(v_path).await;
                                 }
-                                if let Some(a_path) = audio_dest.as_ref() { 
+                                if let Some(a_path) = audio_dest.as_ref() {
                                     let _ = tokio::fs::remove_file(a_path).await;
                                 }
                             } else {
@@ -268,9 +279,7 @@ pub async fn spawn_download_worker(manager: Arc<DownloadManager>) {
         } else if let Some(url) = data.url {
             match manager.add_download(url.clone(), dest).await {
                 Ok(id) => logger::debug(&format!("Spawned worker for {} with id {}", url, id)),
-                Err(e) => {
-                    logger::error(&format!("Failed to spawn worker for {}: {:?}", url, e))
-                }
+                Err(e) => logger::error(&format!("Failed to spawn worker for {}: {:?}", url, e)),
             }
         }
     }
@@ -305,70 +314,76 @@ pub async fn get_download_details(manager: Arc<DownloadManager>) {
                 let mut uploaded = None;
                 let mut upload_speed = None;
                 let mut peers = None;
-                let mut seeds = None;
-                let mut leechers = None;
                 let mut ratio = None;
                 let mut eta = None;
 
                 if matches!(info.download_type, DownloadType::Torrent) {
                     uploaded = Some(info.uploaded);
                     if let Some(hash) = &info.torrent_hash {
-                         let session_guard = manager.torrent_session.read().await;
-                         if let Some(session) = session_guard.as_ref() {
-                             let handle_opt = session.with_torrents(|torrents| {
-                                 for (_, handle) in torrents {
-                                     if hex::encode(handle.info_hash().0) == *hash {
-                                         return Some(handle.clone());
-                                     }
-                                 }
-                                 None
-                             });
+                        let session_guard = manager.torrent_session.read().await;
+                        if let Some(session) = session_guard.as_ref() {
+                            let handle_opt = session.with_torrents(|torrents| {
+                                for (_, handle) in torrents {
+                                    if hex::encode(handle.info_hash().0) == *hash {
+                                        return Some(handle.clone());
+                                    }
+                                }
+                                None
+                            });
 
-                             if let Some(handle) = handle_opt {
-                                 let stats = handle.stats();
-                                 if let Some(live_stats) = stats.live {
-                                     upload_speed = Some((live_stats.upload_speed.mbps * 125_000.0) as f64);
-                                     if let Some(duration) = live_stats.time_remaining {
-                                         eta = Some(duration.to_string());
-                                     }
-                                     peers = Some(live_stats.snapshot.peer_stats.live as u64);
-                                 }
-                                 
-                                 if stats.progress_bytes > 0 {
-                                     ratio = Some(stats.uploaded_bytes as f64 / stats.progress_bytes as f64);
-                                 } else {
-                                     ratio = Some(0.0);
-                                 }
-                             }
-                         }
+                            if let Some(handle) = handle_opt {
+                                let stats = handle.stats();
+                                if let Some(live_stats) = stats.live {
+                                    upload_speed =
+                                        Some((live_stats.upload_speed.mbps * 125_000.0) as f64);
+                                    if let Some(duration) = live_stats.time_remaining {
+                                        eta = Some(duration.to_string());
+                                    }
+                                    peers = Some(live_stats.snapshot.peer_stats.live as u64);
+                                }
+
+                                if stats.progress_bytes > 0 {
+                                    ratio = Some(
+                                        stats.uploaded_bytes as f64 / stats.progress_bytes as f64,
+                                    );
+                                } else {
+                                    ratio = Some(0.0);
+                                }
+                            }
+                        }
                     }
                 }
 
                 DownloadDetails {
                     id: info.id.to_string(),
-                    name: info.dest
+                    name: info
+                        .dest
                         .file_name()
                         .and_then(|s| s.to_str())
-                        .unwrap_or("").to_string(),
+                        .unwrap_or("")
+                        .to_string(),
                     url: info.url,
                     dest: info.dest.display().to_string(),
                     total_size: info.total_size,
                     downloaded: info.downloaded,
                     speed: speed,
                     state: state_str,
-                    part_info: info.parts.iter().map(|p| PartInfo {
-                        start: p.start,
-                        end: p.end,
-                        current: p.current,
-                    }).collect(),
+                    part_info: info
+                        .parts
+                        .iter()
+                        .map(|p| PartInfo {
+                            start: p.start,
+                            end: p.end,
+                            current: p.current,
+                        })
+                        .collect(),
                     uploaded,
                     upload_speed,
                     peers,
-                    seeds,
-                    leechers,
                     ratio,
                     eta,
-                }.send_signal_to_dart();
+                }
+                .send_signal_to_dart();
             }
             Err(e) => {
                 logger::error(&format!("Failed to get download details: {:?}", e));
@@ -463,7 +478,7 @@ pub async fn handle_update_download_url(manager: Arc<DownloadManager>) {
     let receiver = crate::signals::UpdateDownloadUrl::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
         let data = signal_pack.message;
-        
+
         let id = match Uuid::parse_str(&data.id) {
             Ok(uuid) => uuid,
             Err(e) => {
@@ -481,14 +496,15 @@ pub async fn handle_update_download_url(manager: Arc<DownloadManager>) {
 }
 
 pub async fn get_download_list(manager: Arc<DownloadManager>) {
-    let mut receiver = GetDownloadList::get_dart_signal_receiver();
+    let receiver = GetDownloadList::get_dart_signal_receiver();
     while let Some(dart_signal) = receiver.recv().await {
         let query = dart_signal.message;
-        
+
         match manager.list_all().await {
             Ok(list) => {
                 // 1. Filter
-                let mut filtered: Vec<DownloadInfo> = list.into_iter()
+                let mut filtered: Vec<DownloadInfo> = list
+                    .into_iter()
                     .filter(|info| {
                         let state_str = match &info.state {
                             DownloadState::Queued => "Queued",
@@ -499,12 +515,14 @@ pub async fn get_download_list(manager: Arc<DownloadManager>) {
                             DownloadState::Cancelled => "Cancelled",
                             DownloadState::Error(_) => "Error",
                         };
-                        
+
                         let matches_status = query.statuses.contains(&state_str.to_string());
-                        
+
                         let matches_search = if let Some(q) = &query.search_query {
                             let q = q.to_lowercase();
-                            let name = info.dest.file_name()
+                            let name = info
+                                .dest
+                                .file_name()
                                 .and_then(|s| s.to_str())
                                 .unwrap_or("")
                                 .to_lowercase();
@@ -523,7 +541,8 @@ pub async fn get_download_list(manager: Arc<DownloadManager>) {
                 let ascending = query.ascending.unwrap_or(false);
 
                 match sort_by {
-                    1 => { // Name
+                    1 => {
+                        // Name
                         filtered.sort_by(|a, b| {
                             let name_a = a.dest.file_name().and_then(|s| s.to_str()).unwrap_or("");
                             let name_b = b.dest.file_name().and_then(|s| s.to_str()).unwrap_or("");
@@ -533,8 +552,9 @@ pub async fn get_download_list(manager: Arc<DownloadManager>) {
                                 name_b.cmp(name_a)
                             }
                         });
-                    },
-                    2 => { // Size
+                    }
+                    2 => {
+                        // Size
                         filtered.sort_by(|a, b| {
                             let size_a = a.total_size.unwrap_or(0);
                             let size_b = b.total_size.unwrap_or(0);
@@ -544,8 +564,9 @@ pub async fn get_download_list(manager: Arc<DownloadManager>) {
                                 size_b.cmp(&size_a)
                             }
                         });
-                    },
-                    3 => { // Speed
+                    }
+                    3 => {
+                        // Speed
                         filtered.sort_by(|a, b| {
                             let speed_a = calc_speed(a.history.clone()) as u64;
                             let speed_b = calc_speed(b.history.clone()) as u64;
@@ -555,8 +576,9 @@ pub async fn get_download_list(manager: Arc<DownloadManager>) {
                                 speed_b.cmp(&speed_a)
                             }
                         });
-                    },
-                    _ => { // Date (Insertion Order)
+                    }
+                    _ => {
+                        // Date (Insertion Order)
                         filtered.sort_by(|a, b| {
                             if ascending {
                                 a.added_at.cmp(&b.added_at)
@@ -571,7 +593,9 @@ pub async fn get_download_list(manager: Arc<DownloadManager>) {
 
                 // 3. Find Anchor
                 let anchor_index = if let Some(anchor_id_str) = query.anchor_id {
-                    filtered.iter().position(|x| x.id.to_string() == anchor_id_str)
+                    filtered
+                        .iter()
+                        .position(|x| x.id.to_string() == anchor_id_str)
                 } else {
                     None
                 };
@@ -594,7 +618,7 @@ pub async fn get_download_list(manager: Arc<DownloadManager>) {
                 // 5. Slice and Map
                 let slice = &filtered[start..end];
                 let mut download_list = Vec::new();
-                
+
                 for info in slice {
                     let state_str = match &info.state {
                         DownloadState::Queued => "Queued".to_string(),
@@ -608,7 +632,8 @@ pub async fn get_download_list(manager: Arc<DownloadManager>) {
                     let speed = calc_speed(info.history.clone());
                     let glance = DownloadGlance {
                         id: info.id.to_string(),
-                        name: info.dest
+                        name: info
+                            .dest
                             .file_name()
                             .and_then(|s| s.to_str())
                             .unwrap_or("")
@@ -622,12 +647,13 @@ pub async fn get_download_list(manager: Arc<DownloadManager>) {
                     download_list.push(glance);
                 }
 
-                DownloadList { 
+                DownloadList {
                     list: download_list,
                     total_count,
                     start_index: start as u64,
                     tag: query.tag,
-                }.send_signal_to_dart();
+                }
+                .send_signal_to_dart();
             }
             Err(e) => {
                 logger::error(&format!("Failed to get download list: {:?}", e));

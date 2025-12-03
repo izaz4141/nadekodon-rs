@@ -273,7 +273,7 @@ class _DownloadDetailsDialogState extends State<DownloadDetailsDialog> {
 
     return Column(
       children: parts.asMap().entries.map((entry) {
-        final index = entry.key;
+        // final index = entry.key;
         final part = entry.value;
         final start = part.start.toBigInt();
         final end = part.end.toBigInt();

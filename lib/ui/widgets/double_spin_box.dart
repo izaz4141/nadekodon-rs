@@ -38,19 +38,21 @@ class _DoubleSpinBoxState extends State<DoubleSpinBox> {
   void initState() {
     super.initState();
     _controller = TextEditingController(
-      text: widget.valueListenable.value.toStringAsFixed(widget.decimalPlaces)
+      text: widget.valueListenable.value.toStringAsFixed(widget.decimalPlaces),
     );
     _focusNode = FocusNode();
-    
+
     // Listen for external changes to update the text field
     widget.valueListenable.addListener(_updateController);
-    
+
     // Handle focus changes
     _focusNode.addListener(_handleFocusChange);
   }
 
   void _updateController() {
-    final String newValue = widget.valueListenable.value.toStringAsFixed(widget.decimalPlaces);
+    final String newValue = widget.valueListenable.value.toStringAsFixed(
+      widget.decimalPlaces,
+    );
     if (!_isEditing && _controller.text != newValue) {
       _controller.text = newValue;
     }
@@ -72,25 +74,35 @@ class _DoubleSpinBoxState extends State<DoubleSpinBox> {
 
   void _saveValue() {
     final doubleValue = double.tryParse(_controller.text);
-    if (doubleValue != null && doubleValue >= widget.min && doubleValue <= widget.max) {
-      widget.valueListenable.value = double.parse(doubleValue.toStringAsFixed(widget.decimalPlaces));
+    if (doubleValue != null &&
+        doubleValue >= widget.min &&
+        doubleValue <= widget.max) {
+      widget.valueListenable.value = double.parse(
+        doubleValue.toStringAsFixed(widget.decimalPlaces),
+      );
     } else {
       // Reset to current value if invalid
-      _controller.text = widget.valueListenable.value.toStringAsFixed(widget.decimalPlaces);
+      _controller.text = widget.valueListenable.value.toStringAsFixed(
+        widget.decimalPlaces,
+      );
     }
   }
 
   void _increment() {
     if (widget.valueListenable.value < widget.max) {
       final newValue = widget.valueListenable.value + widget.step;
-      widget.valueListenable.value = double.parse(newValue.toStringAsFixed(widget.decimalPlaces));
+      widget.valueListenable.value = double.parse(
+        newValue.toStringAsFixed(widget.decimalPlaces),
+      );
     }
   }
 
   void _decrement() {
     if (widget.valueListenable.value > widget.min) {
       final newValue = widget.valueListenable.value - widget.step;
-      widget.valueListenable.value = double.parse(newValue.toStringAsFixed(widget.decimalPlaces));
+      widget.valueListenable.value = double.parse(
+        newValue.toStringAsFixed(widget.decimalPlaces),
+      );
     }
   }
 
@@ -106,14 +118,11 @@ class _DoubleSpinBoxState extends State<DoubleSpinBox> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
-    
+
     return ListTile(
-      title: Text(
-        widget.title, 
-        style: textTheme.bodyMedium
-      ),
+      title: Text(widget.title, style: textTheme.bodyMedium),
       subtitle: Text(
-        widget.subtitle, 
+        widget.subtitle,
         style: textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
       ),
       trailing: Row(
@@ -148,8 +157,12 @@ class _DoubleSpinBoxState extends State<DoubleSpinBox> {
               onChanged: (value) {
                 // Update the value as the user types
                 final doubleValue = double.tryParse(value);
-                if (doubleValue != null && doubleValue >= widget.min && doubleValue <= widget.max) {
-                  widget.valueListenable.value = double.parse(doubleValue.toStringAsFixed(widget.decimalPlaces));
+                if (doubleValue != null &&
+                    doubleValue >= widget.min &&
+                    doubleValue <= widget.max) {
+                  widget.valueListenable.value = double.parse(
+                    doubleValue.toStringAsFixed(widget.decimalPlaces),
+                  );
                 }
               },
               onSubmitted: (value) {

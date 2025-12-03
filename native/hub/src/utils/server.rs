@@ -1,18 +1,20 @@
+use crate::signals::{NewApiKey, RequestAddDownload, RequestNewApiKey, StartServer};
+use crate::utils::logger;
+use crate::{downloader::main::DownloadManager, utils::types::WorkerEvent};
 use axum::{
-    extract::{ws::{Message, WebSocket, WebSocketUpgrade}, State},
+    Router,
+    extract::{
+        State,
+        ws::{Message, WebSocket, WebSocketUpgrade},
+    },
     response::IntoResponse,
     routing::any,
-    Router,
 };
 use futures::{sink::SinkExt, stream::StreamExt};
-use std::{net::SocketAddr, sync::Arc, path::PathBuf};
-use tokio::sync::broadcast;
+use rinf::{DartSignal, RustSignal};
 use serde::{Deserialize, Serialize};
-use crate::{downloader::main::DownloadManager, utils::types::WorkerEvent};
-use crate::signals::{RequestAddDownload, StartServer, RequestNewApiKey, NewApiKey};
-use rinf::{RustSignal, DartSignal};
+use std::{net::SocketAddr, sync::Arc};
 use uuid::Uuid;
-use crate::utils::logger;
 
 #[derive(Clone)]
 struct AppState {
@@ -42,14 +44,6 @@ enum ServerMessage {
         event: String,
         id: String,
         data: Option<String>,
-    },
-    #[serde(rename = "error")]
-    Error {
-        message: String,
-    },
-    #[serde(rename = "success")]
-    Success {
-        id: String,
     },
     #[serde(rename = "pong")]
     Pong,
@@ -191,4 +185,3 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
         }
     }
 }
-

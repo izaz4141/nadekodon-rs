@@ -1,11 +1,9 @@
-use std::{fs, path::PathBuf, sync::Arc};
-use rinf::{DartSignal, RustSignal, SignalPiece, debug_print};
+use rinf::DartSignal;
+use std::sync::Arc;
 
-use crate::signals::UpdateSettings;
-use crate::utils::types::{
-    DMSettings, ServerSettings,
-};
 use crate::downloader::main::DownloadManager;
+use crate::signals::UpdateSettings;
+use crate::utils::types::DMSettings;
 
 use crate::utils::logger;
 
@@ -19,10 +17,18 @@ pub async fn update_settings(dm: Arc<DownloadManager>) {
         let dm_old = dm.settings.read().await;
         let dm_new = DMSettings {
             speed_limit: data_clone.speed_limit.unwrap_or(dm_old.speed_limit),
-            concurrency_limit: data_clone.concurrency_limit.unwrap_or(dm_old.concurrency_limit),
-            download_threads: data_clone.download_threads.unwrap_or(dm_old.download_threads),
-            download_timeout: data_clone.download_timeout.unwrap_or(dm_old.download_timeout),
-            download_retries: data_clone.download_retries.unwrap_or(dm_old.download_retries),
+            concurrency_limit: data_clone
+                .concurrency_limit
+                .unwrap_or(dm_old.concurrency_limit),
+            download_threads: data_clone
+                .download_threads
+                .unwrap_or(dm_old.download_threads),
+            download_timeout: data_clone
+                .download_timeout
+                .unwrap_or(dm_old.download_timeout),
+            download_retries: data_clone
+                .download_retries
+                .unwrap_or(dm_old.download_retries),
             seeding_ratio: data_clone.seeding_ratio.unwrap_or(dm_old.seeding_ratio),
             seeding_time: data_clone.seeding_time.unwrap_or(dm_old.seeding_time),
         };
@@ -30,13 +36,5 @@ pub async fn update_settings(dm: Arc<DownloadManager>) {
 
         logger::debug(&format!("Updated dm settings to {:?}", &dm_new));
         let _ = dm.update_settings(dm_new).await;
-        match data_clone.server_port {
-            Some(p) => {
-                let server_settings = ServerSettings {
-                    port: data_clone.server_port,
-                };
-            }
-            None => {}
-        }
     }
 }

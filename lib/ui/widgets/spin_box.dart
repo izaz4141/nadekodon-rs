@@ -35,18 +35,21 @@ class _SpinBoxState extends State<SpinBox> {
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: widget.valueListenable.value.toString());
+    _controller = TextEditingController(
+      text: widget.valueListenable.value.toString(),
+    );
     _focusNode = FocusNode();
-    
+
     // Listen for external changes to update the text field
     widget.valueListenable.addListener(_updateController);
-    
+
     // Handle focus changes
     _focusNode.addListener(_handleFocusChange);
   }
 
   void _updateController() {
-    if (!_isEditing && _controller.text != widget.valueListenable.value.toString()) {
+    if (!_isEditing &&
+        _controller.text != widget.valueListenable.value.toString()) {
       _controller.text = widget.valueListenable.value.toString();
     }
   }
@@ -101,12 +104,9 @@ class _SpinBoxState extends State<SpinBox> {
     final textTheme = Theme.of(context).textTheme;
 
     return ListTile(
-      title: Text(
-        widget.title, 
-        style: textTheme.bodyMedium
-      ),
+      title: Text(widget.title, style: textTheme.bodyMedium),
       subtitle: Text(
-        widget.subtitle, 
+        widget.subtitle,
         style: textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
       ),
       trailing: Row(
@@ -141,7 +141,9 @@ class _SpinBoxState extends State<SpinBox> {
               onChanged: (value) {
                 // Update the value as the user types
                 final intValue = int.tryParse(value);
-                if (intValue != null && intValue >= widget.min && intValue <= widget.max) {
+                if (intValue != null &&
+                    intValue >= widget.min &&
+                    intValue <= widget.max) {
                   widget.valueListenable.value = intValue;
                 }
               },
