@@ -51,11 +51,8 @@ class SettingsManager {
   static Future<void> init() async {
     // On Android, use the public Downloads directory via external storage
     if (Platform.isAndroid) {
-      final dirs = await getExternalStorageDirectories(
-        type: StorageDirectory.downloads,
-      );
-      downloadsDir = dirs?.firstOrNull;
-      DefaultSettings.downloadFolder = downloadsDir?.path ?? '';
+      downloadsDir = Directory('/storage/emulated/0/Download');
+      DefaultSettings.downloadFolder = downloadsDir!.path;
     } else {
       downloadsDir = await getDownloadsDirectory();
       DefaultSettings.downloadFolder = downloadsDir?.path ?? '';
