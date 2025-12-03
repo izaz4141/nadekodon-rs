@@ -1,6 +1,7 @@
 // lib/ui/pages/home_page.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../../theme/app_theme.dart';
 import '../widgets/window_controls.dart';
@@ -75,7 +76,28 @@ class HomePage extends StatelessWidget {
                 ],
               ),
             ),
-            if (!Platform.isAndroid && !Platform.isIOS && !Platform.isFuchsia)
+            if (!Platform.isAndroid &&
+                !Platform.isIOS &&
+                !Platform.isFuchsia) ...[
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                height: kToolbarHeight,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onPanStart: (details) {
+                    windowManager.startDragging();
+                  },
+                  onDoubleTap: () async {
+                    if (await windowManager.isMaximized()) {
+                      await windowManager.unmaximize();
+                    } else {
+                      await windowManager.maximize();
+                    }
+                  },
+                ),
+              ),
               Positioned(
                 top: 0,
                 right: 0,
@@ -84,6 +106,7 @@ class HomePage extends StatelessWidget {
                   child: WindowControls(),
                 ),
               ),
+            ],
           ],
         );
       },
