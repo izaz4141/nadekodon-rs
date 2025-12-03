@@ -5,22 +5,21 @@ import '../../../theme/app_theme.dart';
 
 class DirChoose extends StatelessWidget {
   final ValueNotifier<String> selectedDir;
-  
-  const DirChoose({
-    super.key,
-    required this.selectedDir,
-  });
+
+  const DirChoose({super.key, required this.selectedDir});
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
-    
+
     return Row(
       children: [
         Expanded(
           child: Text(
-            selectedDir.value ?? "No directory selected",
+            selectedDir.value != ""
+                ? selectedDir.value
+                : "No directory selected",
             style: textTheme.bodySmall?.copyWith(
               color: (selectedDir.value.isEmpty)
                   ? colors.onSurfaceVariant
