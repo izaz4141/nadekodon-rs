@@ -159,7 +159,6 @@ async fn init_db(path: &str) -> Result<Pool<Sqlite>, sqlx::Error> {
             state TEXT NOT NULL,
             parts TEXT,
             added_at INTEGER NOT NULL DEFAULT 0,
-            added_at INTEGER NOT NULL DEFAULT 0,
             updated_at INTEGER NOT NULL,
             download_type TEXT,
             torrent_hash TEXT
