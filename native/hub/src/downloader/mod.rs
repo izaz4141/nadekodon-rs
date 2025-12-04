@@ -260,7 +260,7 @@ pub async fn spawn_download_worker(manager: Arc<DownloadManager>) {
                                         .unwrap()
                                         .as_millis()
                                         as u64,
-                                    download_type: DownloadType::Normal,
+                                    download_type: DownloadType::YTDLP,
                                     torrent_hash: None,
                                 };
 
