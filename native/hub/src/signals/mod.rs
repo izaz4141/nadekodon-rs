@@ -84,11 +84,14 @@ pub struct DownloadList {
 #[derive(Serialize, SignalPiece)]
 pub struct DownloadGlance {
     pub id: String,
+    pub download_type: String,
     pub name: String,
     pub dest: String,
     pub total_size: Option<u64>,
     pub downloaded: u64,
-    pub speed: f64,
+    pub uploaded: u64,
+    pub dspeed: f64,
+    pub uspeed: Option<f64>,
     pub state: String,
 }
 

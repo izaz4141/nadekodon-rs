@@ -39,21 +39,25 @@ DownloadStatus parseDownloadStatus(String state) {
 
 class DownloadItem {
   final String id;
+  final String downloadType;
   final String name;
   final String dest;
   final int downloaded;
   final int? total;
   final DownloadStatus status;
-  final double speed;
+  final double dspeed;
+  final double? uspeed;
 
   const DownloadItem({
     required this.id,
+    required this.downloadType,
     required this.name,
     required this.dest,
     required this.downloaded,
     required this.total,
     required this.status,
-    required this.speed,
+    required this.dspeed,
+    this.uspeed,
   });
 
   double get progress =>

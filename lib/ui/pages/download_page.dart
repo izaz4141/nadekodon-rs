@@ -100,12 +100,14 @@ class _DownloadPageState extends State<DownloadPage>
       final status = parseDownloadStatus(d.state);
       return DownloadItem(
         id: d.id,
+        downloadType: d.downloadType,
         name: d.name,
         dest: d.dest,
         downloaded: d.downloaded.toInt(),
         total: d.totalSize?.toInt(),
         status: status,
-        speed: d.speed,
+        dspeed: d.dspeed,
+        uspeed: d.uspeed,
       );
     }).toList();
 

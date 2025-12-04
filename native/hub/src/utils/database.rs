@@ -112,19 +112,20 @@ async fn load_downloads(pool: &Pool<Sqlite>) -> Result<Vec<DownloadInfo>, sqlx::
         let torrent_hash: Option<String> = row.get("torrent_hash");
 
         downloads.push(DownloadInfo {
-            id,
-            url,
-            dest,
-            total_size,
-            downloaded,
-            uploaded,
-            state,
+            id: id,
+            url: url,
+            dest: dest,
+            total_size: total_size,
+            downloaded: downloaded,
+            uploaded: uploaded,
+            uspeed: None,
+            state: state,
             history: Vec::new(),
-            parts,
-            added_at,
-            updated_at,
-            download_type,
-            torrent_hash,
+            parts: parts,
+            added_at: added_at,
+            updated_at: updated_at,
+            download_type: download_type,
+            torrent_hash: torrent_hash,
         });
     }
 

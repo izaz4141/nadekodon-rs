@@ -76,6 +76,7 @@ impl DownloadWorker {
                 total_size: None,
                 downloaded: 0,
                 uploaded: 0,
+                uspeed: None,
                 state: DownloadState::Queued,
                 history: Vec::new(),
                 parts: Vec::new(),
@@ -837,7 +838,9 @@ impl DownloadWorker {
         url: &str,
         dest: &std::path::Path,
     ) -> Result<()> {
-        let output_dir = if let Some(stem) = dest.file_stem() {
+        let output_dir = if dest.exists() && dest.is_dir() {
+            dest.to_path_buf()
+        } else if let Some(stem) = dest.file_stem() {
             let parent = dest.parent().unwrap_or(std::path::Path::new("."));
             parent.join(stem)
         } else {
@@ -988,9 +991,18 @@ impl DownloadWorker {
             let downloaded = stats.progress_bytes;
             let total = stats.total_bytes;
             let uploaded = stats.uploaded_bytes;
-
             self.downloaded.store(downloaded, Ordering::SeqCst);
             self.uploaded.store(uploaded, Ordering::SeqCst);
+
+            if let Some(s) = stats.live {
+                let uspeed = s.upload_speed.mbps * 125_000 as f64;
+                let mut info = self.info.lock().await;
+                info.uspeed = Some(uspeed);
+            } else {
+                let mut info = self.info.lock().await;
+                info.uspeed = None;
+            }
+
             let file_progress = &stats.file_progress;
             let pp = self.part_progress.read().await;
             if pp.len() == file_progress.len() {
@@ -1058,9 +1070,17 @@ impl DownloadWorker {
 
             let downloaded = stats.progress_bytes;
             let uploaded = stats.uploaded_bytes;
-
             self.downloaded.store(downloaded, Ordering::SeqCst);
             self.uploaded.store(uploaded, Ordering::SeqCst);
+
+            if let Some(s) = stats.live {
+                let uspeed = s.upload_speed.mbps * 125_000 as f64;
+                let mut info = self.info.lock().await;
+                info.uspeed = Some(uspeed);
+            } else {
+                let mut info = self.info.lock().await;
+                info.uspeed = None;
+            }
 
             // Check limits
             let settings = self.settings.read().await;

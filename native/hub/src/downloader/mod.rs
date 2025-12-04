@@ -43,7 +43,15 @@ pub async fn query_url_info(client: Client) {
         let data = signal_pack.message;
         let url = data.url;
 
-        match get_url_info(client.clone(), &url).await {
+        let result =
+            tokio::time::timeout(Duration::from_secs(20), get_url_info(client.clone(), &url)).await;
+
+        let result = match result {
+            Ok(res) => res,
+            Err(e) => Err(anyhow::anyhow!(e)),
+        };
+
+        match result {
             Ok(info) => {
                 let is_webpage = match &info.content_type {
                     Some(ct) => {
@@ -238,6 +246,7 @@ pub async fn spawn_download_worker(manager: Arc<DownloadManager>) {
                                     total_size: Some(total_size),
                                     downloaded: total_size,
                                     uploaded: 0,
+                                    uspeed: None,
                                     state: DownloadState::Completed,
                                     history: Vec::new(),
                                     parts: Vec::new(),
@@ -301,15 +310,7 @@ pub async fn get_download_details(manager: Arc<DownloadManager>) {
         let manager = Arc::clone(&manager);
         match manager.info(id).await {
             Ok(info) => {
-                let state_str = match &info.state {
-                    DownloadState::Queued => "Queued".to_string(),
-                    DownloadState::Running => "Running".to_string(),
-                    DownloadState::Paused => "Paused".to_string(),
-                    DownloadState::Completed => "Completed".to_string(),
-                    DownloadState::Seeding => "Seeding".to_string(),
-                    DownloadState::Cancelled => "Cancelled".to_string(),
-                    DownloadState::Error(e) => format!("Error: {}", e),
-                };
+                let state_str = info.state.to_string();
                 let speed = calc_speed(info.history);
                 let mut uploaded = None;
                 let mut upload_speed = None;
@@ -506,15 +507,7 @@ pub async fn get_download_list(manager: Arc<DownloadManager>) {
                 let mut filtered: Vec<DownloadInfo> = list
                     .into_iter()
                     .filter(|info| {
-                        let state_str = match &info.state {
-                            DownloadState::Queued => "Queued",
-                            DownloadState::Running => "Running",
-                            DownloadState::Paused => "Paused",
-                            DownloadState::Completed => "Completed",
-                            DownloadState::Seeding => "Seeding",
-                            DownloadState::Cancelled => "Cancelled",
-                            DownloadState::Error(_) => "Error",
-                        };
+                        let state_str = info.state.to_string();
 
                         let matches_status = query.statuses.contains(&state_str.to_string());
 
@@ -620,18 +613,15 @@ pub async fn get_download_list(manager: Arc<DownloadManager>) {
                 let mut download_list = Vec::new();
 
                 for info in slice {
-                    let state_str = match &info.state {
-                        DownloadState::Queued => "Queued".to_string(),
-                        DownloadState::Running => "Running".to_string(),
-                        DownloadState::Paused => "Paused".to_string(),
-                        DownloadState::Completed => "Completed".to_string(),
-                        DownloadState::Seeding => "Seeding".to_string(),
-                        DownloadState::Cancelled => "Cancelled".to_string(),
-                        DownloadState::Error(_) => "Error".to_string(),
+                    let state_str = info.state.to_string();
+                    let dspeed: f64 = calc_speed(info.history.clone());
+                    let uspeed: Option<f64> = match info.uspeed {
+                        Some(s) => Some(s),
+                        _ => None,
                     };
-                    let speed = calc_speed(info.history.clone());
                     let glance = DownloadGlance {
                         id: info.id.to_string(),
+                        download_type: info.download_type.to_string(),
                         name: info
                             .dest
                             .file_name()
@@ -641,7 +631,9 @@ pub async fn get_download_list(manager: Arc<DownloadManager>) {
                         dest: info.dest.to_string_lossy().to_string(),
                         total_size: info.total_size,
                         downloaded: info.downloaded,
-                        speed: speed,
+                        uploaded: info.uploaded,
+                        dspeed: dspeed,
+                        uspeed: uspeed,
                         state: state_str,
                     };
                     download_list.push(glance);

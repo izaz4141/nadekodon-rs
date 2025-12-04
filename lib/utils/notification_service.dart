@@ -146,7 +146,7 @@ class NotificationService {
         anchorId: null,
         before: 0,
         after: 100,
-        statuses: ["Running"],
+        statuses: ["Running", "Seeding"],
         tag: 2, // Notification tag
         searchQuery: null,
         sortBy: 0,
@@ -187,14 +187,18 @@ class NotificationService {
       final total = (item.totalSize?.toBigInt())?.toInt() ?? 0;
       final downloaded = (item.downloaded.toBigInt()).toInt();
       final progress = (total > 0) ? (downloaded / total * 100).toInt() : 0;
-      final speedStr = "${formatBytes(item.speed.toInt())}/s";
+      final speedStr = item.state == "Seeding"
+          ? "${formatBytes(item.uspeed?.toInt() ?? 0)}/s"
+          : "${formatBytes(item.dspeed.toInt())}/s";
 
       await showDownloadNotification(
         id: notificationId,
         title: name,
         progress: progress,
         speed: speedStr,
-        status: DownloadStatus.running,
+        status: item.state == "Running"
+            ? DownloadStatus.running
+            : DownloadStatus.seeding,
         payload: id,
       );
     }
@@ -270,10 +274,16 @@ class NotificationService {
   }) async {
     if (!_isInitialized) await init();
 
-    final isRunning = status == DownloadStatus.running;
+    final isRunning =
+        status == DownloadStatus.running || status == DownloadStatus.seeding;
     final isCompleted = status == DownloadStatus.completed;
     final isFailed = status == DownloadStatus.failed;
     final isPaused = status == DownloadStatus.paused;
+    final isCancelled = status == DownloadStatus.cancelled;
+
+    if ((Platform.isWindows || Platform.isLinux) && isRunning) {
+      return;
+    }
 
     // Android Notification Details
     final AndroidNotificationDetails androidPlatformChannelSpecifics =
@@ -284,7 +294,7 @@ class NotificationService {
           importance: Importance.low,
           priority: Priority.low,
           onlyAlertOnce: true,
-          showProgress: true,
+          showProgress: isRunning,
           maxProgress: 100,
           progress: progress,
           ongoing: isRunning, // Only running is ongoing
@@ -319,9 +329,13 @@ class NotificationService {
           category: LinuxNotificationCategory.transfer,
           urgency: LinuxNotificationUrgency.low,
           suppressSound: true,
-          transient: isRunning,
+          transient: false, // Changed to false so it stays in control center
           customHints: [
-            LinuxNotificationCustomHint('value', LinuxHintInt32Value(progress)),
+            if (isRunning)
+              LinuxNotificationCustomHint(
+                'value',
+                LinuxHintInt32Value(progress),
+              ),
           ],
           actions: <LinuxNotificationAction>[
             if (isRunning)
@@ -336,11 +350,14 @@ class NotificationService {
     final WindowsNotificationDetails windowsPlatformChannelSpecifics =
         WindowsNotificationDetails(
           progressBars: [
-            WindowsProgressBar(
-              id: id.toString(),
-              status: 'Downloading',
-              value: progress / 100,
-            ),
+            if (isRunning)
+              WindowsProgressBar(
+                id: id.toString(),
+                status: status == DownloadStatus.running
+                    ? 'Downloading'
+                    : 'Seeding',
+                value: progress / 100,
+              ),
           ],
           actions: <WindowsAction>[
             if (isRunning)
@@ -367,6 +384,8 @@ class NotificationService {
       body = 'Download failed';
     } else if (isPaused) {
       body = 'Paused • $progress%';
+    } else if (isCancelled) {
+      body = 'Download cancelled';
     }
 
     await flutterLocalNotificationsPlugin.show(

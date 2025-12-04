@@ -161,9 +161,18 @@ class _DownloadCardState extends State<DownloadCard> {
                     Expanded(
                       child: Align(
                         alignment: Alignment.center,
-                        child: Text(
-                          "${formatBytes(widget.item.speed.toInt())}/s",
-                          style: textTheme.bodySmall,
+                        child: Column(
+                          children: [
+                            if (widget.item.uspeed != null)
+                              Text(
+                                "  ${formatBytes(widget.item.uspeed!.toInt())}/s",
+                                style: textTheme.bodySmall,
+                              ),
+                            Text(
+                              "  ${formatBytes(widget.item.dspeed.toInt())}/s",
+                              style: textTheme.bodySmall,
+                            ),
+                          ],
                         ),
                       ),
                     ),

@@ -24,12 +24,22 @@ pub struct HeadData {
 pub enum DownloadType {
     Normal,
     Torrent,
+    YTDLP,
     HLS,
 }
-
 impl Default for DownloadType {
     fn default() -> Self {
         Self::Normal
+    }
+}
+impl DownloadType {
+    pub fn to_string(&self) -> String {
+        match self {
+            DownloadType::Normal => "normal".to_string(),
+            DownloadType::Torrent => "torrent".to_string(),
+            DownloadType::YTDLP => "ytdlp".to_string(),
+            DownloadType::HLS => "hls".to_string(),
+        }
     }
 }
 
@@ -42,6 +52,20 @@ pub enum DownloadState {
     Seeding,
     Cancelled,
     Error(String),
+}
+
+impl DownloadState {
+    pub fn to_string(&self) -> String {
+        match self {
+            DownloadState::Queued => "Queued".to_string(),
+            DownloadState::Running => "Running".to_string(),
+            DownloadState::Paused => "Paused".to_string(),
+            DownloadState::Completed => "Completed".to_string(),
+            DownloadState::Seeding => "Seeding".to_string(),
+            DownloadState::Cancelled => "Cancelled".to_string(),
+            DownloadState::Error(_) => "Error".to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,6 +83,7 @@ pub struct DownloadInfo {
     pub total_size: Option<u64>,
     pub downloaded: u64,
     pub uploaded: u64,
+    pub uspeed: Option<f64>,
     pub state: DownloadState,
     pub history: Vec<(u128, u64)>,
     pub parts: Vec<PartInfo>,
