@@ -1,12 +1,12 @@
-# NadekoDon
+# Nadeko~don
 
-**NadekoDon** is a modern, cross-platform Download Manager built with Flutter and Rust. It leverages the performance of Rust for backend operations (downloading, file management) and the flexibility of Flutter for a beautiful user interface.
+**Nadeko~don** is a modern, cross-platform Download Manager built with Flutter and Rust. It leverages the performance of Rust for backend operations (downloading, file management) and the flexibility of Flutter for a beautiful user interface.
 
 ## Key Features
 
 - **High Performance**: Powered by a Rust backend for efficient download handling.
 - **Cross-Platform**: Runs on Linux, Windows, and Android.
-- **Browser Integration**: Includes a local server to communicate with browser extensions for seamless download capture.
+- **Browser Integration**: Includes a local server to communicate with browser extensions [**NadeCon**](https://github.com/izaz4141/NadeCon) for seamless download capture.
 - **System Tray Support**: Minimizes to the system tray for background operation.
 
 ## Getting Started
@@ -22,7 +22,7 @@ Check your system readiness:
 
 ```shell
 rustc --version
-fvm flutter doctor
+flutter doctor
 cargo install rinf_cli
 ```
 
@@ -35,21 +35,11 @@ rinf gen
 
 **Run the App:**
 ```shell
-fvm flutter run
+flutter run
 ```
 
 **Build for Production:**
 ```shell
-fvm flutter build <platform>
+flutter build <platform>
 ```
-
-## Development
-
-### Code Style
-- **Dart**: Follows `flutter_lints`.
-- **Rust**: Follows standard `rustfmt` conventions.
-
-### Linting
-- Dart: `fvm flutter analyze`
-- Rust: `cargo clippy -- -D warnings`
 
