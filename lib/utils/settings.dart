@@ -47,6 +47,8 @@ class SettingsManager {
     DefaultSettings.customColor,
   ); // PinkAccent default
 
+  static final checkNightly = ValueNotifier<bool>(DefaultSettings.checkNightly);
+
   /// Init config system (call at app startup)
   static Future<void> init() async {
     // On Android, use the public Downloads directory via external storage
@@ -104,6 +106,7 @@ class SettingsManager {
     }
     useDynamicColor.value = json['use_dynamic_color'] ?? true;
     customColor.value = json['custom_color'] ?? 0xFFFF4081;
+    checkNightly.value = json['check_nightly'] ?? DefaultSettings.checkNightly;
   }
 
   static Map<String, dynamic> _toJson() => {
@@ -121,6 +124,7 @@ class SettingsManager {
     'theme_mode': themeMode.value.index,
     'use_dynamic_color': useDynamicColor.value,
     'custom_color': customColor.value,
+    'check_nightly': checkNightly.value,
   };
 
   /// Save entire config (initial only)
@@ -184,6 +188,9 @@ class SettingsManager {
     );
     customColor.addListener(
       () => _saveChanged('custom_color', customColor.value),
+    );
+    checkNightly.addListener(
+      () => _saveChanged('check_nightly', checkNightly.value),
     );
   }
 
@@ -250,6 +257,7 @@ class SettingsManager {
     themeMode.value = DefaultSettings.themeMode;
     useDynamicColor.value = DefaultSettings.useDynamicColor;
     customColor.value = DefaultSettings.customColor;
+    checkNightly.value = DefaultSettings.checkNightly;
   }
 
   static Future<String> getDatabasePath() async {

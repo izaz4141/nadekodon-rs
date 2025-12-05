@@ -5,8 +5,11 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:nadekodon/theme/app_theme.dart';
 import 'package:nadekodon/ui/widgets/app_snackbar.dart';
 import 'package:nadekodon/ui/widgets/dialog/view_logs.dart';
+import 'package:nadekodon/utils/settings.dart';
 import 'package:nadekodon/utils/updater.dart';
+import 'package:nadekodon/utils/logger.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:pub_semver/pub_semver.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SystemApp extends StatefulWidget {
@@ -34,10 +37,19 @@ class _SystemAppState extends State<SystemApp> {
     super.initState();
     _initPackageInfo();
     _checkForUpdates();
+    SettingsManager.checkNightly.addListener(_checkForUpdates);
+  }
+
+  @override
+  void dispose() {
+    SettingsManager.checkNightly.removeListener(_checkForUpdates);
+    super.dispose();
   }
 
   Future<void> _checkForUpdates() async {
-    final versionInfo = await checkForUpdate();
+    final versionInfo = await checkForUpdate(
+      checkNightly: SettingsManager.checkNightly.value,
+    );
     if (!mounted) return;
     setState(() {
       _latestVersion = versionInfo;
@@ -191,9 +203,17 @@ class _SystemAppState extends State<SystemApp> {
       );
     }
 
-    final hasUpdate =
-        _latestVersion != null &&
-        compareVersions(_packageInfo.version, _latestVersion!.version) < 0;
+    bool hasUpdate = false;
+    try {
+      if (_latestVersion != null) {
+        final currentVer = Version.parse(
+          '${_packageInfo.version}+${_packageInfo.buildNumber}',
+        );
+        hasUpdate = isNewerThan(_latestVersion!.version, currentVer);
+      }
+    } catch (e) {
+      log(e.toString(), isError: true);
+    }
 
     return Column(
       children: [

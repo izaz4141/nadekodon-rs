@@ -15,4 +15,6 @@ class DefaultSettings {
   static const ThemeMode themeMode = ThemeMode.system;
   static const bool useDynamicColor = true;
   static const int customColor = 0xFFFF4081;
+
+  static const bool checkNightly = false;
 }

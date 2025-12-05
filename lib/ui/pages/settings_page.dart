@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
 import 'package:nadekodon/ui/widgets/view/settings_dm.dart';
+import 'package:nadekodon/ui/widgets/view/settings_misc.dart';
 import 'package:nadekodon/ui/widgets/view/settings_ui.dart';
 import 'package:nadekodon/ui/widgets/view/settings_ws.dart';
 import 'package:nadekodon/ui/widgets/components/settings_actions_bar.dart';
@@ -31,6 +32,8 @@ class SettingsPage extends StatelessWidget {
                 Divider(),
                 SettingsUI(),
                 if (!Platform.isAndroid) ...[Divider(), SettingsWS()],
+                Divider(),
+                SettingsMisc(),
                 SizedBox(height: 120 * AppTheme.heightScale(context)),
               ],
             ),

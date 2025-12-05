@@ -34,7 +34,7 @@ packages:
     source: hosted
     version: "1.0.4"
   archive:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: archive
       sha256: "2fde1607386ab523f7a36bb3e7edb43bd58e6edaf2ffb29d8a6d578b297fdbbd"
@@ -568,6 +568,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.0.3"
+  pub_semver:
+    dependency: "direct main"
+    description:
+      name: pub_semver
+      sha256: "5bfcf68ca79ef689f8990d1160781b4bad40a3bd5e5218ad4076ddb7f4081585"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.2.0"
   rinf:
     dependency: "direct main"
     description:
