@@ -104,20 +104,23 @@ Future<Version> getCurrentVersion() async {
 }
 
 bool isNewerThan(Version newVersion, Version currentVersion) {
-  if (newVersion > currentVersion) {
-    return true;
+  // If major, minor, or patch are different, standard SemVer takes precedence.
+  // e.g. 0.1.2 > 0.1.1-nightly
+  if (newVersion.major != currentVersion.major ||
+      newVersion.minor != currentVersion.minor ||
+      newVersion.patch != currentVersion.patch) {
+    return newVersion > currentVersion;
   }
 
-  if (newVersion == currentVersion) {
-    int? newBuild = _extractBuildNumber(newVersion);
-    int? currentBuild = _extractBuildNumber(currentVersion);
+  int? newBuild = _extractBuildNumber(newVersion);
+  int? currentBuild = _extractBuildNumber(currentVersion);
 
-    if (newBuild != null && currentBuild != null) {
-      return newBuild > currentBuild;
-    }
+  if (newBuild != null && currentBuild != null) {
+    return newBuild > currentBuild;
   }
 
-  return false;
+  // Fallback to standard SemVer if build numbers are missing
+  return newVersion > currentVersion;
 }
 
 int? _extractBuildNumber(Version version) {
