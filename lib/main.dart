@@ -123,7 +123,11 @@ class _TrayListener extends TrayListener {
 }
 
 Future<void> _initTray() async {
-  await trayManager.setIcon('assets/icons/nadeko-don.png');
+  await trayManager.setIcon(
+    Platform.isWindows
+        ? 'assets/icons/nadeko-don.ico'
+        : 'assets/icons/nadeko-don.png',
+  );
   if (!Platform.isLinux) {
     await trayManager.setToolTip(
       'Nadeko~don',
@@ -132,11 +136,8 @@ Future<void> _initTray() async {
   await trayManager.setContextMenu(
     Menu(
       items: [
-        MenuItem(
-          key: 'show',
-          label: 'Show App',
-          icon: 'assets/icons/nadeko-don.png',
-        ),
+        MenuItem(key: 'show', label: 'Show App'),
+        MenuItem.separator(),
         MenuItem(key: 'exit', label: 'Close App'),
       ],
     ),
