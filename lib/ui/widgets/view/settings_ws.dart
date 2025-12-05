@@ -5,6 +5,7 @@ import 'package:nadekodon/utils/settings.dart';
 import 'package:nadekodon/ui/widgets/app_snackbar.dart';
 import 'package:nadekodon/ui/widgets/components/section_header.dart';
 import 'package:nadekodon/ui/widgets/components/spin_box.dart';
+import 'package:nadekodon/utils/ws_status_service.dart';
 
 class SettingsWS extends StatelessWidget {
   const SettingsWS({super.key});
@@ -20,14 +21,30 @@ class SettingsWS extends StatelessWidget {
         SectionHeader(
           title: 'WebSocket Settings',
           icon: Icons.network_wifi,
-          trailing: IconButton(
-            icon: const Icon(Icons.refresh),
-            iconSize: AppTheme.iconMD * AppTheme.iconScale(context),
-            tooltip: "Restart Server",
-            onPressed: () {
-              SettingsManager.restartServer();
-              AppSnackBar.show(context, "Server restarted");
-            },
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ValueListenableBuilder<bool>(
+                valueListenable: WebsocketStatusService.isOnline,
+                builder: (context, isOnline, _) {
+                  return IconButton(
+                    icon: Icon(
+                      Icons.refresh,
+                      color: isOnline
+                          ? colors.onPrimaryContainer
+                          : colors.error,
+                    ),
+                    iconSize: AppTheme.iconMD * AppTheme.iconScale(context),
+                    tooltip: isOnline ? "Server Online" : "Server Offline",
+                    onPressed: () {
+                      SettingsManager.restartServer();
+                      WebsocketStatusService.restartPolling();
+                      AppSnackBar.show(context, "Server restarted");
+                    },
+                  );
+                },
+              ),
+            ],
           ),
         ),
         SpinBox(

@@ -14,6 +14,7 @@ import 'utils/settings.dart';
 import 'utils/logger.dart';
 import 'utils/permission_helper.dart';
 import 'utils/updater.dart';
+import 'utils/ws_status_service.dart';
 
 final _trayListener = _TrayListener();
 final _windowListener = _WindowListener();
@@ -44,6 +45,7 @@ Future<void> main() async {
           port: SettingsManager.serverPort.value,
           apiKey: SettingsManager.serverApiKey.value,
         ).sendSignalToRust();
+        WebsocketStatusService.init();
       }
 
       if (!Platform.isAndroid && !Platform.isIOS && !Platform.isFuchsia) {
