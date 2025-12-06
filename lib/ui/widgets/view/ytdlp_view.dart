@@ -167,16 +167,22 @@ class _YtdlpView extends State<YtdlpView> {
         DropdownButton<YtdlFormat>(
           value: selectedFormat,
           isExpanded: true,
-          items: formats.map((format) {
-            return DropdownMenuItem<YtdlFormat>(
-              value: format,
-              child: Text(
-                "${format.note} - ${format.ext} - ${format.vcodec != null && format.vcodec != 'none' ? format.vcodec : (format.acodec != null && format.acodec != 'none' ? format.acodec : '')} - ${format.filesize != null ? formatBytes(format.filesize!.toInt()) : 'N/A'}",
-                overflow: TextOverflow.ellipsis,
-                style: textTheme.bodyMedium,
-              ),
-            );
-          }).toList(),
+          items: [
+            DropdownMenuItem<YtdlFormat>(
+              value: null,
+              child: Text("None", style: textTheme.bodyMedium),
+            ),
+            ...formats.map((format) {
+              return DropdownMenuItem<YtdlFormat>(
+                value: format,
+                child: Text(
+                  "${format.note} - ${format.ext} - ${format.vcodec != null && format.vcodec != 'none' ? format.vcodec : (format.acodec != null && format.acodec != 'none' ? format.acodec : '')} - ${format.filesize != null ? formatBytes(format.filesize!.toInt()) : 'N/A'}",
+                  overflow: TextOverflow.ellipsis,
+                  style: textTheme.bodyMedium,
+                ),
+              );
+            }),
+          ],
           onChanged: onChanged,
         ),
       ],
