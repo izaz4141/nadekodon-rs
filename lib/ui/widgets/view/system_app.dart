@@ -229,7 +229,7 @@ class _SystemAppState extends State<SystemApp> {
               Tooltip(
                 message: 'Latest version: ${_latestVersion!.version}',
                 child: InkWell(
-                  onTap: Platform.isLinux && !_isUpdating
+                  onTap: !Platform.isAndroid && !_isUpdating
                       ? _performUpdate
                       : null,
                   borderRadius: BorderRadius.circular(AppTheme.radiusMD),
