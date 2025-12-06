@@ -23,7 +23,10 @@ class SystemInfo extends StatelessWidget {
             size: AppTheme.iconMD * AppTheme.iconScale(context),
           ),
           title: Text('Platform', style: textTheme.bodyMedium),
-          subtitle: Text(Platform.operatingSystem, style: textTheme.bodySmall),
+          subtitle: Text(
+            Platform.operatingSystemVersion,
+            style: textTheme.bodySmall,
+          ),
         ),
         ListTile(
           leading: Icon(
