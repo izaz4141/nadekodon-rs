@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:nadekodon/utils/settings.dart';
 
 class WindowControls extends StatefulWidget {
   const WindowControls({super.key});
@@ -86,7 +87,13 @@ class _WindowControlsState extends State<WindowControls> with WindowListener {
         ),
         _buildButton(
           icon: Icons.close_rounded,
-          onPressed: () => windowManager.close(),
+          onPressed: () {
+            if (SettingsManager.retreatToTray.value) {
+              windowManager.hide();
+            } else {
+              windowManager.close();
+            }
+          },
           hoverColor: colors.error.withAlpha(26),
           colors: colors,
         ),
