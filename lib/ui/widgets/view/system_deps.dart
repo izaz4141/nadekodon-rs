@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:nadekodon/theme/app_theme.dart';
 import 'package:nadekodon/ui/widgets/components/section_header.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class SystemDeps extends StatefulWidget {
   const SystemDeps({super.key});
@@ -105,6 +106,13 @@ class _SystemDepsState extends State<SystemDeps> {
                   : null,
             ),
           ),
+          trailing: IconButton(
+            icon: const Icon(Icons.open_in_new),
+            iconSize: AppTheme.iconMD * AppTheme.iconScale(context),
+            tooltip: "Visit",
+            onPressed: () =>
+                launchUrl(Uri.parse('https://github.com/yt-dlp/yt-dlp')),
+          ),
         ),
         ListTile(
           leading: Icon(
@@ -122,6 +130,13 @@ class _SystemDepsState extends State<SystemDeps> {
                   ? Theme.of(context).colorScheme.error
                   : null,
             ),
+          ),
+          trailing: IconButton(
+            icon: const Icon(Icons.open_in_new),
+            iconSize: AppTheme.iconMD * AppTheme.iconScale(context),
+            tooltip: "Visit",
+            onPressed: () =>
+                launchUrl(Uri.parse('https://github.com/FFmpeg/FFmpeg')),
           ),
         ),
       ],
