@@ -58,7 +58,7 @@ class _SystemAppState extends State<SystemApp> {
   }
 
   Future<void> _performUpdate() async {
-    if (!Platform.isLinux || _latestVersion == null) return;
+    if (Platform.isAndroid || _latestVersion == null) return;
 
     // Show confirmation dialog
     final confirmed = await showDialog<bool>(
