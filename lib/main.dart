@@ -96,12 +96,7 @@ class _WindowListener extends WindowListener {
   @override
   void onWindowClose() async {
     if (SettingsManager.retreatToTray.value) {
-      if (Platform.isWindows) {
-        await windowManager.setSkipTaskbar(true);
-        await windowManager.minimize();
-      } else {
-        await windowManager.hide();
-      }
+      await windowManager.hide();
     } else {
       NotificationService().stopListening();
       await _removeTray();
@@ -113,9 +108,6 @@ class _WindowListener extends WindowListener {
 class _TrayListener extends TrayListener {
   @override
   void onTrayIconMouseDown() async {
-    if (Platform.isWindows) {
-      await windowManager.setSkipTaskbar(false);
-    }
     await windowManager.show();
     await windowManager.restore();
     await windowManager.focus();
@@ -129,9 +121,6 @@ class _TrayListener extends TrayListener {
   @override
   void onTrayMenuItemClick(MenuItem menuItem) async {
     if (menuItem.key == 'show') {
-      if (Platform.isWindows) {
-        await windowManager.setSkipTaskbar(false);
-      }
       await windowManager.show();
       await windowManager.restore();
       await windowManager.focus();
