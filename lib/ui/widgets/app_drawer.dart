@@ -96,7 +96,7 @@ class _SidebarOverlayHandlerState extends State<SidebarOverlayHandler>
                 // Slightly blurred scrim
                 BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 2, sigmaY: 2),
-                  child: Container(color: colors.shadow.withOpacity(0.25)),
+                  child: Container(color: colors.shadow.withAlpha(64)),
                 ),
 
                 // Sidebar
@@ -117,12 +117,12 @@ class _SidebarOverlayHandlerState extends State<SidebarOverlayHandler>
                               AppTheme.radiusLG * 1.2,
                             ),
                             border: Border.all(
-                              color: colors.outlineVariant.withOpacity(0.5),
+                              color: colors.outlineVariant.withAlpha(128),
                               width: 1.2,
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: colors.shadow.withOpacity(0.15),
+                                color: colors.shadow.withAlpha(40),
                                 blurRadius: 20,
                                 offset: const Offset(0, 8),
                               ),
@@ -177,7 +177,7 @@ class _SidebarOverlayHandlerState extends State<SidebarOverlayHandler>
     }) {
       final selected = selectedIndex == index;
       final bg = selected
-          ? colors.primaryContainer.withOpacity(0.8)
+          ? colors.primaryContainer.withAlpha(204)
           : Colors.transparent;
       final fg = selected ? colors.primary : colors.onSurfaceVariant;
 
@@ -187,8 +187,8 @@ class _SidebarOverlayHandlerState extends State<SidebarOverlayHandler>
           isExpandedNotifier.value = false;
         },
         borderRadius: BorderRadius.circular(AppTheme.radiusMD),
-        hoverColor: colors.surfaceContainerHighest.withOpacity(0.08),
-        splashColor: colors.primary.withOpacity(0.12),
+        hoverColor: colors.surfaceContainerHighest.withAlpha(16),
+        splashColor: colors.primary.withAlpha(32),
         child: Container(
           margin: EdgeInsets.symmetric(
             horizontal: AppTheme.spaceMD * AppTheme.spaceScale(context),
@@ -203,7 +203,7 @@ class _SidebarOverlayHandlerState extends State<SidebarOverlayHandler>
             borderRadius: BorderRadius.circular(AppTheme.radiusMD),
             border: Border.all(
               color: selected
-                  ? colors.primary.withOpacity(0.3)
+                  ? colors.primary.withAlpha(64)
                   : Colors.transparent,
             ),
           ),

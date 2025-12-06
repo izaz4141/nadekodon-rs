@@ -115,7 +115,9 @@ class _TrayListener extends TrayListener {
 
   @override
   void onTrayIconRightMouseDown() {
-    trayManager.popUpContextMenu();
+    if (!Platform.isLinux) {
+      trayManager.popUpContextMenu();
+    }
   }
 
   @override
@@ -146,7 +148,6 @@ Future<void> _initTray() async {
     Menu(
       items: [
         MenuItem(key: 'show', label: 'Show App'),
-        MenuItem.separator(),
         MenuItem(key: 'exit', label: 'Close App'),
       ],
     ),

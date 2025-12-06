@@ -100,7 +100,7 @@ class _LogsDialogState extends State<LogsDialog> {
             const SizedBox(height: AppTheme.spaceMD),
             Flexible(
               child: Container(
-                color: colors.surfaceContainerHighest.withOpacity(0.5),
+                color: colors.surfaceContainerHighest.withAlpha(128),
                 child: filteredLogs.isEmpty
                     ? const Center(child: Text('No logs yet.'))
                     : ListView.builder(

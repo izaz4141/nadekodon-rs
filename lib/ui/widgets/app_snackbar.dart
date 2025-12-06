@@ -168,7 +168,7 @@ class _OverlaySnackState extends State<_OverlaySnack>
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: colors.shadow.withOpacity(0.2),
+                          color: colors.shadow.withAlpha(51),
                           blurRadius: 8,
                           offset: const Offset(0, 3),
                         ),
