@@ -100,15 +100,29 @@ class _SystemAppState extends State<SystemApp> {
       _updateProgress = 0.0;
     });
 
-    final success = await downloadAndReplaceAppImage(
-      _latestVersion!,
-      onProgress: (progress) {
-        if (!mounted) return;
-        setState(() {
-          _updateProgress = progress;
-        });
-      },
-    );
+    bool success = false;
+
+    if (Platform.isLinux) {
+      success = await downloadAndReplaceAppImage(
+        _latestVersion!,
+        onProgress: (progress) {
+          if (!mounted) return;
+          setState(() {
+            _updateProgress = progress;
+          });
+        },
+      );
+    } else if (Platform.isWindows) {
+      success = await downloadAndReplaceWindows(
+        _latestVersion!,
+        onProgress: (progress) {
+          if (!mounted) return;
+          setState(() {
+            _updateProgress = progress;
+          });
+        },
+      );
+    }
 
     if (!mounted) return;
 
