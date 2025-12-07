@@ -140,16 +140,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            apt-cache
+            ~/.apt-cache
             /usr/lib/x86_64-linux-gnu/cmake
           key: ${{ matrix.target }}-linux-deps-v1 
 
       - name: Install system deps (Linux only)
         if: matrix.target == 'linux-x64'
         run: |
-          mkdir -p apt-cache
+          mkdir -p ~/.apt-cache
           sudo apt update
-          sudo apt install -y -o Dir::Cache::Archives="${{ github.workspace }}/apt-cache" \
+          sudo apt install -y -o Dir::Cache::Archives="$HOME/.apt-cache" \
             clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev \
             libfuse2 libayatana-appindicator3-dev patchelf curl jq
 
