@@ -140,15 +140,17 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            /var/cache/apt/archives
+            apt-cache
             /usr/lib/x86_64-linux-gnu/cmake
           key: ${{ matrix.target }}-linux-deps-v1 
 
       - name: Install system deps (Linux only)
         if: matrix.target == 'linux-x64'
         run: |
+          mkdir -p apt-cache
           sudo apt update
-          sudo apt install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev \
+          sudo apt install -y -o Dir::Cache::Archives="${{ github.workspace }}/apt-cache" \
+            clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev \
             libfuse2 libayatana-appindicator3-dev patchelf curl jq
 
       - name: Install Java (Android only)
@@ -165,6 +167,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
+            ~/.cargo/bin
             target
           # Cache key changes if the target or Cargo.lock file changes
           key: ${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
@@ -180,9 +183,14 @@ jobs:
           flutter-version: ${{ needs.setup.outputs.flutter_version }}
           channel: stable
           cache: true
+          cache-key: "flutter-:os:-:channel:-:version:-:arch:-:hash:"
+          cache-path: "${{ runner.tool_cache }}/flutter/:channel:-:version:-:arch:"
 
       - name: Install rinf_cli
-        run: cargo install rinf_cli --force
+        run: |
+          if ! command -v rinf &> /dev/null; then
+            cargo install rinf_cli
+          fi
 
       - name: Generate rinf bindings
         run: rinf gen
@@ -268,7 +276,8 @@ jobs:
             TITLE="🌙 Nightly Release"
             TAG_NAME="nightly"
             IS_PRERELEASE="true"
-            BODY="## Nightly Build (${{ needs.setup.outputs.version_name }})\n\nChanges since $PREV_TAG:\n"
+            BUILD_TIME=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
+            BODY="## Nightly Build (${{ needs.setup.outputs.version_name }})\n\n**Built:** ${BUILD_TIME}\n\nChanges since $PREV_TAG:\n"
           else
             # Stable: Diff from previous tag
             PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
