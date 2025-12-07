@@ -35,7 +35,6 @@ class _NadekoDonState extends State<NadekoDon> {
   /// creating this listener is not necessary.
   late final AppLifecycleListener _listener;
   StreamSubscription? _intentStreamSubscription;
-  late final AppLinks _appLinks;
   StreamSubscription? _linkSubscription;
 
   @override
@@ -119,20 +118,9 @@ class _NadekoDonState extends State<NadekoDon> {
   }
 
   Future<void> _initAppLinks() async {
-    _appLinks = AppLinks();
+    final appLinks = AppLinks();
 
-    // Handle initial link
-    try {
-      final initialUri = await _appLinks.getInitialLink();
-      if (initialUri != null) {
-        _handleIncomingUri(initialUri);
-      }
-    } catch (e) {
-      // Silently handle errors
-    }
-
-    // Listen for new links
-    _linkSubscription = _appLinks.uriLinkStream.listen((uri) {
+    _linkSubscription = appLinks.uriLinkStream.listen((uri) {
       _handleIncomingUri(uri);
     });
   }
