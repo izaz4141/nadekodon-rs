@@ -187,6 +187,7 @@ jobs:
           cache-path: "${{ runner.tool_cache }}/flutter/:channel:-:version:-:arch:"
 
       - name: Install rinf_cli
+        shell: bash
         run: |
           if ! command -v rinf &> /dev/null; then
             cargo install rinf_cli
