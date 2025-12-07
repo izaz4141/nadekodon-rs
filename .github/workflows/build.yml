@@ -170,7 +170,7 @@ jobs:
             ~/.cargo/bin
             target
           # Cache key changes if the target or Cargo.lock file changes
-          key: ${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ matrix.target }}-cargo-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
             ${{ matrix.target }}-cargo-
 
