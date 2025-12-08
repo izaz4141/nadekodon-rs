@@ -206,14 +206,8 @@ jobs:
         if: startsWith(matrix.target, 'android')
         run: |
           if [ -n "${{ secrets.UPLOAD_KEYSTORE_BASE64 }}" ]; then
-            echo "${{ secrets.UPLOAD_KEYSTORE_BASE64 }}" | base64 -d > android/upload-keystore.jks
-            
-            cat <<EOF > android/key.properties
-            storePassword=${{ secrets.STORE_PASSWORD }}
-            keyPassword=${{ secrets.KEY_PASSWORD }}
-            keyAlias=upload
-            storeFile=upload-keystore.jks
-            EOF
+            echo "${{ secrets.UPLOAD_KEYSTORE_BASE64 }}" | base64 -d > android/upload-keystore.jks  
+            printf "storePassword=${{ secrets.STORE_PASSWORD }}\nkeyPassword=${{ secrets.KEY_PASSWORD }}\nkeyAlias=upload\nstoreFile=upload-keystore.jks\n" > android/key.properties
           else
             echo "Warning: UPLOAD_KEYSTORE_BASE64 secret not found. Skipping signing configuration."
           fi
