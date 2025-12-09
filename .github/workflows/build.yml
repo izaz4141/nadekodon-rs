@@ -161,6 +161,12 @@ jobs:
           java-version: 17
           cache: gradle
 
+      - name: Install Python (Android only)
+        if: startsWith(matrix.target, 'android')
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
       - name: Cache Rust dependencies and target directory
         uses: actions/cache@v4
         with:
