@@ -183,32 +183,34 @@ class _YtdlpView extends State<YtdlpView> {
     final textTheme = Theme.of(context).textTheme;
     final isDesktop = AppTheme.isDesktop(context);
 
+    Widget buildDropdown() => DropdownButton<YtdlFormat>(
+      value: selectedFormat,
+      isExpanded: true,
+      items: [
+        DropdownMenuItem<YtdlFormat>(
+          value: null,
+          child: Text("None", style: textTheme.bodyMedium),
+        ),
+        ...formats.map((format) {
+          return DropdownMenuItem<YtdlFormat>(
+            value: format,
+            child: Text(
+              "${format.note} - ${format.ext} - ${format.vcodec != null && format.vcodec != 'none' ? format.vcodec : (format.acodec != null && format.acodec != 'none' ? format.acodec : '')} - ${format.filesize != null ? formatBytes(format.filesize!.toInt()) : 'N/A'}",
+              overflow: TextOverflow.ellipsis,
+              style: textTheme.bodyMedium,
+            ),
+          );
+        }),
+      ],
+      onChanged: onChanged,
+    );
+
     if (isDesktop) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(title, style: textTheme.titleMedium),
-          DropdownButton<YtdlFormat>(
-            value: selectedFormat,
-            isExpanded: true,
-            items: [
-              DropdownMenuItem<YtdlFormat>(
-                value: null,
-                child: Text("None", style: textTheme.bodyMedium),
-              ),
-              ...formats.map((format) {
-                return DropdownMenuItem<YtdlFormat>(
-                  value: format,
-                  child: Text(
-                    "${format.note} - ${format.ext} - ${format.vcodec != null && format.vcodec != 'none' ? format.vcodec : (format.acodec != null && format.acodec != 'none' ? format.acodec : '')} - ${format.filesize != null ? formatBytes(format.filesize!.toInt()) : 'N/A'}",
-                    overflow: TextOverflow.ellipsis,
-                    style: textTheme.bodyMedium,
-                  ),
-                );
-              }),
-            ],
-            onChanged: onChanged,
-          ),
+          buildDropdown(),
         ],
       );
     } else {
@@ -219,30 +221,7 @@ class _YtdlpView extends State<YtdlpView> {
             flex: 1,
             child: Text("$title:", style: textTheme.titleSmall),
           ),
-          Expanded(
-            flex: 5,
-            child: DropdownButton<YtdlFormat>(
-              value: selectedFormat,
-              isExpanded: true,
-              items: [
-                DropdownMenuItem<YtdlFormat>(
-                  value: null,
-                  child: Text("None", style: textTheme.bodyMedium),
-                ),
-                ...formats.map((format) {
-                  return DropdownMenuItem<YtdlFormat>(
-                    value: format,
-                    child: Text(
-                      "${format.note} - ${format.ext} - ${format.vcodec != null && format.vcodec != 'none' ? format.vcodec : (format.acodec != null && format.acodec != 'none' ? format.acodec : '')} - ${format.filesize != null ? formatBytes(format.filesize!.toInt()) : 'N/A'}",
-                      overflow: TextOverflow.ellipsis,
-                      style: textTheme.bodyMedium,
-                    ),
-                  );
-                }),
-              ],
-              onChanged: onChanged,
-            ),
-          ),
+          Expanded(flex: 5, child: buildDropdown()),
         ],
       );
     }
