@@ -12,6 +12,7 @@ import 'package:nadekodon/ui/widgets/view/ytdlp_view.dart';
 import 'package:nadekodon/ui/widgets/dialog/replace_file.dart';
 
 import 'package:nadekodon/src/bindings/bindings.dart';
+import 'package:nadekodon/utils/ytdlp_android.dart';
 
 Future<void> showAddDownloadDialog(
   BuildContext context, {
@@ -44,6 +45,7 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
 
   YtdlFormat? ytdlVideo;
   YtdlFormat? ytdlAudio;
+  YtdlQueryOutput? _androidYtdlOutput;
 
   final _showQueryInfo = ValueNotifier<bool>(false);
   final _queryFinished = ValueNotifier<bool>(false);
@@ -85,7 +87,14 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
   Future<void> _onQueryYtdl() async {
     _isQueryingYtdl.value = true;
     if (Platform.isAndroid) {
-      return;
+      final result = await YtDlpAndroid.getVideoInfo(
+        _urlController.text.trim(),
+      );
+      if (mounted) {
+        setState(() {
+          _androidYtdlOutput = result;
+        });
+      }
     } else {
       QueryYtdl(url: _urlController.text.trim()).sendSignalToRust();
     }
@@ -257,6 +266,7 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
         onDownload: _handleYtdlDownload,
         onVideoChanged: _onSelectYtdlVideo,
         onAudioChanged: _onSelectYtdlAudio,
+        directOutput: _androidYtdlOutput,
       );
     }
     return Column(

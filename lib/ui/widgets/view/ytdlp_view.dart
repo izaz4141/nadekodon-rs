@@ -12,6 +12,7 @@ class YtdlpView extends StatefulWidget {
   final void Function() onDownload;
   final ValueChanged<YtdlFormat?> onVideoChanged;
   final ValueChanged<YtdlFormat?> onAudioChanged;
+  final YtdlQueryOutput? directOutput;
 
   const YtdlpView({
     super.key,
@@ -20,6 +21,7 @@ class YtdlpView extends StatefulWidget {
     required this.onDownload,
     required this.onVideoChanged,
     required this.onAudioChanged,
+    this.directOutput,
   });
 
   @override
@@ -31,7 +33,19 @@ class _YtdlpView extends State<YtdlpView> {
   YtdlFormat? selectedAudio;
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.directOutput != null) {
+      widget.nameController.text = widget.directOutput!.name;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (widget.directOutput != null) {
+      return _buildView(widget.directOutput!);
+    }
+
     return StreamBuilder(
       stream: YtdlQueryOutput.rustSignalStream,
       builder: (context, snapshot) {
@@ -43,113 +57,116 @@ class _YtdlpView extends State<YtdlpView> {
         final ytdlOutput = signalPack.message;
         widget.nameController.text = ytdlOutput.name;
 
-        final colors = Theme.of(context).colorScheme;
-        final textTheme = Theme.of(context).textTheme;
+        return _buildView(ytdlOutput);
+      },
+    );
+  }
 
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (ytdlOutput.thumbnail != null)
-                    Expanded(
-                      flex: 2,
-                      child: SizedBox(
-                        height: 0,
-                        child: Image.network(
-                          ytdlOutput.thumbnail!,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              Container(
-                                color: colors.surfaceContainerHighest,
-                                child: Center(
-                                  child: Icon(
-                                    Icons.broken_image,
-                                    color: colors.onSurfaceVariant,
-                                  ),
-                                ),
-                              ),
+  Widget _buildView(YtdlQueryOutput ytdlOutput) {
+    final colors = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (ytdlOutput.thumbnail != null)
+                Expanded(
+                  flex: 2,
+                  child: SizedBox(
+                    height: 0,
+                    child: Image.network(
+                      ytdlOutput.thumbnail!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        color: colors.surfaceContainerHighest,
+                        child: Center(
+                          child: Icon(
+                            Icons.broken_image,
+                            color: colors.onSurfaceVariant,
+                          ),
                         ),
                       ),
                     ),
-                  const SizedBox(width: AppTheme.spaceMD),
-                  Expanded(
-                    flex: 3,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (ytdlOutput.videos.isNotEmpty)
-                          _buildFormatSelector(
-                            "Video",
-                            ytdlOutput.videos,
-                            selectedVideo,
-                            (format) {
-                              setState(() => selectedVideo = format);
-                              widget.onVideoChanged(format);
-                            },
-                          ),
-                        const SizedBox(height: AppTheme.spaceMD),
-                        if (ytdlOutput.audios.isNotEmpty)
-                          _buildFormatSelector(
-                            "Audio",
-                            ytdlOutput.audios,
-                            selectedAudio,
-                            (format) {
-                              setState(() => selectedAudio = format);
-                              widget.onAudioChanged(format);
-                            },
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppTheme.spaceMD),
-            TextField(
-              controller: widget.nameController,
-              onSubmitted: (_) => widget.onDownload(),
-              decoration: InputDecoration(
-                labelText: "Filename",
-                labelStyle: textTheme.bodyMedium,
-                floatingLabelStyle: textTheme.bodySmall?.copyWith(
-                  color: colors.primary,
-                ),
-                hintText: "No format needed",
-                hintStyle: textTheme.bodyMedium,
-                border: const OutlineInputBorder(
-                  borderRadius: BorderRadius.all(
-                    Radius.circular(AppTheme.radiusMD),
                   ),
                 ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: AppTheme.spaceSM,
-                  vertical: AppTheme.spaceSM,
-                ),
-                suffixIcon: ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: widget.nameController,
-                  builder: (context, value, child) {
-                    if (value.text.isEmpty) {
-                      return const SizedBox.shrink(); // Hide button if empty
-                    }
-                    return IconButton(
-                      icon: const Icon(Icons.clear),
-                      tooltip: "Clear",
-                      onPressed: () => widget.nameController.clear(),
-                    );
-                  },
+              const SizedBox(width: AppTheme.spaceMD),
+              Expanded(
+                flex: 3,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (ytdlOutput.videos.isNotEmpty)
+                      _buildFormatSelector(
+                        "Video",
+                        ytdlOutput.videos,
+                        selectedVideo,
+                        (format) {
+                          setState(() => selectedVideo = format);
+                          widget.onVideoChanged(format);
+                        },
+                      ),
+                    const SizedBox(height: AppTheme.spaceMD),
+                    if (ytdlOutput.audios.isNotEmpty)
+                      _buildFormatSelector(
+                        "Audio",
+                        ytdlOutput.audios,
+                        selectedAudio,
+                        (format) {
+                          setState(() => selectedAudio = format);
+                          widget.onAudioChanged(format);
+                        },
+                      ),
+                  ],
                 ),
               ),
-              style: textTheme.bodyMedium,
+            ],
+          ),
+        ),
+        const SizedBox(height: AppTheme.spaceMD),
+        TextField(
+          controller: widget.nameController,
+          onSubmitted: (_) => widget.onDownload(),
+          decoration: InputDecoration(
+            labelText: "Filename",
+            labelStyle: textTheme.bodyMedium,
+            floatingLabelStyle: textTheme.bodySmall?.copyWith(
+              color: colors.primary,
             ),
-            const SizedBox(height: AppTheme.spaceSM),
-            DirChoose(selectedDir: widget.selectedDir),
-          ],
-        );
-      },
+            hintText: "No format needed",
+            hintStyle: textTheme.bodyMedium,
+            border: const OutlineInputBorder(
+              borderRadius: BorderRadius.all(
+                Radius.circular(AppTheme.radiusMD),
+              ),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: AppTheme.spaceSM,
+              vertical: AppTheme.spaceSM,
+            ),
+            suffixIcon: ValueListenableBuilder<TextEditingValue>(
+              valueListenable: widget.nameController,
+              builder: (context, value, child) {
+                if (value.text.isEmpty) {
+                  return const SizedBox.shrink(); // Hide button if empty
+                }
+                return IconButton(
+                  icon: const Icon(Icons.clear),
+                  tooltip: "Clear",
+                  onPressed: () => widget.nameController.clear(),
+                );
+              },
+            ),
+          ),
+          style: textTheme.bodyMedium,
+        ),
+        const SizedBox(height: AppTheme.spaceSM),
+        DirChoose(selectedDir: widget.selectedDir),
+      ],
     );
   }
 
