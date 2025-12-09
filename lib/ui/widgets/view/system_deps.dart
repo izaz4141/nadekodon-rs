@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:nadekodon/theme/app_theme.dart';
 import 'package:nadekodon/ui/widgets/components/section_header.dart';
+import 'package:nadekodon/utils/ytdlp_android.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SystemDeps extends StatefulWidget {
@@ -25,18 +26,19 @@ class _SystemDepsState extends State<SystemDeps> {
 
   Future<void> _checkYtdlpVersion() async {
     try {
-      final result = await Process.run('yt-dlp', ['--version']);
-      if (result.exitCode == 0) {
-        if (!mounted) return;
-        setState(() {
-          _ytdlpVersion = result.stdout.toString().trim();
-        });
+      String? version;
+      if (Platform.isAndroid) {
+        version = await YtDlpAndroid.getYtdlpVersion();
       } else {
-        if (!mounted) return;
-        setState(() {
-          _ytdlpVersion = 'Not found';
-        });
+        final result = await Process.run('yt-dlp', ['--version']);
+        if (result.exitCode == 0) {
+          version = result.stdout.toString().trim();
+        }
       }
+      if (!mounted) return;
+      setState(() {
+        _ytdlpVersion = version ?? 'Not found';
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -114,31 +116,32 @@ class _SystemDepsState extends State<SystemDeps> {
                 launchUrl(Uri.parse('https://github.com/yt-dlp/yt-dlp')),
           ),
         ),
-        ListTile(
-          leading: Icon(
-            Icons.movie_outlined,
-            size: AppTheme.iconMD * AppTheme.iconScale(context),
-          ),
-          title: Text('ffmpeg', style: textTheme.bodyMedium),
-          subtitle: Text(
-            _ffmpegVersion == 'Not found' || _ffmpegVersion == 'Unknown'
-                ? 'Not found - yt-dlp downloads will not work'
-                : _ffmpegVersion,
-            style: textTheme.bodySmall?.copyWith(
-              color:
-                  _ffmpegVersion == 'Not found' || _ffmpegVersion == 'Unknown'
-                  ? Theme.of(context).colorScheme.error
-                  : null,
+        if (!Platform.isAndroid)
+          ListTile(
+            leading: Icon(
+              Icons.movie_outlined,
+              size: AppTheme.iconMD * AppTheme.iconScale(context),
+            ),
+            title: Text('ffmpeg', style: textTheme.bodyMedium),
+            subtitle: Text(
+              _ffmpegVersion == 'Not found' || _ffmpegVersion == 'Unknown'
+                  ? 'Not found - yt-dlp downloads will not work'
+                  : _ffmpegVersion,
+              style: textTheme.bodySmall?.copyWith(
+                color:
+                    _ffmpegVersion == 'Not found' || _ffmpegVersion == 'Unknown'
+                    ? Theme.of(context).colorScheme.error
+                    : null,
+              ),
+            ),
+            trailing: IconButton(
+              icon: const Icon(Icons.open_in_new),
+              iconSize: AppTheme.iconMD * AppTheme.iconScale(context),
+              tooltip: "Visit",
+              onPressed: () =>
+                  launchUrl(Uri.parse('https://github.com/FFmpeg/FFmpeg')),
             ),
           ),
-          trailing: IconButton(
-            icon: const Icon(Icons.open_in_new),
-            iconSize: AppTheme.iconMD * AppTheme.iconScale(context),
-            tooltip: "Visit",
-            onPressed: () =>
-                launchUrl(Uri.parse('https://github.com/FFmpeg/FFmpeg')),
-          ),
-        ),
       ],
     );
   }

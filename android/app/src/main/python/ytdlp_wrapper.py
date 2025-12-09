@@ -16,6 +16,12 @@ def run_ytdlp(url):
     except Exception as e:
         return json.dumps({'error': str(e)})
 
+def get_version():
+    try:
+        return json.dumps({'version': yt_dlp.version.__version__})
+    except Exception as e:
+        return json.dumps({'error': str(e)})
+
 def download_video(url, options_json, callback):
     try:
         options = json.loads(options_json)

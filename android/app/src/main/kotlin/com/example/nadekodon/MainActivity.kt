@@ -44,6 +44,22 @@ class MainActivity : FlutterActivity() {
                 } else {
                     result.error("INVALID_ARGUMENT", "URL is required", null)
                 }
+            } else if (call.method == "ytdlpGetVersion") {
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        val python = Python.getInstance()
+                        val ytdlpModule = python.getModule("ytdlp_wrapper")
+                        val jsonResult = ytdlpModule.callAttr("get_version").toString()
+                        
+                        withContext(Dispatchers.Main) {
+                            result.success(jsonResult)
+                        }
+                    } catch (e: Exception) {
+                        withContext(Dispatchers.Main) {
+                            result.error("PYTHON_ERROR", e.message, null)
+                        }
+                    }
+                }
             } else if (call.method == "ytdlpDownload") {
                 val url = call.argument<String>("url")
                 val options = call.argument<String>("options")

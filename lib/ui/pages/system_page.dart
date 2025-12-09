@@ -25,6 +25,7 @@ class SystemPage extends StatelessWidget {
           const SystemInfo(),
           const Divider(),
           const SystemDeps(),
+          SizedBox(height: 120 * AppTheme.heightScale(context)),
         ],
       ),
     );

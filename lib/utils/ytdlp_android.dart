@@ -9,6 +9,20 @@ class YtDlpAndroid {
     'id.glicole.nadekodon/ytdlp',
   );
 
+  static Future<String?> getYtdlpVersion() async {
+    try {
+      final String? result = await _channel.invokeMethod('ytdlpGetVersion');
+      if (result != null) {
+        final rawJson = jsonDecode(result);
+        return rawJson['version'] as String?;
+      }
+      return null;
+    } catch (e) {
+      log('Error getting yt-dlp version: $e', isError: true);
+      return null;
+    }
+  }
+
   static Future<YtdlQueryOutput?> getVideoInfo(String url) async {
     try {
       log('Running yt-dlp for $url via Chaquopy');
