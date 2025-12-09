@@ -62,69 +62,76 @@ class _YtdlpView extends State<YtdlpView> {
     final colors = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     widget.nameController.text = ytdlOutput.name;
+    final isDesktop = AppTheme.isDesktop(context);
+
+    Widget buildThumbnail() => Image.network(
+      ytdlOutput.thumbnail!,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) => Container(
+        color: colors.surfaceContainerHighest,
+        child: Center(
+          child: Icon(Icons.broken_image, color: colors.onSurfaceVariant),
+        ),
+      ),
+    );
+
+    Widget buildSelectors() => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (ytdlOutput.videos.isNotEmpty)
+          _buildFormatSelector("Video", ytdlOutput.videos, selectedVideo, (
+            format,
+          ) {
+            setState(() => selectedVideo = format);
+            widget.onVideoChanged(format);
+          }),
+        const SizedBox(height: AppTheme.spaceMD),
+        if (ytdlOutput.audios.isNotEmpty)
+          _buildFormatSelector("Audio", ytdlOutput.audios, selectedAudio, (
+            format,
+          ) {
+            setState(() => selectedAudio = format);
+            widget.onAudioChanged(format);
+          }),
+      ],
+    );
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        IntrinsicHeight(
-          child: Row(
+        if (isDesktop)
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (ytdlOutput.thumbnail != null) ...[
+                  Expanded(flex: 2, child: SizedBox(child: buildThumbnail())),
+                  SizedBox(
+                    width: AppTheme.spaceMD * AppTheme.spaceScale(context),
+                  ),
+                ],
+                Expanded(flex: 3, child: buildSelectors()),
+              ],
+            ),
+          )
+        else
+          Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (ytdlOutput.thumbnail != null)
-                Expanded(
-                  flex: 2,
-                  child: SizedBox(
-                    height: 0,
-                    child: Image.network(
-                      ytdlOutput.thumbnail!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        color: colors.surfaceContainerHighest,
-                        child: Center(
-                          child: Icon(
-                            Icons.broken_image,
-                            color: colors.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+              if (ytdlOutput.thumbnail != null) ...[
+                SizedBox(
+                  height: 5 * AppTheme.spaceXXL * AppTheme.spaceScale(context),
+                  child: buildThumbnail(),
                 ),
-              const SizedBox(width: AppTheme.spaceMD),
-              Expanded(
-                flex: 3,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (ytdlOutput.videos.isNotEmpty)
-                      _buildFormatSelector(
-                        "Video",
-                        ytdlOutput.videos,
-                        selectedVideo,
-                        (format) {
-                          setState(() => selectedVideo = format);
-                          widget.onVideoChanged(format);
-                        },
-                      ),
-                    const SizedBox(height: AppTheme.spaceMD),
-                    if (ytdlOutput.audios.isNotEmpty)
-                      _buildFormatSelector(
-                        "Audio",
-                        ytdlOutput.audios,
-                        selectedAudio,
-                        (format) {
-                          setState(() => selectedAudio = format);
-                          widget.onAudioChanged(format);
-                        },
-                      ),
-                  ],
+                SizedBox(
+                  height: AppTheme.spaceMD * AppTheme.spaceScale(context),
                 ),
-              ),
+              ],
+              buildSelectors(),
             ],
           ),
-        ),
-        const SizedBox(height: AppTheme.spaceMD),
+        SizedBox(height: AppTheme.spaceMD * AppTheme.spaceScale(context)),
         TextField(
           controller: widget.nameController,
           onSubmitted: (_) => widget.onDownload(),
@@ -141,9 +148,9 @@ class _YtdlpView extends State<YtdlpView> {
                 Radius.circular(AppTheme.radiusMD),
               ),
             ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: AppTheme.spaceSM,
-              vertical: AppTheme.spaceSM,
+            contentPadding: EdgeInsets.symmetric(
+              horizontal: AppTheme.spaceSM * AppTheme.spaceScale(context),
+              vertical: AppTheme.spaceSM * AppTheme.spaceScale(context),
             ),
             suffixIcon: ValueListenableBuilder<TextEditingValue>(
               valueListenable: widget.nameController,
@@ -161,7 +168,7 @@ class _YtdlpView extends State<YtdlpView> {
           ),
           style: textTheme.bodyMedium,
         ),
-        const SizedBox(height: AppTheme.spaceSM),
+        SizedBox(height: AppTheme.spaceSM * AppTheme.spaceScale(context)),
         DirChoose(selectedDir: widget.selectedDir),
       ],
     );
@@ -174,32 +181,70 @@ class _YtdlpView extends State<YtdlpView> {
     void Function(YtdlFormat?) onChanged,
   ) {
     final textTheme = Theme.of(context).textTheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: textTheme.titleMedium),
-        DropdownButton<YtdlFormat>(
-          value: selectedFormat,
-          isExpanded: true,
-          items: [
-            DropdownMenuItem<YtdlFormat>(
-              value: null,
-              child: Text("None", style: textTheme.bodyMedium),
-            ),
-            ...formats.map((format) {
-              return DropdownMenuItem<YtdlFormat>(
-                value: format,
-                child: Text(
-                  "${format.note} - ${format.ext} - ${format.vcodec != null && format.vcodec != 'none' ? format.vcodec : (format.acodec != null && format.acodec != 'none' ? format.acodec : '')} - ${format.filesize != null ? formatBytes(format.filesize!.toInt()) : 'N/A'}",
-                  overflow: TextOverflow.ellipsis,
-                  style: textTheme.bodyMedium,
+    final isDesktop = AppTheme.isDesktop(context);
+
+    if (isDesktop) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: textTheme.titleMedium),
+          DropdownButton<YtdlFormat>(
+            value: selectedFormat,
+            isExpanded: true,
+            items: [
+              DropdownMenuItem<YtdlFormat>(
+                value: null,
+                child: Text("None", style: textTheme.bodyMedium),
+              ),
+              ...formats.map((format) {
+                return DropdownMenuItem<YtdlFormat>(
+                  value: format,
+                  child: Text(
+                    "${format.note} - ${format.ext} - ${format.vcodec != null && format.vcodec != 'none' ? format.vcodec : (format.acodec != null && format.acodec != 'none' ? format.acodec : '')} - ${format.filesize != null ? formatBytes(format.filesize!.toInt()) : 'N/A'}",
+                    overflow: TextOverflow.ellipsis,
+                    style: textTheme.bodyMedium,
+                  ),
+                );
+              }),
+            ],
+            onChanged: onChanged,
+          ),
+        ],
+      );
+    } else {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            flex: 1,
+            child: Text("$title:", style: textTheme.titleSmall),
+          ),
+          Expanded(
+            flex: 5,
+            child: DropdownButton<YtdlFormat>(
+              value: selectedFormat,
+              isExpanded: true,
+              items: [
+                DropdownMenuItem<YtdlFormat>(
+                  value: null,
+                  child: Text("None", style: textTheme.bodyMedium),
                 ),
-              );
-            }),
-          ],
-          onChanged: onChanged,
-        ),
-      ],
-    );
+                ...formats.map((format) {
+                  return DropdownMenuItem<YtdlFormat>(
+                    value: format,
+                    child: Text(
+                      "${format.note} - ${format.ext} - ${format.vcodec != null && format.vcodec != 'none' ? format.vcodec : (format.acodec != null && format.acodec != 'none' ? format.acodec : '')} - ${format.filesize != null ? formatBytes(format.filesize!.toInt()) : 'N/A'}",
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.bodyMedium,
+                    ),
+                  );
+                }),
+              ],
+              onChanged: onChanged,
+            ),
+          ),
+        ],
+      );
+    }
   }
 }
