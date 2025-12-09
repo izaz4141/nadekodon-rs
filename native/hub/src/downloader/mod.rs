@@ -8,17 +8,18 @@ use std::{
 use uuid::Uuid;
 
 use crate::utils::{
-    helper::calc_speed,
+    helper::{calc_speed, fabricate_speed_history},
     types::{DMSettings, DownloadInfo, DownloadState, DownloadType},
     url::get_url_info,
 };
 use main::DownloadManager;
 
 use crate::signals::{
-    CancelDownload, DeleteDownload, DoDownload, DownloadDetails, DownloadGlance, DownloadList,
+    CancelDownload, DeleteDownload, DownloadDetails, DownloadGlance, DownloadList,
     GetDownloadDetails, GetDownloadList, InitTorrentPersistence, PartInfo, PauseDownload, QueryUrl,
     ResumeDownload, UrlQueryOutput,
 };
+use crate::signals::{DoDownload, ReportDownloadProgress, RequestAddExternalDownload};
 use crate::utils::logger;
 use rinf::{DartSignal, RustSignal};
 
@@ -99,6 +100,41 @@ async fn wait_for_download(manager: Arc<DownloadManager>, id: Uuid) -> Result<()
             Err(e) => return Err(e.to_string()),
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+}
+
+pub async fn spawn_progress_listener(manager: Arc<DownloadManager>) {
+    let receiver = ReportDownloadProgress::get_dart_signal_receiver();
+    while let Some(signal_pack) = receiver.recv().await {
+        let message = signal_pack.message;
+        if let Ok(uuid) = Uuid::parse_str(&message.id) {
+            if let Ok(mut info) = manager.info(uuid).await {
+                info.downloaded = message.downloaded;
+                info.total_size = message.total;
+                info.history = fabricate_speed_history(message.downloaded, message.speed);
+                info.state = match message.state.as_str() {
+                    "downloading" => DownloadState::Running,
+                    "finished" => DownloadState::Completed,
+                    "error" => DownloadState::Error("Download failed".to_string()),
+                    _ => DownloadState::Running,
+                };
+
+                // Update info
+                manager.update_download_info(info).await;
+            }
+        }
+    }
+}
+
+pub async fn insert_download_worker(manager: Arc<DownloadManager>) {
+    let receiver = RequestAddExternalDownload::get_dart_signal_receiver();
+    while let Some(signal_pack) = receiver.recv().await {
+        let message = signal_pack.message;
+        if let Ok(uuid) = Uuid::parse_str(&message.id) {
+            let _ = manager
+                .add_external_download(uuid, message.url, std::path::PathBuf::from(message.dest))
+                .await;
+        }
     }
 }
 

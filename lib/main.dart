@@ -16,6 +16,8 @@ import 'utils/permission_helper.dart';
 import 'utils/updater.dart';
 import 'utils/ws_status_service.dart';
 
+import 'utils/ytdlp_android.dart';
+
 final _trayListener = _TrayListener();
 final _windowListener = _WindowListener();
 
@@ -38,17 +40,15 @@ Future<void> main() async {
       InitDatabase(path: dbPath).sendSignalToRust();
 
       NotificationService().startListening();
-      await checkAndRequestPermission();
-
-      if (!Platform.isAndroid) {
+      if (Platform.isAndroid) {
+        YtDlpAndroid.init();
+        await checkAndRequestPermission();
+      } else {
         StartServer(
           port: SettingsManager.serverPort.value,
           apiKey: SettingsManager.serverApiKey.value,
         ).sendSignalToRust();
         WebsocketStatusService.init();
-      }
-
-      if (!Platform.isAndroid && !Platform.isIOS && !Platform.isFuchsia) {
         await windowManager.ensureInitialized();
         await windowManager.setPreventClose(true);
         const windowOptions = WindowOptions(

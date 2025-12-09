@@ -35,9 +35,6 @@ class _YtdlpView extends State<YtdlpView> {
   @override
   void initState() {
     super.initState();
-    if (widget.directOutput != null) {
-      widget.nameController.text = widget.directOutput!.name;
-    }
   }
 
   @override
@@ -55,7 +52,6 @@ class _YtdlpView extends State<YtdlpView> {
         }
 
         final ytdlOutput = signalPack.message;
-        widget.nameController.text = ytdlOutput.name;
 
         return _buildView(ytdlOutput);
       },
@@ -65,6 +61,7 @@ class _YtdlpView extends State<YtdlpView> {
   Widget _buildView(YtdlQueryOutput ytdlOutput) {
     final colors = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
+    widget.nameController.text = ytdlOutput.name;
 
     return Column(
       mainAxisSize: MainAxisSize.min,

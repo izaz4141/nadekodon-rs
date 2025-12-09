@@ -1534,6 +1534,29 @@ impl DownloadManager {
         Ok(id)
     }
 
+    pub async fn add_external_download(&self, id: Uuid, url: String, dest: PathBuf) -> Result<()> {
+        let worker = DownloadWorker::new(
+            id,
+            self.client.clone(),
+            self.settings.clone(),
+            url,
+            dest,
+            self.sender.clone(),
+            self.torrent_session.clone(),
+        )
+        .await;
+
+        {
+            let mut info = worker.info.lock().await;
+            info.state = DownloadState::Running;
+            info.download_type = DownloadType::YTDLP;
+        }
+
+        self.workers.lock().await.insert(id, worker);
+        // Do NOT call process_queue or start, as this is managed externally
+        Ok(())
+    }
+
     pub async fn start(&self, id: Uuid) -> Result<()> {
         let worker_opt = { self.workers.lock().await.get(&id).cloned() };
         let worker = match worker_opt {
@@ -1571,10 +1594,25 @@ impl DownloadManager {
         }
     }
 
+    pub async fn update_download_info(&self, info: DownloadInfo) {
+        let workers = self.workers.lock().await;
+        if let Some(worker) = workers.get(&info.id) {
+            let mut worker_info = worker.info.lock().await;
+            *worker_info = info;
+        }
+    }
+
     pub async fn pause(&self, id: Uuid) -> Result<()> {
         let w = { self.workers.lock().await.get(&id).cloned() };
         match w {
             Some(worker) => {
+                {
+                    let info = worker.info.lock().await;
+                    if cfg!(target_os = "android") && info.download_type == DownloadType::YTDLP {
+                        return Ok(());
+                    }
+                }
+
                 worker.pause().await?;
                 if self.active.lock().await.remove(&id) {
                     if self.concurrency.load(Ordering::SeqCst) > 0 {
@@ -1614,6 +1652,13 @@ impl DownloadManager {
         let w = { self.workers.lock().await.get(&id).cloned() };
         match w {
             Some(worker) => {
+                {
+                    let info = worker.info.lock().await;
+                    if cfg!(target_os = "android") && info.download_type == DownloadType::YTDLP {
+                        return Ok(());
+                    }
+                }
+
                 worker.cancel().await?;
                 self.active.lock().await.remove(&id);
                 let conc = self.concurrency.load(Ordering::SeqCst).clone();

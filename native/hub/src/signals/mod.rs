@@ -189,3 +189,30 @@ pub struct RequestNewApiKey {}
 pub struct NewApiKey {
     pub key: String,
 }
+
+#[derive(Deserialize, DartSignal)]
+pub struct ReportDownloadProgress {
+    pub id: String,
+    pub downloaded: u64,
+    pub total: Option<u64>,
+    pub speed: u64,
+    pub state: String,
+}
+
+#[derive(Deserialize, DartSignal)]
+pub struct RequestAddExternalDownload {
+    pub id: String,
+    pub url: String,
+    pub dest: String,
+}
+
+#[derive(Deserialize, DartSignal)]
+pub struct RequestNewUuid {
+    pub request_id: String,
+}
+
+#[derive(Serialize, RustSignal)]
+pub struct ReportNewUuid {
+    pub request_id: String,
+    pub new_uuid: String,
+}

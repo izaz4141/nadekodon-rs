@@ -84,6 +84,19 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
     });
   }
 
+  Future<String> _getUuidFromRust() async {
+    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+    RequestNewUuid(requestId: requestId).sendSignalToRust();
+
+    await for (final signal in ReportNewUuid.rustSignalStream) {
+      final message = signal.message;
+      if (message.requestId == requestId) {
+        return message.newUuid;
+      }
+    }
+    throw Exception("Failed to get UUID from Rust");
+  }
+
   Future<void> _onQueryYtdl() async {
     _isQueryingYtdl.value = true;
     if (Platform.isAndroid) {
@@ -193,13 +206,42 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
 
     if (!mounted) return;
     Navigator.pop(context);
-    DoDownload(
-      url: null,
-      dest: "${_selectedDir.value}/${_nameController.text}",
-      videoFormat: vFormat,
-      audioFormat: aFormat,
-      isYtdl: true,
-    ).sendSignalToRust();
+
+    if (Platform.isAndroid) {
+      final id = await _getUuidFromRust();
+      final url = _urlController.text.trim();
+
+      // Notify Rust to add the download entry
+      RequestAddExternalDownload(
+        id: id,
+        url: url,
+        dest: destPath,
+      ).sendSignalToRust();
+
+      // Construct options for yt-dlp
+      final options = <String, dynamic>{'outtmpl': destPath};
+
+      if (vFormat != null) {
+        options['format'] = vFormat.formatId;
+        if (aFormat != null) {
+          options['format'] = "${vFormat.formatId}+${aFormat.formatId}";
+        }
+      } else if (aFormat != null) {
+        options['format'] = aFormat.formatId;
+      }
+
+      // Start download via Python
+      YtDlpAndroid.downloadVideo(url, id, options);
+    } else {
+      DoDownload(
+        url: null,
+        dest: "${_selectedDir.value}/${_nameController.text}",
+        videoFormat: vFormat,
+        audioFormat: aFormat,
+        isYtdl: true,
+      ).sendSignalToRust();
+    }
+    if (!mounted) return;
     AppSnackBar.show(context, "Added ytdl download");
   }
 

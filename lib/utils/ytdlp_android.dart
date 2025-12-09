@@ -33,6 +33,57 @@ class YtDlpAndroid {
     }
   }
 
+  static void init() {
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'onProgress') {
+        try {
+          final args = call.arguments as Map;
+          final id = args['id'] as String;
+          final dataStr = args['data'] as String;
+          final data = jsonDecode(dataStr);
+
+          final downloaded = (data['downloaded_bytes'] as num?)?.toInt() ?? 0;
+          final total = (data['total_bytes'] as num?)?.toInt();
+          final speed = (data['speed'] as num?)?.toInt() ?? 0;
+
+          ReportDownloadProgress(
+            id: id,
+            downloaded: Uint64(BigInt.from(downloaded)),
+            total: total != null ? Uint64(BigInt.from(total)) : null,
+            speed: Uint64(BigInt.from(speed)),
+            state: data['status'] ?? 'unknown',
+          ).sendSignalToRust();
+        } catch (e) {
+          log('Error processing progress: $e', isError: true);
+        }
+      }
+    });
+  }
+
+  static Future<void> downloadVideo(
+    String url,
+    String id,
+    Map<String, dynamic> options,
+  ) async {
+    try {
+      await _channel.invokeMethod('ytdlpDownload', {
+        'url': url,
+        'id': id,
+        'options': jsonEncode(options),
+      });
+    } catch (e) {
+      log('Error starting download: $e', isError: true);
+      // Report error to Rust
+      ReportDownloadProgress(
+        id: id,
+        downloaded: Uint64(BigInt.from(0)),
+        total: null,
+        speed: Uint64(BigInt.from(0)),
+        state: 'error',
+      ).sendSignalToRust();
+    }
+  }
+
   static YtdlQueryOutput _mapToYtdlQueryOutput(Map<String, dynamic> raw) {
     if (raw.containsKey('error')) {
       return YtdlQueryOutput(
