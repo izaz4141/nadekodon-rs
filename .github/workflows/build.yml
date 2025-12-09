@@ -321,6 +321,13 @@ jobs:
           echo "title=${TITLE}" >> $GITHUB_OUTPUT
           echo "prerelease=${IS_PRERELEASE}" >> $GITHUB_OUTPUT
 
+      - name: Delete existing nightly release
+        if: needs.setup.outputs.is_nightly == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete nightly --cleanup-tag -y || true
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
