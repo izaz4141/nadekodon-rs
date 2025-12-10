@@ -100,7 +100,7 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
   Future<void> _onQueryYtdl() async {
     _isQueryingYtdl.value = true;
     if (Platform.isAndroid) {
-      final result = await YtDlpAndroid.getVideoInfo(
+      final result = await YtDlpAndroid.ytdlpExtractInfo(
         _urlController.text.trim(),
       );
       if (mounted) {

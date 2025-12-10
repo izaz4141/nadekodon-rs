@@ -9,44 +9,6 @@ class YtDlpAndroid {
     'id.glicole.nadekodon/ytdlp',
   );
 
-  static Future<String?> getYtdlpVersion() async {
-    try {
-      final String? result = await _channel.invokeMethod('ytdlpGetVersion');
-      if (result != null) {
-        final rawJson = jsonDecode(result);
-        return rawJson['version'] as String?;
-      }
-      return null;
-    } catch (e) {
-      log('Error getting yt-dlp version: $e', isError: true);
-      return null;
-    }
-  }
-
-  static Future<YtdlQueryOutput?> getVideoInfo(String url) async {
-    try {
-      log('Running yt-dlp for $url via Chaquopy');
-
-      final String? result = await _channel.invokeMethod('ytdlpExtractInfo', {
-        'url': url,
-      });
-
-      if (result != null) {
-        final rawJson = jsonDecode(result);
-        return _mapToYtdlQueryOutput(rawJson);
-      } else {
-        log('Output from Chaquopy was null', isError: true);
-        return null;
-      }
-    } on PlatformException catch (e) {
-      log('Error running yt-dlp via Chaquopy: ${e.message}', isError: true);
-      return null;
-    } catch (e) {
-      log('Unexpected error running yt-dlp: $e', isError: true);
-      return null;
-    }
-  }
-
   static void init() {
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'onProgress') {
@@ -74,17 +36,62 @@ class YtDlpAndroid {
     });
   }
 
+  static Future<String?> getYtdlpVersion() async {
+    try {
+      final String? result = await _channel.invokeMethod('ytdlpGetVersion');
+      if (result != null) {
+        final rawJson = jsonDecode(result);
+        return rawJson['version'] as String?;
+      }
+      return null;
+    } catch (e) {
+      log('Error getting yt-dlp version: $e', isError: true);
+      return null;
+    }
+  }
+
+  static Future<YtdlQueryOutput?> ytdlpExtractInfo(String url) async {
+    try {
+      log('Running yt-dlp for $url via Chaquopy');
+
+      final String? result = await _channel.invokeMethod('ytdlpExtractInfo', {
+        'url': url,
+      });
+
+      if (result != null) {
+        final rawJson = jsonDecode(result);
+        return _mapToYtdlQueryOutput(rawJson);
+      } else {
+        log('Output from Chaquopy was null', isError: true);
+        return null;
+      }
+    } on PlatformException catch (e) {
+      log('Error running yt-dlp via Chaquopy: ${e.message}', isError: true);
+      return null;
+    } catch (e) {
+      log('Unexpected error running yt-dlp: $e', isError: true);
+      return null;
+    }
+  }
+
   static Future<void> downloadVideo(
     String url,
     String id,
     Map<String, dynamic> options,
   ) async {
     try {
-      await _channel.invokeMethod('ytdlpDownload', {
+      final String? result = await _channel.invokeMethod('ytdlpDownload', {
         'url': url,
         'id': id,
         'options': jsonEncode(options),
       });
+
+      if (result != null) {
+        final response = jsonDecode(result);
+        if (response['status'] == 'error' || response.containsKey('error')) {
+          throw Exception(response['error'] ?? 'Unknown error from yt-dlp');
+        }
+      }
     } catch (e) {
       log('Error starting download: $e', isError: true);
       // Report error to Rust
