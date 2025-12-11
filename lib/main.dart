@@ -15,8 +15,7 @@ import 'utils/logger.dart';
 import 'utils/permission_helper.dart';
 import 'utils/updater.dart';
 import 'utils/ws_status_service.dart';
-
-import 'utils/ytdlp_android.dart';
+import 'utils/ffmpeg_service.dart';
 
 final _trayListener = _TrayListener();
 final _windowListener = _WindowListener();
@@ -41,7 +40,7 @@ Future<void> main() async {
 
       NotificationService().startListening();
       if (Platform.isAndroid) {
-        YtDlpAndroid.init();
+        FfmpegService.startListening();
         await checkAndRequestPermission();
       } else {
         StartServer(

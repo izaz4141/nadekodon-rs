@@ -8,20 +8,137 @@ use std::{
 use uuid::Uuid;
 
 use crate::utils::{
-    helper::{calc_speed, fabricate_speed_history},
+    helper::calc_speed,
     types::{DMSettings, DownloadInfo, DownloadState, DownloadType},
     url::get_url_info,
 };
 use main::DownloadManager;
 
 use crate::signals::{
-    CancelDownload, DeleteDownload, DownloadDetails, DownloadGlance, DownloadList,
-    GetDownloadDetails, GetDownloadList, InitTorrentPersistence, PartInfo, PauseDownload, QueryUrl,
-    ResumeDownload, UrlQueryOutput,
+    CancelDownload, DeleteDownload, DoDownload, DownloadDetails, DownloadGlance, DownloadList,
+    FfmpegResult, GetDownloadDetails, GetDownloadList, InitTorrentPersistence, PartInfo,
+    PauseDownload, ResumeDownload, QueryUrl, UrlQueryOutput, RequestFfmpeg,
 };
-use crate::signals::{DoDownload, ReportDownloadProgress, RequestAddExternalDownload};
 use crate::utils::logger;
 use rinf::{DartSignal, RustSignal};
+use std::collections::HashMap;
+use tokio::sync::oneshot;
+
+static FFMPEG_WAITERS: std::sync::OnceLock<
+    std::sync::Mutex<HashMap<String, oneshot::Sender<FfmpegResult>>>,
+> = std::sync::OnceLock::new();
+
+pub async fn handle_ffmpeg_results() {
+    let receiver = FfmpegResult::get_dart_signal_receiver();
+    while let Some(signal_pack) = receiver.recv().await {
+        let result = signal_pack.message;
+        let waiters_lock = FFMPEG_WAITERS.get_or_init(|| std::sync::Mutex::new(HashMap::new()));
+        if let Ok(mut waiters) = waiters_lock.lock() {
+            if let Some(sender) = waiters.remove(&result.id) {
+                let _ = sender.send(result);
+            }
+        }
+    }
+}
+
+pub async fn perform_ffmpeg_request_android(args: Vec<String>) -> Result<bool, String> {
+    let id = Uuid::new_v4().to_string();
+    let (tx, rx) = oneshot::channel();
+
+    {
+        let waiters_lock = FFMPEG_WAITERS.get_or_init(|| std::sync::Mutex::new(HashMap::new()));
+        if let Ok(mut waiters) = waiters_lock.lock() {
+            waiters.insert(id.clone(), tx);
+        }
+    }
+
+    RequestFfmpeg {
+        id: id.clone(),
+        args,
+    }
+    .send_signal_to_dart();
+
+    match rx.await {
+        Ok(result) => {
+            if result.success {
+                Ok(true)
+            } else {
+                Err(result.log)
+            }
+        }
+        Err(e) => Err(format!("Failed to receive ffmpeg result: {:?}", e)),
+    }
+}
+
+async fn handle_merge_success(
+    manager: &Arc<DownloadManager>,
+    video_id: Option<Uuid>,
+    audio_id: Option<Uuid>,
+    dest: &std::path::PathBuf,
+    url: &Option<String>,
+    video_dest: Option<&std::path::PathBuf>,
+    audio_dest: Option<&std::path::PathBuf>,
+) {
+    let mut total_size = 0;
+    if let Some(vid) = video_id {
+        if let Ok(info) = manager.info(vid).await {
+            total_size += info.downloaded;
+        }
+        let _ = manager.delete_worker(vid, true).await;
+    }
+    if let Some(aid) = audio_id {
+        if let Ok(info) = manager.info(aid).await {
+            total_size += info.downloaded;
+        }
+        let _ = manager.delete_worker(aid, true).await;
+    }
+
+    let final_info = DownloadInfo {
+        id: Uuid::new_v4(),
+        url: url.clone().unwrap_or_default(),
+        dest: dest.clone(),
+        total_size: Some(total_size),
+        downloaded: total_size,
+        uploaded: 0,
+        uspeed: None,
+        state: DownloadState::Completed,
+        history: Vec::new(),
+        parts: Vec::new(),
+        added_at: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64,
+        updated_at: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64,
+        download_type: DownloadType::YTDLP,
+        torrent_hash: None,
+    };
+
+    manager.load_snapshot(vec![final_info]).await;
+
+    if let Some(v_path) = video_dest {
+        let _ = tokio::fs::remove_file(v_path).await;
+    }
+    if let Some(a_path) = audio_dest {
+        let _ = tokio::fs::remove_file(a_path).await;
+    }
+}
+
+async fn wait_for_download(manager: Arc<DownloadManager>, id: Uuid) -> Result<(), String> {
+    loop {
+        match manager.info(id).await {
+            Ok(info) => match info.state {
+                DownloadState::Completed => return Ok(()),
+                DownloadState::Error(e) => return Err(e),
+                _ => (),
+            },
+            Err(e) => return Err(e.to_string()),
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+}
 
 /// Function to spawn the single global DownloadManager at startup
 pub async fn start_download_manager(client: Client) -> Arc<DownloadManager> {
@@ -85,55 +202,6 @@ pub async fn query_url_info(client: Client) {
                 }
                 .send_signal_to_dart();
             }
-        }
-    }
-}
-
-async fn wait_for_download(manager: Arc<DownloadManager>, id: Uuid) -> Result<(), String> {
-    loop {
-        match manager.info(id).await {
-            Ok(info) => match info.state {
-                DownloadState::Completed => return Ok(()),
-                DownloadState::Error(e) => return Err(e),
-                _ => (),
-            },
-            Err(e) => return Err(e.to_string()),
-        }
-        tokio::time::sleep(Duration::from_secs(1)).await;
-    }
-}
-
-pub async fn spawn_progress_listener(manager: Arc<DownloadManager>) {
-    let receiver = ReportDownloadProgress::get_dart_signal_receiver();
-    while let Some(signal_pack) = receiver.recv().await {
-        let message = signal_pack.message;
-        if let Ok(uuid) = Uuid::parse_str(&message.id) {
-            if let Ok(mut info) = manager.info(uuid).await {
-                info.downloaded = message.downloaded;
-                info.total_size = message.total;
-                info.history = fabricate_speed_history(message.downloaded, message.speed);
-                info.state = match message.state.as_str() {
-                    "downloading" => DownloadState::Running,
-                    "finished" => DownloadState::Completed,
-                    "error" => DownloadState::Error("Download failed".to_string()),
-                    _ => DownloadState::Running,
-                };
-
-                // Update info
-                manager.update_download_info(info).await;
-            }
-        }
-    }
-}
-
-pub async fn insert_download_worker(manager: Arc<DownloadManager>) {
-    let receiver = RequestAddExternalDownload::get_dart_signal_receiver();
-    while let Some(signal_pack) = receiver.recv().await {
-        let message = signal_pack.message;
-        if let Ok(uuid) = Uuid::parse_str(&message.id) {
-            let _ = manager
-                .add_external_download(uuid, message.url, std::path::PathBuf::from(message.dest))
-                .await;
         }
     }
 }
@@ -230,93 +298,110 @@ pub async fn spawn_download_worker(manager: Arc<DownloadManager>) {
 
                 if video_id.is_some() && audio_id.is_some() {
                     logger::debug("Downloads complete, starting merge");
-                    let mut command = tokio::process::Command::new("ffmpeg");
-                    if let Some(v_path) = video_dest.as_ref() {
-                        command.arg("-i").arg(v_path);
-                    }
-                    if let Some(a_path) = audio_dest.as_ref() {
-                        command.arg("-i").arg(a_path);
-                    }
 
-                    let is_webm = dest
-                        .extension()
-                        .and_then(|ext| ext.to_str())
-                        .map(|ext| ext.eq_ignore_ascii_case("webm"))
-                        .unwrap_or(false);
+                    if cfg!(target_os = "android") {
+                        let mut args = Vec::new();
+                        if let Some(v_path) = video_dest.as_ref() {
+                            args.push("-i".to_string());
+                            args.push(v_path.to_string_lossy().to_string());
+                        }
+                        if let Some(a_path) = audio_dest.as_ref() {
+                            args.push("-i".to_string());
+                            args.push(a_path.to_string_lossy().to_string());
+                        }
 
-                    if is_webm {
-                        command.arg("-c:v").arg("copy");
-                        command.arg("-c:a").arg("libopus");
-                    } else {
-                        command.arg("-c").arg("copy");
-                    }
+                        let is_webm = dest
+                            .extension()
+                            .and_then(|ext| ext.to_str())
+                            .map(|ext| ext.eq_ignore_ascii_case("webm"))
+                            .unwrap_or(false);
 
-                    command.arg("-map").arg("0:v:0");
-                    command.arg("-map").arg("1:a:0");
-                    command.arg("-y");
-                    command.arg(&dest);
+                        if is_webm {
+                            args.push("-c:v".to_string());
+                            args.push("copy".to_string());
+                            args.push("-c:a".to_string());
+                            args.push("libopus".to_string());
+                        } else {
+                            args.push("-c".to_string());
+                            args.push("copy".to_string());
+                        }
 
-                    match command.output().await {
-                        Ok(output) => {
-                            if output.status.success() {
-                                logger::debug("Merge successful");
+                        args.push("-map".to_string());
+                        args.push("0:v:0".to_string());
+                        args.push("-map".to_string());
+                        args.push("1:a:0".to_string());
+                        args.push("-y".to_string());
+                        args.push(dest.to_string_lossy().to_string());
 
-                                let mut total_size = 0;
-                                if let Some(vid) = video_id {
-                                    if let Ok(info) = manager.info(vid).await {
-                                        total_size += info.downloaded;
-                                    }
-                                    let _ = manager.delete_worker(vid, true).await;
-                                }
-                                if let Some(aid) = audio_id {
-                                    if let Ok(info) = manager.info(aid).await {
-                                        total_size += info.downloaded;
-                                    }
-                                    let _ = manager.delete_worker(aid, true).await;
-                                }
-
-                                let final_info = DownloadInfo {
-                                    id: Uuid::new_v4(),
-                                    url: data.url.clone().unwrap_or_default(),
-                                    dest: dest.clone(),
-                                    total_size: Some(total_size),
-                                    downloaded: total_size,
-                                    uploaded: 0,
-                                    uspeed: None,
-                                    state: DownloadState::Completed,
-                                    history: Vec::new(),
-                                    parts: Vec::new(),
-                                    added_at: SystemTime::now()
-                                        .duration_since(UNIX_EPOCH)
-                                        .unwrap()
-                                        .as_millis()
-                                        as u64,
-                                    updated_at: SystemTime::now()
-                                        .duration_since(UNIX_EPOCH)
-                                        .unwrap()
-                                        .as_millis()
-                                        as u64,
-                                    download_type: DownloadType::YTDLP,
-                                    torrent_hash: None,
-                                };
-
-                                manager.load_snapshot(vec![final_info]).await;
-
-                                if let Some(v_path) = video_dest.as_ref() {
-                                    let _ = tokio::fs::remove_file(v_path).await;
-                                }
-                                if let Some(a_path) = audio_dest.as_ref() {
-                                    let _ = tokio::fs::remove_file(a_path).await;
-                                }
-                            } else {
-                                logger::error(&format!(
-                                    "ffmpeg error: {}",
-                                    String::from_utf8_lossy(&output.stderr)
-                                ));
+                        match perform_ffmpeg_request_android(args).await {
+                            Ok(_) => {
+                                logger::debug("Merge successful (Android)");
+                                handle_merge_success(
+                                    &manager,
+                                    video_id,
+                                    audio_id,
+                                    &dest,
+                                    &data.url,
+                                    video_dest.as_ref(),
+                                    audio_dest.as_ref(),
+                                )
+                                .await;
+                            }
+                            Err(e) => {
+                                logger::error(&format!("ffmpeg error (Android): {}", e));
                             }
                         }
-                        Err(e) => {
-                            logger::error(&format!("ffmpeg execution failed: {}", e));
+                    } else {
+                        let mut command = tokio::process::Command::new("ffmpeg");
+                        if let Some(v_path) = video_dest.as_ref() {
+                            command.arg("-i").arg(v_path);
+                        }
+                        if let Some(a_path) = audio_dest.as_ref() {
+                            command.arg("-i").arg(a_path);
+                        }
+
+                        let is_webm = dest
+                            .extension()
+                            .and_then(|ext| ext.to_str())
+                            .map(|ext| ext.eq_ignore_ascii_case("webm"))
+                            .unwrap_or(false);
+
+                        if is_webm {
+                            command.arg("-c:v").arg("copy");
+                            command.arg("-c:a").arg("libopus");
+                        } else {
+                            command.arg("-c").arg("copy");
+                        }
+
+                        command.arg("-map").arg("0:v:0");
+                        command.arg("-map").arg("1:a:0");
+                        command.arg("-y");
+                        command.arg(&dest);
+
+                        match command.output().await {
+                            Ok(output) => {
+                                if output.status.success() {
+                                    logger::debug("Merge successful");
+                                    handle_merge_success(
+                                        &manager,
+                                        video_id,
+                                        audio_id,
+                                        &dest,
+                                        &data.url,
+                                        video_dest.as_ref(),
+                                        audio_dest.as_ref(),
+                                    )
+                                    .await;
+                                } else {
+                                    logger::error(&format!(
+                                        "ffmpeg error: {}",
+                                        String::from_utf8_lossy(&output.stderr)
+                                    ));
+                                }
+                            }
+                            Err(e) => {
+                                logger::error(&format!("ffmpeg execution failed: {}", e));
+                            }
                         }
                     }
                 }

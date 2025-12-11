@@ -60,39 +60,6 @@ class MainActivity : FlutterActivity() {
                         }
                     }
                 }
-            } else if (call.method == "ytdlpDownload") {
-                val url = call.argument<String>("url")
-                val options = call.argument<String>("options")
-                val id = call.argument<String>("id")
-
-                if (url != null && options != null && id != null) {
-                    CoroutineScope(Dispatchers.IO).launch {
-                        try {
-                            val python = Python.getInstance()
-                            val ytdlpModule = python.getModule("ytdlp_wrapper")
-                            
-                            val callback = object {
-                                fun onProgress(jsonProgress: String) {
-                                    CoroutineScope(Dispatchers.Main).launch {
-                                        channel.invokeMethod("onProgress", mapOf("id" to id, "data" to jsonProgress))
-                                    }
-                                }
-                            }
-
-                            val jsonResult = ytdlpModule.callAttr("download_video", url, options, callback).toString()
-                            
-                            withContext(Dispatchers.Main) {
-                                result.success(jsonResult)
-                            }
-                        } catch (e: Exception) {
-                            withContext(Dispatchers.Main) {
-                                result.error("PYTHON_ERROR", e.message, null)
-                            }
-                        }
-                    }
-                } else {
-                    result.error("INVALID_ARGUMENT", "URL, options, and ID are required", null)
-                }
             } else {
                 result.notImplemented()
             }

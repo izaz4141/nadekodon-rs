@@ -784,27 +784,46 @@ impl DownloadWorker {
         }
         list_file.flush().await?;
 
-        let mut command = tokio::process::Command::new("ffmpeg");
-        command
-            .arg("-f")
-            .arg("concat")
-            .arg("-safe")
-            .arg("0")
-            .arg("-i")
-            .arg(&list_path)
-            .arg("-c")
-            .arg("copy")
-            .arg("-y")
-            .arg(dest);
+        if cfg!(target_os = "android") {
+            let mut args = Vec::new();
+            args.push("-f".to_string());
+            args.push("concat".to_string());
+            args.push("-safe".to_string());
+            args.push("0".to_string());
+            args.push("-i".to_string());
+            args.push(list_path.to_string_lossy().to_string());
+            args.push("-c".to_string());
+            args.push("copy".to_string());
+            args.push("-y".to_string());
+            args.push(dest.to_string_lossy().to_string());
 
-        match command.output().await {
-            Ok(output) => {
-                if !output.status.success() {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    return Err(anyhow::anyhow!("ffmpeg failed: {}", stderr));
-                }
+            match crate::downloader::perform_ffmpeg_request_android(args).await {
+                Ok(_) => {}
+                Err(e) => return Err(anyhow::anyhow!("ffmpeg execution failed (Android): {}", e)),
             }
-            Err(e) => return Err(anyhow::anyhow!("ffmpeg execution failed: {}", e)),
+        } else {
+            let mut command = tokio::process::Command::new("ffmpeg");
+            command
+                .arg("-f")
+                .arg("concat")
+                .arg("-safe")
+                .arg("0")
+                .arg("-i")
+                .arg(&list_path)
+                .arg("-c")
+                .arg("copy")
+                .arg("-y")
+                .arg(dest);
+
+            match command.output().await {
+                Ok(output) => {
+                    if !output.status.success() {
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        return Err(anyhow::anyhow!("ffmpeg failed: {}", stderr));
+                    }
+                }
+                Err(e) => return Err(anyhow::anyhow!("ffmpeg execution failed: {}", e)),
+            }
         }
 
         tokio::fs::remove_dir_all(&temp_dir).await?;
@@ -1534,29 +1553,6 @@ impl DownloadManager {
         Ok(id)
     }
 
-    pub async fn add_external_download(&self, id: Uuid, url: String, dest: PathBuf) -> Result<()> {
-        let worker = DownloadWorker::new(
-            id,
-            self.client.clone(),
-            self.settings.clone(),
-            url,
-            dest,
-            self.sender.clone(),
-            self.torrent_session.clone(),
-        )
-        .await;
-
-        {
-            let mut info = worker.info.lock().await;
-            info.state = DownloadState::Running;
-            info.download_type = DownloadType::YTDLP;
-        }
-
-        self.workers.lock().await.insert(id, worker);
-        // Do NOT call process_queue or start, as this is managed externally
-        Ok(())
-    }
-
     pub async fn start(&self, id: Uuid) -> Result<()> {
         let worker_opt = { self.workers.lock().await.get(&id).cloned() };
         let worker = match worker_opt {
@@ -1591,14 +1587,6 @@ impl DownloadManager {
             .await;
 
             workers.insert(id, worker);
-        }
-    }
-
-    pub async fn update_download_info(&self, info: DownloadInfo) {
-        let workers = self.workers.lock().await;
-        if let Some(worker) = workers.get(&info.id) {
-            let mut worker_info = worker.info.lock().await;
-            *worker_info = info;
         }
     }
 

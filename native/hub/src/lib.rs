@@ -6,9 +6,8 @@ mod utils;
 
 use downloader::{
     cancel_download, delete_download, get_download_details, get_download_list,
-    handle_init_torrent_persistence, handle_update_download_url, insert_download_worker,
-    pause_download, query_url_info, resume_download, spawn_download_worker,
-    spawn_progress_listener, start_download_manager,
+    handle_init_torrent_persistence, handle_update_download_url, pause_download, query_url_info,
+    resume_download, spawn_download_worker, start_download_manager,
 };
 use rinf::{dart_shutdown, write_interface};
 use tokio::spawn;
@@ -43,8 +42,6 @@ async fn main() {
     spawn(utils::server::start_server_listener(dm.clone()));
     spawn(query_url_info(rclient.clone()));
     spawn(spawn_download_worker(dm.clone()));
-    spawn(spawn_progress_listener(dm.clone()));
-    spawn(insert_download_worker(dm.clone()));
     spawn(get_download_list(dm.clone()));
     spawn(get_download_details(dm.clone()));
     spawn(pause_download(dm.clone()));
@@ -53,7 +50,7 @@ async fn main() {
     spawn(delete_download(dm.clone()));
     spawn(handle_update_download_url(dm.clone()));
     spawn(utils::ytdlp::handle_ytdl_query());
-    spawn(utils::helper::handle_uuid_request());
+    spawn(downloader::handle_ffmpeg_results());
 
     // Keep the main function running until Dart shutdown.
     dart_shutdown().await;
