@@ -43,7 +43,7 @@ Future<void> main() async {
       if (Platform.isAndroid) {
         await checkAndRequestPermission();
       } else {
-        await SingleInstance.initialize(() async {
+        await SingleInstance.init(() async {
           await windowManager.show();
           await windowManager.restore();
           await windowManager.focus();
@@ -102,9 +102,7 @@ class _WindowListener extends WindowListener {
     if (SettingsManager.retreatToTray.value) {
       await windowManager.hide();
     } else {
-      NotificationService().stopListening();
-      await _removeTray();
-      await windowManager.destroy();
+      await closeApp();
     }
   }
 }
@@ -131,8 +129,7 @@ class _TrayListener extends TrayListener {
       await windowManager.restore();
       await windowManager.focus();
     } else if (menuItem.key == 'exit') {
-      NotificationService().stopListening();
-      await windowManager.destroy();
+      await closeApp();
     }
   }
 }
@@ -162,4 +159,11 @@ Future<void> _initTray() async {
 Future<void> _removeTray() async {
   trayManager.removeListener(_trayListener);
   await trayManager.destroy();
+}
+
+Future<void> closeApp() async {
+  await SingleInstance.dispose();
+  NotificationService().stopListening();
+  await _removeTray();
+  await windowManager.destroy();
 }

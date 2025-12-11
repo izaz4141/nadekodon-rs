@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 class SingleInstance {
   static const String _lockFileName = '.instance_lock';
   static const String _focusCommand = 'focus';
+  static File? _lockFile;
 
   /// Initializes the single instance mechanism.
   ///
@@ -16,15 +17,15 @@ class SingleInstance {
   /// subsequent instances.
   ///
   /// [onFocus] is the callback to execute when a focus signal is received.
-  static Future<void> initialize(Function onFocus) async {
+  static Future<void> init(Function onFocus) async {
     final appDocDir = await getApplicationSupportDirectory();
-    final lockFile = File('${appDocDir.path}/$_lockFileName');
+    _lockFile = File('${appDocDir.path}/$_lockFileName');
 
     bool isMainInstance = false;
 
-    if (await lockFile.exists()) {
+    if (await _lockFile!.exists()) {
       try {
-        final port = int.parse(await lockFile.readAsString());
+        final port = int.parse(await _lockFile!.readAsString());
         final socket = await Socket.connect(InternetAddress.loopbackIPv4, port);
         socket.write(_focusCommand);
         await socket.flush();
@@ -40,14 +41,11 @@ class SingleInstance {
     }
 
     if (isMainInstance) {
-      await _becomeMainInstance(lockFile, onFocus);
+      await _becomeMainInstance(onFocus);
     }
   }
 
-  static Future<void> _becomeMainInstance(
-    File lockFile,
-    Function onFocus,
-  ) async {
+  static Future<void> _becomeMainInstance(Function onFocus) async {
     // Bind to an ephemeral port (port 0)
     final serverSocket = await ServerSocket.bind(
       InternetAddress.loopbackIPv4,
@@ -55,7 +53,7 @@ class SingleInstance {
     );
 
     // Write the assigned port to the lock file
-    await lockFile.writeAsString(serverSocket.port.toString(), flush: true);
+    await _lockFile!.writeAsString(serverSocket.port.toString(), flush: true);
 
     // Listen for incoming connections
     serverSocket.listen((socket) {
@@ -66,5 +64,11 @@ class SingleInstance {
         }
       });
     });
+  }
+
+  static Future<void> dispose() async {
+    if (_lockFile != null) {
+      await _lockFile!.delete();
+    }
   }
 }
