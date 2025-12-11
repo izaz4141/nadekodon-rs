@@ -25,6 +25,7 @@ Future<void> main() async {
     () async {
       WidgetsFlutterBinding.ensureInitialized();
 
+      await LogService.init();
       await SettingsManager.init();
 
       await cleanupOldFiles();

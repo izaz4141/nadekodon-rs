@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nadekodon/theme/app_theme.dart';
-import 'package:nadekodon/utils/log_entry.dart';
 import 'package:nadekodon/utils/log_service.dart';
 
 class LogsDialog extends StatefulWidget {
@@ -20,11 +19,6 @@ class _LogsDialogState extends State<LogsDialog> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-      }
-    });
   }
 
   @override
@@ -37,17 +31,21 @@ class _LogsDialogState extends State<LogsDialog> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
-    final filteredLogs = LogService.logs.where((log) {
-      if (!_showDebug && log.level == LogLevel.debug) return false;
-      if (!_showStdout && log.level == LogLevel.stdout) return false;
-      return true;
-    }).toList();
+    final filteredLogs = LogService.logs
+        .where((log) {
+          if (!_showDebug && log.level == LogLevel.debug) return false;
+          if (!_showStdout && log.level == LogLevel.stdout) return false;
+          return true;
+        })
+        .toList()
+        .reversed
+        .toList();
 
     return AlertDialog(
       title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Text('Logs'),
+          Text('Logs', style: textTheme.titleMedium),
           IconButton(
             onPressed: _selectedLogs.isEmpty
                 ? null
@@ -73,7 +71,7 @@ class _LogsDialogState extends State<LogsDialog> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 ChoiceChip(
-                  label: const Text('Debug'),
+                  label: Text('Debug', style: textTheme.bodyMedium),
                   selected: _showDebug,
                   onSelected: (selected) {
                     setState(() {
@@ -85,7 +83,7 @@ class _LogsDialogState extends State<LogsDialog> {
                 ),
                 const SizedBox(width: AppTheme.spaceMD),
                 ChoiceChip(
-                  label: const Text('Stdout'),
+                  label: Text('Stdout', style: textTheme.bodyMedium),
                   selected: _showStdout,
                   onSelected: (selected) {
                     setState(() {
@@ -102,8 +100,14 @@ class _LogsDialogState extends State<LogsDialog> {
               child: Container(
                 color: colors.surfaceContainerHighest.withAlpha(128),
                 child: filteredLogs.isEmpty
-                    ? const Center(child: Text('No logs yet.'))
+                    ? Center(
+                        child: Text(
+                          'No logs yet.',
+                          style: textTheme.bodyMedium,
+                        ),
+                      )
                     : ListView.builder(
+                        reverse: true,
                         controller: _scrollController,
                         itemCount: filteredLogs.length,
                         itemBuilder: (context, index) {
