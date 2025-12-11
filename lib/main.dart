@@ -15,6 +15,7 @@ import 'utils/logger.dart';
 import 'utils/permission_helper.dart';
 import 'utils/updater.dart';
 import 'utils/ws_status_service.dart';
+import 'utils/single_instance.dart';
 
 final _trayListener = _TrayListener();
 final _windowListener = _WindowListener();
@@ -41,6 +42,11 @@ Future<void> main() async {
       if (Platform.isAndroid) {
         await checkAndRequestPermission();
       } else {
+        await SingleInstance.initialize(() async {
+          await windowManager.show();
+          await windowManager.restore();
+          await windowManager.focus();
+        });
         StartServer(
           port: SettingsManager.serverPort.value,
           apiKey: SettingsManager.serverApiKey.value,
