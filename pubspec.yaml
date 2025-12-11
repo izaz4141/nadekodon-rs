@@ -59,7 +59,6 @@ dependencies:
   http: ^1.6.0
   archive: ^4.0.7
   pub_semver: ^2.2.0
-  ffmpeg_kit_flutter_new_min_gpl: ^2.1.1
 
 dev_dependencies:
   flutter_test:

@@ -4,7 +4,7 @@ import java.io.FileInputStream
 plugins {
     id("com.android.application")
     id("kotlin-android")
-    id("com.chaquo.python")
+    // id("com.chaquo.python")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
@@ -40,9 +40,9 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
-        ndk {
-            abiFilters += listOf("arm64-v8a")
-        }
+        // ndk {
+        //     abiFilters += listOf("arm64-v8a")
+        // }
     }
 
     signingConfigs {
@@ -61,14 +61,14 @@ android {
     }
 }
 
-chaquopy {
-    defaultConfig {
-        version = "3.13"
-        pip {
-            install("yt-dlp")
-        }
-    }
-}
+// chaquopy {
+//     defaultConfig {
+//         version = "3.13"
+//         pip {
+//             install("yt-dlp")
+//         }
+//     }
+// }
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")

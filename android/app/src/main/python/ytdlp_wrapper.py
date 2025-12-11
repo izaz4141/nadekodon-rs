@@ -1,6 +1,9 @@
 import json
 import yt_dlp
 
+## UNUSED CODE FOR CHAQUOPY, 
+# SCRAPPED BECAUSE FFMPEG FOR ANDROID IS BIG AND UGLY
+
 def run_ytdlp(url):
     ydl_opts = {
         'dump_single_json': True,

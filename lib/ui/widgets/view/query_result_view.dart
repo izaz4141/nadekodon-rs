@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'package:nadekodon/theme/app_theme.dart';
@@ -137,14 +138,16 @@ class QueryResultView extends StatelessWidget {
                                     color: colors.error,
                                   ),
                                 ),
-                                const SizedBox(width: AppTheme.spaceMD),
-                                ElevatedButton(
-                                  onPressed: onQueryYtdl,
-                                  child: Text(
-                                    "YTDL",
-                                    style: textTheme.bodySmall,
+                                if (!Platform.isAndroid) ...[
+                                  const SizedBox(width: AppTheme.spaceMD),
+                                  ElevatedButton(
+                                    onPressed: onQueryYtdl,
+                                    child: Text(
+                                      "YTDL",
+                                      style: textTheme.bodySmall,
+                                    ),
                                   ),
-                                ),
+                                ],
                               ],
                             ),
                           Text(

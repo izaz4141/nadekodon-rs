@@ -158,14 +158,14 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: zulu
-          java-version: 17
+          java-version: 11
           cache: gradle
 
-      - name: Install Python (Android only)
-        if: startsWith(matrix.target, 'android')
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
+      # - name: Install Python (Android only)
+      #   if: startsWith(matrix.target, 'android')
+      #   uses: actions/setup-python@v5
+      #   with:
+      #     python-version: "3.13"
 
       - name: Cache Rust dependencies and target directory
         uses: actions/cache@v4
@@ -218,7 +218,7 @@ jobs:
             echo "Warning: UPLOAD_KEYSTORE_BASE64 secret not found. Skipping signing configuration."
           fi
 
-      - name: Build app
+      - name: Build APP
         run: ${{ matrix.build_cmd }}
 
       - name: Fix RPATH (Linux only)
