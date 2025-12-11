@@ -66,6 +66,8 @@ class _DownloadCardState extends State<DownloadCard> {
       cardColor = colors.primaryContainer.withValues(alpha: 0.3);
     } else if (_isHovering) {
       cardColor = colors.surfaceContainerHigh;
+    } else if (!widget.isSelected) {
+      cardColor = colors.surfaceContainer;
     }
 
     final spaceScale = AppTheme.spaceScale(context);
@@ -89,7 +91,7 @@ class _DownloadCardState extends State<DownloadCard> {
             ),
             side: widget.isSelected
                 ? BorderSide(color: colors.primary, width: 2)
-                : BorderSide.none,
+                : BorderSide(color: colors.outline, width: 1),
           ),
           child: Padding(
             padding: EdgeInsets.all(AppTheme.spaceSM * spaceScale),
@@ -164,13 +166,29 @@ class _DownloadCardState extends State<DownloadCard> {
                         child: Column(
                           children: [
                             if (widget.item.uspeed != null)
-                              Text(
-                                "  ${formatBytes(widget.item.uspeed!.toInt())}/s",
-                                style: textTheme.bodySmall,
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.upload, size: AppTheme.iconSM),
+                                  SizedBox(
+                                    width: AppTheme.spaceXS * spaceScale,
+                                  ),
+                                  Text(
+                                    "${formatBytes(widget.item.uspeed!.toInt())}/s",
+                                    style: textTheme.bodySmall,
+                                  ),
+                                ],
                               ),
-                            Text(
-                              "  ${formatBytes(widget.item.dspeed.toInt())}/s",
-                              style: textTheme.bodySmall,
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.download, size: AppTheme.iconSM),
+                                SizedBox(width: AppTheme.spaceXS * spaceScale),
+                                Text(
+                                  "${formatBytes(widget.item.dspeed.toInt())}/s",
+                                  style: textTheme.bodySmall,
+                                ),
+                              ],
                             ),
                           ],
                         ),

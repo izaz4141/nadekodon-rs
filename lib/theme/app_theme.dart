@@ -99,6 +99,7 @@ class AppTheme {
     final textScale = isDesktopLayout ? 1.0 : 0.8;
     final spaceScale = isDesktopLayout ? 1.0 : 0.8;
     final radiusScale = isDesktopLayout ? 1.0 : 0.8;
+    final iconScale = isDesktopLayout ? 1.0 : 0.9;
 
     return ThemeData(
       colorScheme: scheme,
@@ -135,6 +136,119 @@ class AppTheme {
         ),
       ),
 
+      appBarTheme: AppBarTheme(
+        backgroundColor: Colors.transparent,
+        scrolledUnderElevation: 1,
+        iconTheme: IconThemeData(size: iconLG * iconScale),
+      ),
+
+      iconTheme: IconThemeData(
+        size: iconMD * iconScale,
+        color: scheme.onSurface,
+      ),
+
+      inputDecorationTheme: InputDecorationTheme(
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(radiusMD * radiusScale),
+        ),
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: spaceSM * spaceScale,
+          vertical: spaceSM * spaceScale,
+        ),
+      ),
+
+      dialogTheme: DialogThemeData(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radiusLG * radiusScale),
+        ),
+        backgroundColor: scheme.surfaceContainerHigh,
+      ),
+
+      bottomSheetTheme: BottomSheetThemeData(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(radiusLG * radiusScale),
+          ),
+        ),
+      ),
+
+      dividerTheme: DividerThemeData(
+        color: scheme.outlineVariant,
+        thickness: 1,
+      ),
+
+      listTileTheme: ListTileThemeData(
+        contentPadding: EdgeInsets.symmetric(horizontal: spaceSM * spaceScale),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radiusMD * radiusScale),
+        ),
+      ),
+
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radiusLG * radiusScale),
+        ),
+      ),
+
+      menuTheme: MenuThemeData(
+        style: MenuStyle(
+          shape: WidgetStateProperty.all(
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(radiusMD * radiusScale),
+            ),
+          ),
+        ),
+      ),
+
+      popupMenuTheme: PopupMenuThemeData(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radiusMD * radiusScale),
+        ),
+      ),
+
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return scheme.onPrimary;
+          }
+          return scheme.outline;
+        }),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return scheme.primary;
+          }
+          return scheme.surfaceContainerHighest;
+        }),
+      ),
+
+      checkboxTheme: CheckboxThemeData(
+        fillColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return scheme.primary;
+          }
+          return null;
+        }),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radiusSM * radiusScale),
+        ),
+      ),
+
+      radioTheme: RadioThemeData(
+        fillColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return scheme.primary;
+          }
+          return null;
+        }),
+      ),
+
+      tabBarTheme: TabBarThemeData(
+        indicatorColor: scheme.primary,
+        labelColor: scheme.primary,
+        unselectedLabelColor: scheme.onSurfaceVariant,
+        dividerColor: scheme.outlineVariant,
+      ),
+
       cardTheme: CardThemeData(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusMD * radiusScale),
@@ -147,6 +261,22 @@ class AppTheme {
 
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
+          backgroundColor: scheme.surfaceContainerLowest,
+          foregroundColor: scheme.primary,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(radiusMD * radiusScale),
+          ),
+          padding: EdgeInsets.symmetric(
+            horizontal: spaceSM * spaceScale,
+            vertical: spaceSM * spaceScale,
+          ),
+          elevation: 5.0,
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: scheme.primaryContainer,
+          foregroundColor: scheme.onPrimaryContainer,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radiusMD * radiusScale),
           ),

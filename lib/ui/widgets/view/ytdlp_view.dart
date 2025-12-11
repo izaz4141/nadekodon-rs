@@ -186,6 +186,8 @@ class _YtdlpView extends State<YtdlpView> {
     Widget buildDropdown() => DropdownButton<YtdlFormat>(
       value: selectedFormat,
       isExpanded: true,
+      isDense: true,
+      itemHeight: null,
       items: [
         DropdownMenuItem<YtdlFormat>(
           value: null,

@@ -116,32 +116,31 @@ class _SystemDepsState extends State<SystemDeps> {
                 launchUrl(Uri.parse('https://github.com/yt-dlp/yt-dlp')),
           ),
         ),
-        if (!Platform.isAndroid)
-          ListTile(
-            leading: Icon(
-              Icons.movie_outlined,
-              size: AppTheme.iconMD * AppTheme.iconScale(context),
-            ),
-            title: Text('ffmpeg', style: textTheme.bodyMedium),
-            subtitle: Text(
-              _ffmpegVersion == 'Not found' || _ffmpegVersion == 'Unknown'
-                  ? 'Not found - yt-dlp downloads will not work'
-                  : _ffmpegVersion,
-              style: textTheme.bodySmall?.copyWith(
-                color:
-                    _ffmpegVersion == 'Not found' || _ffmpegVersion == 'Unknown'
-                    ? Theme.of(context).colorScheme.error
-                    : null,
-              ),
-            ),
-            trailing: IconButton(
-              icon: const Icon(Icons.open_in_new),
-              iconSize: AppTheme.iconMD * AppTheme.iconScale(context),
-              tooltip: "Visit",
-              onPressed: () =>
-                  launchUrl(Uri.parse('https://github.com/FFmpeg/FFmpeg')),
+        ListTile(
+          leading: Icon(
+            Icons.movie_outlined,
+            size: AppTheme.iconMD * AppTheme.iconScale(context),
+          ),
+          title: Text('ffmpeg', style: textTheme.bodyMedium),
+          subtitle: Text(
+            _ffmpegVersion == 'Not found' || _ffmpegVersion == 'Unknown'
+                ? 'Not found - yt-dlp downloads will not work'
+                : _ffmpegVersion,
+            style: textTheme.bodySmall?.copyWith(
+              color:
+                  _ffmpegVersion == 'Not found' || _ffmpegVersion == 'Unknown'
+                  ? Theme.of(context).colorScheme.error
+                  : null,
             ),
           ),
+          trailing: IconButton(
+            icon: const Icon(Icons.open_in_new),
+            iconSize: AppTheme.iconMD * AppTheme.iconScale(context),
+            tooltip: "Visit",
+            onPressed: () =>
+                launchUrl(Uri.parse('https://github.com/FFmpeg/FFmpeg')),
+          ),
+        ),
       ],
     );
   }
