@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:nadekodon/theme/app_theme.dart';
 import 'package:nadekodon/ui/widgets/components/section_header.dart';
-import 'package:nadekodon/utils/ytdlp_android.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SystemDeps extends StatefulWidget {
