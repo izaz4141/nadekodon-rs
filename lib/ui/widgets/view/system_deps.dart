@@ -28,7 +28,7 @@ class _SystemDepsState extends State<SystemDeps> {
     try {
       String? version;
       if (Platform.isAndroid) {
-        version = await YtDlpAndroid.getYtdlpVersion();
+        // version = await YtDlpAndroid.getYtdlpVersion();
       } else {
         final result = await Process.run('yt-dlp', ['--version']);
         if (result.exitCode == 0) {
