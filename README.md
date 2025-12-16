@@ -36,7 +36,7 @@ Nadeko~don is a open-source download manager designed for efficiency and a seaml
 
 <details close>
   <summary>Desktop</summary>
-  <img src="assets/preview/Desktop.jpg" alt="Nadeko~don" width="1200">  
+  <img src="assets/preview/desktop-downloads.jpg" alt="Nadeko~don" width="1200">  
 </details>
 
 <details close>
