@@ -49,26 +49,67 @@ Communication happens via "Signals".
 -   **Dart to Rust**: Dart sends signals (e.g., `InitDatabase`, `StartServer`) to trigger actions in Rust.
 -   **Rust to Dart**: Rust sends signals to update the UI (e.g., download progress, status updates).
 
-## Development Workflow
+## Build Guide
 
--   **Building**: `rinf gen`, `flutter build`
--   **Linting**: `flutter analyze`, `cargo clippy`
--   **Code Style**: Guidelines for Dart and Rust.
+This guide provides instructions for setting up the development environment, building, and running the project.
 
-## Getting Started
+### 1. Prerequisites
 
-1.  **Install Dependencies**:
-    ```bash
-    flutter pub get
-    # Rust dependencies are handled automatically by cargo
+Before you begin, ensure you have the following tools installed on your system:
+
+-   **Flutter**: The project uses a specific Flutter version managed by FVM (Flutter Version Manager).
+-   **Rust**: The Rust toolchain is required for the backend. You can install it via [rustup](https://rustup.rs/).
+-   **Rinf**: The `rinf` CLI is needed to generate the communication bridge between Rust and Dart. Install it with: `cargo install rinf_cli`
+-   **FVM**: Flutter Version Manager is used to ensure the correct Flutter SDK version is used. Follow the [FVM installation guide](https://fvm.app/docs/getting_started/installation).
+
+### 2. Setup
+
+1.  **Clone the repository:**
+    ```sh
+    git clone https://github.com/izaz4141/nadekodon-rs.git
+    cd nadekodon-rs
     ```
 
-2.  **Generate Bindings**:
-    ```bash
-    rinf gen
+2.  **Install the correct Flutter SDK version:**
+    ```sh
+    fvm install
     ```
 
-3.  **Run Locally**:
-    ```bash
-    flutter run
+### 3. Development Workflow
+
+#### Signal Generation
+The communication between Dart and Rust is handled by `rinf`. If you modify the protocol buffer definitions (`.proto` files), you must regenerate the bindings:
+```sh
+rinf gen
+```
+
+#### Running the App
+To run the application in debug mode, use the following command:
+```sh
+fvm flutter run
+```
+
+#### Building for Release
+To create a release build for your target platform, use the `build` command. Replace `<platform>` with your target (e.g., `linux`, `windows`, `android`).
+```sh
+fvm flutter build <platform>
+```
+
+#### Formatting and Linting
+To maintain code quality and consistency, please format and lint your code before committing.
+
+-   **Format Dart & Rust:**
+    ```sh
+    fvm dart format lib
+    cargo fmt --all
+    ```
+
+-   **Lint Dart:**
+    ```sh
+    fvm flutter analyze
+    ```
+
+-   **Lint Rust:**
+    ```sh
+    cargo clippy -- -D warnings
     ```
