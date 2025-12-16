@@ -31,6 +31,7 @@ enum ClientMessage {
         filename: Option<String>,
         cookie: Option<String>,
         user_agent: Option<String>,
+        referer: Option<String>,
     },
     #[serde(rename = "ping")]
     Ping,
@@ -152,12 +153,13 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                     Some(Ok(Message::Text(text))) => {
                         if let Ok(client_msg) = serde_json::from_str::<ClientMessage>(&text) {
                             match client_msg {
-                                ClientMessage::Download { url, filename, cookie, user_agent } => {
+                                ClientMessage::Download { url, filename, cookie, user_agent, referer } => {
                                     let signal = RequestAddDownload {
                                         url,
                                         filename,
                                         cookie,
                                         user_agent,
+                                        referer,
                                     };
                                     signal.send_signal_to_dart();
                                     logger::debug("Sent RequestAddDownload signal to Dart");

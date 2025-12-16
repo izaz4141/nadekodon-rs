@@ -55,6 +55,8 @@ pub struct DownloadWorker {
     handles: Mutex<Vec<JoinHandle<anyhow::Result<()>>>>,
     part_progress: RwLock<Vec<Arc<AtomicU64>>>,
     pub event_tx: mpsc::Sender<WorkerEvent>,
+    cookie: Option<String>,
+    user_agent: Option<String>,
 }
 
 impl DownloadWorker {
@@ -66,6 +68,9 @@ impl DownloadWorker {
         dest: PathBuf,
         event_tx: mpsc::Sender<WorkerEvent>,
         torrent_session: Arc<tokio::sync::RwLock<Option<Arc<Session>>>>,
+        cookie: Option<String>,
+        user_agent: Option<String>,
+        referer: Option<String>,
     ) -> Arc<Self> {
         let speed_limit = settings.read().await.speed_limit;
         Arc::new(Self {
@@ -90,6 +95,7 @@ impl DownloadWorker {
                     .as_millis() as u64,
                 download_type: DownloadType::Normal,
                 torrent_hash: None,
+                referer,
             }),
             client: client,
             threads: settings.clone().read().await.download_threads as u64,
@@ -107,6 +113,8 @@ impl DownloadWorker {
             part_progress: RwLock::new(Vec::new()),
             event_tx,
             torrent_session,
+            cookie,
+            user_agent,
         })
     }
 
@@ -154,6 +162,8 @@ impl DownloadWorker {
             part_progress: RwLock::new(parts_progress),
             event_tx,
             torrent_session,
+            cookie: None,
+            user_agent: None,
         })
     }
 
@@ -252,7 +262,27 @@ impl DownloadWorker {
 
     async fn fetch_head(&self, url: &str) -> Result<HeadData> {
         let client = self.client.clone();
-        let head = client.head(url).send().await?;
+        let mut request_builder = client.head(url);
+        if let Some(cookie) = &self.cookie {
+            request_builder = request_builder.header(
+                reqwest::header::COOKIE,
+                reqwest::header::HeaderValue::from_str(&cookie)?,
+            );
+        }
+        if let Some(ua) = &self.user_agent {
+            request_builder = request_builder.header(
+                reqwest::header::USER_AGENT,
+                reqwest::header::HeaderValue::from_str(&ua)?,
+            );
+        }
+        let referer = self.info.lock().await.referer.clone();
+        if let Some(r) = &referer {
+            request_builder = request_builder.header(
+                reqwest::header::REFERER,
+                reqwest::header::HeaderValue::from_str(&r)?,
+            );
+        }
+        let head = request_builder.send().await?;
         // let status = head.status();
 
         let total_size = head
@@ -455,6 +485,25 @@ impl DownloadWorker {
             }
 
             let mut request_builder = client.get(url);
+            if let Some(cookie) = &self.cookie {
+                request_builder = request_builder.header(
+                    reqwest::header::COOKIE,
+                    reqwest::header::HeaderValue::from_str(&cookie)?,
+                );
+            }
+            if let Some(ua) = &self.user_agent {
+                request_builder = request_builder.header(
+                    reqwest::header::USER_AGENT,
+                    reqwest::header::HeaderValue::from_str(&ua)?,
+                );
+            }
+            let referer = self.info.lock().await.referer.clone();
+            if let Some(r) = &referer {
+                request_builder = request_builder.header(
+                    reqwest::header::REFERER,
+                    reqwest::header::HeaderValue::from_str(&r)?,
+                );
+            }
             if accept_ranges {
                 let range = format!("bytes={}-{}", current_start, end);
                 request_builder = request_builder.header(RANGE, &range);
@@ -1536,7 +1585,14 @@ impl DownloadManager {
         }
     }
 
-    pub async fn add_download(&self, url: String, dest: PathBuf) -> Result<Uuid> {
+    pub async fn add_download(
+        &self,
+        url: String,
+        dest: PathBuf,
+        cookie: Option<String>,
+        user_agent: Option<String>,
+        referer: Option<String>,
+    ) -> Result<Uuid> {
         let id = Uuid::new_v4();
         let worker = DownloadWorker::new(
             id,
@@ -1546,6 +1602,9 @@ impl DownloadManager {
             dest,
             self.sender.clone(),
             self.torrent_session.clone(),
+            cookie,
+            user_agent,
+            referer,
         )
         .await;
         self.workers.lock().await.insert(id, worker);

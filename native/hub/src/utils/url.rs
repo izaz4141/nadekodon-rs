@@ -14,7 +14,7 @@ pub async fn build_browser_client() -> Client {
     headers.insert(
         header::ACCEPT,
         header::HeaderValue::from_static(
-            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
         ),
     );
     headers.insert(
@@ -25,9 +25,30 @@ pub async fn build_browser_client() -> Client {
         header::ACCEPT_ENCODING,
         header::HeaderValue::from_static("gzip, deflate, br"),
     );
+    headers.insert(
+        "sec-fetch-dest",
+        header::HeaderValue::from_static("document"),
+    );
+    headers.insert(
+        "sec-fetch-mode",
+        header::HeaderValue::from_static("navigate"),
+    );
+    headers.insert(
+        "sec-fetch-site",
+        header::HeaderValue::from_static("none"),
+    );
+    headers.insert(
+        "sec-fetch-user",
+        header::HeaderValue::from_static("?1"),
+    );
+    headers.insert(
+        "upgrade-insecure-requests",
+        header::HeaderValue::from_static("1"),
+    );
 
     Client::builder()
         .default_headers(headers)
+        .cookie_store(true)
         .redirect(reqwest::redirect::Policy::limited(10))
         // .connect_timeout(Duration::from_secs(60))
         // .timeout(Duration::from_secs(300))
@@ -46,7 +67,7 @@ pub struct UrlInfo {
     pub content_type: Option<String>,
 }
 
-pub async fn get_url_info(client: Client, url: &str) -> Result<UrlInfo> {
+pub async fn get_url_info(client: Client, url: &str, cookie: Option<String>, user_agent: Option<String>, referer: Option<String>) -> Result<UrlInfo> {
     if is_magnet_url(url) {
         let (name, total_size) = resolve_torrent_info(AddTorrent::from_url(url)).await?;
 
@@ -60,7 +81,18 @@ pub async fn get_url_info(client: Client, url: &str) -> Result<UrlInfo> {
     }
 
     // Send HEAD request
-    let response = client.head(url).send().await?;
+    let mut request_builder = client.head(url);
+    if let Some(c) = &cookie {
+        request_builder =
+        request_builder.header(header::COOKIE, header::HeaderValue::from_str(&c)?);
+    }
+    if let Some(ua) = &user_agent {
+        request_builder = request_builder.header(header::USER_AGENT, header::HeaderValue::from_str(&ua)?);
+    }
+    if let Some(r) = &referer {
+        request_builder = request_builder.header(header::REFERER, header::HeaderValue::from_str(&r)?);
+    }
+    let response = request_builder.send().await?;
 
     // Extract total size
     let total_size = response

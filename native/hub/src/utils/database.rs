@@ -56,7 +56,7 @@ use sqlx::Row;
 async fn load_downloads(pool: &Pool<Sqlite>) -> Result<Vec<DownloadInfo>, sqlx::Error> {
     let rows = sqlx::query(
         r#"
-        SELECT id, url, dest, total_size, downloaded, uploaded, state, parts, added_at, updated_at, download_type, torrent_hash
+        SELECT id, url, dest, total_size, downloaded, uploaded, state, parts, added_at, updated_at, download_type, torrent_hash, referer
         FROM downloads
         "#
     )
@@ -110,6 +110,7 @@ async fn load_downloads(pool: &Pool<Sqlite>) -> Result<Vec<DownloadInfo>, sqlx::
         };
 
         let torrent_hash: Option<String> = row.get("torrent_hash");
+        let referer: Option<String> = row.get("referer");
 
         downloads.push(DownloadInfo {
             id: id,
@@ -126,6 +127,7 @@ async fn load_downloads(pool: &Pool<Sqlite>) -> Result<Vec<DownloadInfo>, sqlx::
             updated_at: updated_at,
             download_type: download_type,
             torrent_hash: torrent_hash,
+            referer: referer,
         });
     }
 
@@ -162,7 +164,8 @@ async fn init_db(path: &str) -> Result<Pool<Sqlite>, sqlx::Error> {
             added_at INTEGER NOT NULL DEFAULT 0,
             updated_at INTEGER NOT NULL,
             download_type TEXT,
-            torrent_hash TEXT
+            torrent_hash TEXT,
+            referer TEXT
         );
         "#,
     )
@@ -179,6 +182,10 @@ async fn init_db(path: &str) -> Result<Pool<Sqlite>, sqlx::Error> {
         .await;
 
     let _ = sqlx::query("ALTER TABLE downloads ADD COLUMN torrent_hash TEXT")
+        .execute(&pool)
+        .await;
+
+    let _ = sqlx::query("ALTER TABLE downloads ADD COLUMN referer TEXT")
         .execute(&pool)
         .await;
 
@@ -253,13 +260,14 @@ async fn save_downloads(pool: &Pool<Sqlite>, dm: &Arc<DownloadManager>) {
         let updated_at = download.updated_at as i64;
         let download_type = format!("{:?}", download.download_type);
         let torrent_hash = download.torrent_hash;
+        let referer = download.referer;
 
         let parts = serde_json::to_string(&download.parts).unwrap_or_default();
 
         let result = sqlx::query(
             r#"
-            INSERT INTO downloads (id, url, dest, total_size, downloaded, uploaded, state, parts, added_at, updated_at, download_type, torrent_hash)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO downloads (id, url, dest, total_size, downloaded, uploaded, state, parts, added_at, updated_at, download_type, torrent_hash, referer)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 total_size = excluded.total_size,
                 downloaded = excluded.downloaded,
@@ -268,7 +276,8 @@ async fn save_downloads(pool: &Pool<Sqlite>, dm: &Arc<DownloadManager>) {
                 parts = excluded.parts,
                 updated_at = excluded.updated_at,
                 download_type = excluded.download_type,
-                torrent_hash = excluded.torrent_hash;
+                torrent_hash = excluded.torrent_hash,
+                referer = excluded.referer;
             "#
         )
         .bind(id)
@@ -283,6 +292,7 @@ async fn save_downloads(pool: &Pool<Sqlite>, dm: &Arc<DownloadManager>) {
         .bind(updated_at)
         .bind(download_type)
         .bind(torrent_hash)
+        .bind(referer)
         .execute(pool)
         .await;
 

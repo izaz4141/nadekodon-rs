@@ -114,6 +114,7 @@ async fn handle_merge_success(
             .as_millis() as u64,
         download_type: DownloadType::YTDLP,
         torrent_hash: None,
+        referer: None,
     };
 
     manager.load_snapshot(vec![final_info]).await;
@@ -160,9 +161,12 @@ pub async fn query_url_info(client: Client) {
     while let Some(signal_pack) = receiver.recv().await {
         let data = signal_pack.message;
         let url = data.url;
+        let cookie = data.cookie;
+        let user_agent = data.user_agent;
+        let referer = data.referer;
 
         let result =
-            tokio::time::timeout(Duration::from_secs(20), get_url_info(client.clone(), &url)).await;
+            tokio::time::timeout(Duration::from_secs(20), get_url_info(client.clone(), &url, cookie, user_agent, referer)).await;
 
         let result = match result {
             Ok(res) => res,
@@ -250,7 +254,7 @@ pub async fn spawn_download_worker(manager: Arc<DownloadManager>) {
                 let audio_id = if let Some(format) = audio_format {
                     let path = audio_path_base.with_extension(format.ext);
                     audio_dest = Some(path.clone());
-                    match manager.add_download(format.url.clone(), path).await {
+                    match manager.add_download(format.url.clone(), path, None, None, None).await {
                         Ok(id) => Some(id),
                         Err(e) => {
                             logger::error(&format!("Failed to spawn ytdl audio worker: {:?}", e));
@@ -264,7 +268,7 @@ pub async fn spawn_download_worker(manager: Arc<DownloadManager>) {
                 let video_id = if let Some(format) = video_format {
                     let path = video_path_base.with_extension(format.ext);
                     video_dest = Some(path.clone());
-                    match manager.add_download(format.url.clone(), path).await {
+                    match manager.add_download(format.url.clone(), path, None, None, None).await {
                         Ok(id) => Some(id),
                         Err(e) => {
                             logger::error(&format!("Failed to spawn ytdl video worker: {:?}", e));
@@ -407,7 +411,7 @@ pub async fn spawn_download_worker(manager: Arc<DownloadManager>) {
                 }
             });
         } else if let Some(url) = data.url {
-            match manager.add_download(url.clone(), dest).await {
+            match manager.add_download(url.clone(), dest, data.cookie, data.user_agent, data.referer).await {
                 Ok(id) => logger::debug(&format!("Spawned worker for {} with id {}", url, id)),
                 Err(e) => logger::error(&format!("Failed to spawn worker for {}: {:?}", url, e)),
             }

@@ -91,6 +91,7 @@ pub struct DownloadInfo {
     pub updated_at: u64,
     pub download_type: DownloadType,
     pub torrent_hash: Option<String>,
+    pub referer: Option<String>,
 }
 
 #[derive(Debug, Clone)]

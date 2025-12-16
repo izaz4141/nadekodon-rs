@@ -17,11 +17,18 @@ import 'package:nadekodon/utils/ytdlp_android.dart';
 Future<void> showAddDownloadDialog(
   BuildContext context, {
   String? initialUrl,
+  String? cookie,
+  String? userAgent,
+  String? referer,
 }) async {
   await showDialog(
     context: context,
     builder: (context) {
-      return _AddDownloadDialog(initialUrl: initialUrl);
+      return _AddDownloadDialog(
+          initialUrl: initialUrl,
+          cookie: cookie,
+          userAgent: userAgent,
+          referer: referer);
     },
   );
 }
@@ -29,8 +36,12 @@ Future<void> showAddDownloadDialog(
 // Wrapper for mobile platforms to maintain dialog behavior
 class _AddDownloadDialog extends StatefulWidget {
   final String? initialUrl;
+  final String? cookie;
+  final String? userAgent;
+  final String? referer;
 
-  const _AddDownloadDialog({this.initialUrl});
+  const _AddDownloadDialog(
+      {this.initialUrl, this.cookie, this.userAgent, this.referer});
 
   @override
   State<_AddDownloadDialog> createState() => _AddDownloadDialogState();
@@ -118,7 +129,12 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
       );
       return;
     }
-    QueryUrl(url: url).sendSignalToRust();
+    QueryUrl(
+            url: url,
+            cookie: widget.cookie,
+            userAgent: widget.userAgent,
+            referer: widget.referer)
+        .sendSignalToRust();
     _showQueryInfo.value = true;
   }
 
@@ -153,6 +169,9 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
       url: url,
       dest: "${_selectedDir.value}/$name",
       isYtdl: false,
+      cookie: widget.cookie,
+      userAgent: widget.userAgent,
+      referer: widget.referer,
     ).sendSignalToRust();
     AppSnackBar.show(context, "Added download");
   }

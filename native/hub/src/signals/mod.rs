@@ -15,6 +15,9 @@ pub struct UpdateSettings {
 #[derive(Deserialize, DartSignal)]
 pub struct QueryUrl {
     pub url: String,
+    pub cookie: Option<String>,
+    pub user_agent: Option<String>,
+    pub referer: Option<String>,
 }
 
 #[derive(Deserialize, DartSignal)]
@@ -60,6 +63,9 @@ pub struct DoDownload {
     pub video_format: Option<YtdlFormat>,
     pub audio_format: Option<YtdlFormat>,
     pub is_ytdl: bool,
+    pub cookie: Option<String>,
+    pub user_agent: Option<String>,
+    pub referer: Option<String>,
 }
 
 #[derive(Deserialize, DartSignal)]
@@ -174,6 +180,7 @@ pub struct RequestAddDownload {
     pub filename: Option<String>,
     pub user_agent: Option<String>,
     pub cookie: Option<String>,
+    pub referer: Option<String>,
 }
 
 #[derive(Deserialize, DartSignal)]

@@ -20,7 +20,7 @@ wildcard_imports = "deny"
 rinf = "8.7.2"
 serde = { version = "1.0.219", features = ["derive"] }
 tokio = { version = "1.45.0", features = ["full"] }
-reqwest = { version = "0.12.23", features = ["json", "stream", "gzip", "brotli", "deflate", "http2", "rustls-tls", "blocking"] }
+reqwest = { version = "0.12.23", features = ["json", "stream", "gzip", "brotli", "deflate", "http2", "rustls-tls", "blocking", "cookies"] }
 uuid = { version = "1.18.0", features = ["v4"] }
 time = { version = "0.3.41", features = ["macros", "formatting", "parsing"] }
 futures = "0.3.31"

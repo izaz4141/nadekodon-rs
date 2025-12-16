@@ -61,8 +61,14 @@ class _NadekoDonState extends State<NadekoDon> {
       await _focusWindow();
       final context = navigatorKey.currentContext;
       if (context != null) {
-        // ignore: use_build_context_synchronously
-        showAddDownloadDialog(context, initialUrl: message.url);
+        showAddDownloadDialog(
+          // ignore: use_build_context_synchronously
+          context,
+          initialUrl: message.url,
+          cookie: message.cookie,
+          userAgent: message.userAgent,
+          referer: message.referer,
+        );
       }
     });
   }
