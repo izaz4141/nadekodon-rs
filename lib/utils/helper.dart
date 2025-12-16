@@ -47,6 +47,7 @@ class DownloadItem {
   final DownloadStatus status;
   final double dspeed;
   final double? uspeed;
+  final String? referer;
 
   const DownloadItem({
     required this.id,
@@ -58,6 +59,7 @@ class DownloadItem {
     required this.status,
     required this.dspeed,
     this.uspeed,
+    this.referer,
   });
 
   double get progress =>

@@ -99,6 +99,7 @@ pub struct DownloadGlance {
     pub dspeed: f64,
     pub uspeed: Option<f64>,
     pub state: String,
+    pub referer: Option<String>,
 }
 
 #[derive(Deserialize, DartSignal)]
@@ -122,6 +123,7 @@ pub struct DownloadDetails {
     pub peers: Option<u64>,
     pub ratio: Option<f64>,
     pub eta: Option<String>,
+    pub referer: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, SignalPiece)]

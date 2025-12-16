@@ -275,13 +275,6 @@ impl DownloadWorker {
                 reqwest::header::HeaderValue::from_str(&ua)?,
             );
         }
-        let referer = self.info.lock().await.referer.clone();
-        if let Some(r) = &referer {
-            request_builder = request_builder.header(
-                reqwest::header::REFERER,
-                reqwest::header::HeaderValue::from_str(&r)?,
-            );
-        }
         let head = request_builder.send().await?;
         // let status = head.status();
 
@@ -495,13 +488,6 @@ impl DownloadWorker {
                 request_builder = request_builder.header(
                     reqwest::header::USER_AGENT,
                     reqwest::header::HeaderValue::from_str(&ua)?,
-                );
-            }
-            let referer = self.info.lock().await.referer.clone();
-            if let Some(r) = &referer {
-                request_builder = request_builder.header(
-                    reqwest::header::REFERER,
-                    reqwest::header::HeaderValue::from_str(&r)?,
                 );
             }
             if accept_ranges {

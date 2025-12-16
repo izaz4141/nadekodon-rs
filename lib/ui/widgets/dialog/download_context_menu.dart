@@ -6,7 +6,6 @@ import 'package:open_filex/open_filex.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../theme/app_theme.dart';
 import '../../../utils/helper.dart';
-import '../../../src/bindings/bindings.dart';
 import 'delete_download.dart';
 import 'download_details_dialog.dart';
 import 'update_url_dialog.dart';
@@ -154,14 +153,11 @@ Future<void> showDownloadContextMenu(
       );
       break;
     case 'update_url':
-      final newUrl = await showDialog<String>(
+      await showDialog<String>(
         context: context,
-        builder: (context) => UpdateUrlDialog(currentUrl: ''),
+        builder: (context) =>
+            UpdateUrlDialog(id: item.id, currentUrl: '', referer: item.referer),
       );
-
-      if (newUrl != null) {
-        UpdateDownloadUrl(id: item.id, newUrl: newUrl).sendSignalToRust();
-      }
       break;
     case 'delete':
       await showDeleteDownloadDialog(context, item);

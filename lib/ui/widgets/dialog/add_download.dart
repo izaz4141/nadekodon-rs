@@ -25,10 +25,11 @@ Future<void> showAddDownloadDialog(
     context: context,
     builder: (context) {
       return _AddDownloadDialog(
-          initialUrl: initialUrl,
-          cookie: cookie,
-          userAgent: userAgent,
-          referer: referer);
+        initialUrl: initialUrl,
+        cookie: cookie,
+        userAgent: userAgent,
+        referer: referer,
+      );
     },
   );
 }
@@ -40,8 +41,12 @@ class _AddDownloadDialog extends StatefulWidget {
   final String? userAgent;
   final String? referer;
 
-  const _AddDownloadDialog(
-      {this.initialUrl, this.cookie, this.userAgent, this.referer});
+  const _AddDownloadDialog({
+    this.initialUrl,
+    this.cookie,
+    this.userAgent,
+    this.referer,
+  });
 
   @override
   State<_AddDownloadDialog> createState() => _AddDownloadDialogState();
@@ -130,11 +135,11 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
       return;
     }
     QueryUrl(
-            url: url,
-            cookie: widget.cookie,
-            userAgent: widget.userAgent,
-            referer: widget.referer)
-        .sendSignalToRust();
+      url: url,
+      cookie: widget.cookie,
+      userAgent: widget.userAgent,
+      referer: widget.referer,
+    ).sendSignalToRust();
     _showQueryInfo.value = true;
   }
 
@@ -219,6 +224,7 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
       videoFormat: vFormat,
       audioFormat: aFormat,
       isYtdl: true,
+      referer: _urlController.text.trim(),
     ).sendSignalToRust();
 
     if (!mounted) return;

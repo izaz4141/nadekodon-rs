@@ -33,14 +33,8 @@ pub async fn build_browser_client() -> Client {
         "sec-fetch-mode",
         header::HeaderValue::from_static("navigate"),
     );
-    headers.insert(
-        "sec-fetch-site",
-        header::HeaderValue::from_static("none"),
-    );
-    headers.insert(
-        "sec-fetch-user",
-        header::HeaderValue::from_static("?1"),
-    );
+    headers.insert("sec-fetch-site", header::HeaderValue::from_static("none"));
+    headers.insert("sec-fetch-user", header::HeaderValue::from_static("?1"));
     headers.insert(
         "upgrade-insecure-requests",
         header::HeaderValue::from_static("1"),
@@ -67,7 +61,13 @@ pub struct UrlInfo {
     pub content_type: Option<String>,
 }
 
-pub async fn get_url_info(client: Client, url: &str, cookie: Option<String>, user_agent: Option<String>, referer: Option<String>) -> Result<UrlInfo> {
+pub async fn get_url_info(
+    client: Client,
+    url: &str,
+    cookie: Option<String>,
+    user_agent: Option<String>,
+    _referer: Option<String>,
+) -> Result<UrlInfo> {
     if is_magnet_url(url) {
         let (name, total_size) = resolve_torrent_info(AddTorrent::from_url(url)).await?;
 
@@ -84,13 +84,11 @@ pub async fn get_url_info(client: Client, url: &str, cookie: Option<String>, use
     let mut request_builder = client.head(url);
     if let Some(c) = &cookie {
         request_builder =
-        request_builder.header(header::COOKIE, header::HeaderValue::from_str(&c)?);
+            request_builder.header(header::COOKIE, header::HeaderValue::from_str(&c)?);
     }
     if let Some(ua) = &user_agent {
-        request_builder = request_builder.header(header::USER_AGENT, header::HeaderValue::from_str(&ua)?);
-    }
-    if let Some(r) = &referer {
-        request_builder = request_builder.header(header::REFERER, header::HeaderValue::from_str(&r)?);
+        request_builder =
+            request_builder.header(header::USER_AGENT, header::HeaderValue::from_str(&ua)?);
     }
     let response = request_builder.send().await?;
 

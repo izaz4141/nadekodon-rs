@@ -17,7 +17,7 @@ use main::DownloadManager;
 use crate::signals::{
     CancelDownload, DeleteDownload, DoDownload, DownloadDetails, DownloadGlance, DownloadList,
     FfmpegResult, GetDownloadDetails, GetDownloadList, InitTorrentPersistence, PartInfo,
-    PauseDownload, ResumeDownload, QueryUrl, UrlQueryOutput, RequestFfmpeg,
+    PauseDownload, QueryUrl, RequestFfmpeg, ResumeDownload, UrlQueryOutput,
 };
 use crate::utils::logger;
 use rinf::{DartSignal, RustSignal};
@@ -78,6 +78,7 @@ async fn handle_merge_success(
     url: &Option<String>,
     video_dest: Option<&std::path::PathBuf>,
     audio_dest: Option<&std::path::PathBuf>,
+    referer: Option<String>,
 ) {
     let mut total_size = 0;
     if let Some(vid) = video_id {
@@ -114,7 +115,7 @@ async fn handle_merge_success(
             .as_millis() as u64,
         download_type: DownloadType::YTDLP,
         torrent_hash: None,
-        referer: None,
+        referer,
     };
 
     manager.load_snapshot(vec![final_info]).await;
@@ -165,8 +166,11 @@ pub async fn query_url_info(client: Client) {
         let user_agent = data.user_agent;
         let referer = data.referer;
 
-        let result =
-            tokio::time::timeout(Duration::from_secs(20), get_url_info(client.clone(), &url, cookie, user_agent, referer)).await;
+        let result = tokio::time::timeout(
+            Duration::from_secs(20),
+            get_url_info(client.clone(), &url, cookie, user_agent, referer),
+        )
+        .await;
 
         let result = match result {
             Ok(res) => res,
@@ -254,7 +258,10 @@ pub async fn spawn_download_worker(manager: Arc<DownloadManager>) {
                 let audio_id = if let Some(format) = audio_format {
                     let path = audio_path_base.with_extension(format.ext);
                     audio_dest = Some(path.clone());
-                    match manager.add_download(format.url.clone(), path, None, None, None).await {
+                    match manager
+                        .add_download(format.url.clone(), path, None, None, data.referer.clone())
+                        .await
+                    {
                         Ok(id) => Some(id),
                         Err(e) => {
                             logger::error(&format!("Failed to spawn ytdl audio worker: {:?}", e));
@@ -268,7 +275,10 @@ pub async fn spawn_download_worker(manager: Arc<DownloadManager>) {
                 let video_id = if let Some(format) = video_format {
                     let path = video_path_base.with_extension(format.ext);
                     video_dest = Some(path.clone());
-                    match manager.add_download(format.url.clone(), path, None, None, None).await {
+                    match manager
+                        .add_download(format.url.clone(), path, None, None, data.referer.clone())
+                        .await
+                    {
                         Ok(id) => Some(id),
                         Err(e) => {
                             logger::error(&format!("Failed to spawn ytdl video worker: {:?}", e));
@@ -348,6 +358,7 @@ pub async fn spawn_download_worker(manager: Arc<DownloadManager>) {
                                     &data.url,
                                     video_dest.as_ref(),
                                     audio_dest.as_ref(),
+                                    data.referer.clone(),
                                 )
                                 .await;
                             }
@@ -394,6 +405,7 @@ pub async fn spawn_download_worker(manager: Arc<DownloadManager>) {
                                         &data.url,
                                         video_dest.as_ref(),
                                         audio_dest.as_ref(),
+                                        data.referer.clone(),
                                     )
                                     .await;
                                 } else {
@@ -411,7 +423,16 @@ pub async fn spawn_download_worker(manager: Arc<DownloadManager>) {
                 }
             });
         } else if let Some(url) = data.url {
-            match manager.add_download(url.clone(), dest, data.cookie, data.user_agent, data.referer).await {
+            match manager
+                .add_download(
+                    url.clone(),
+                    dest,
+                    data.cookie,
+                    data.user_agent,
+                    data.referer,
+                )
+                .await
+            {
                 Ok(id) => logger::debug(&format!("Spawned worker for {} with id {}", url, id)),
                 Err(e) => logger::error(&format!("Failed to spawn worker for {}: {:?}", url, e)),
             }
@@ -508,6 +529,7 @@ pub async fn get_download_details(manager: Arc<DownloadManager>) {
                     peers,
                     ratio,
                     eta,
+                    referer: info.referer,
                 }
                 .send_signal_to_dart();
             }
@@ -760,6 +782,7 @@ pub async fn get_download_list(manager: Arc<DownloadManager>) {
                         dspeed: dspeed,
                         uspeed: uspeed,
                         state: state_str,
+                        referer: info.referer.clone(),
                     };
                     download_list.push(glance);
                 }

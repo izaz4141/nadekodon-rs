@@ -108,6 +108,7 @@ class _DownloadPageState extends State<DownloadPage>
         status: status,
         dspeed: d.dspeed,
         uspeed: d.uspeed,
+        referer: d.referer,
       );
     }).toList();
 

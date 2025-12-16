@@ -10,6 +10,7 @@ import 'package:window_manager/window_manager.dart';
 import 'theme/app_theme.dart';
 import 'ui/pages/home_page.dart';
 import 'ui/widgets/dialog/add_download.dart';
+import 'ui/widgets/dialog/update_url_dialog.dart';
 import 'utils/helper.dart';
 import 'utils/logger.dart';
 import 'utils/settings.dart';
@@ -59,6 +60,11 @@ class _NadekoDonState extends State<NadekoDon> {
     RequestAddDownload.rustSignalStream.listen((signal) async {
       final message = signal.message;
       await _focusWindow();
+
+      if (UpdateUrlDialog.isOpen) {
+        return;
+      }
+
       final context = navigatorKey.currentContext;
       if (context != null) {
         showAddDownloadDialog(
