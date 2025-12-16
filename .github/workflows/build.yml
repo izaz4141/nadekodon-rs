@@ -297,7 +297,7 @@ jobs:
             BODY="## Nightly Build (${{ needs.setup.outputs.version_name }})\n\n**Built:** ${BUILD_TIME}\n\nChanges since $PREV_TAG:\n"
           else
             # Stable: Diff from previous tag
-            PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+            PREV_TAG=$(git describe --tags --match "v*" --abbrev=0 HEAD^ 2>/dev/null || echo "")
             echo "Previous tag: $PREV_TAG"
             TITLE="${{ github.ref_name }}"
             TAG_NAME="${{ github.ref_name }}"
