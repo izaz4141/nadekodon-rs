@@ -47,7 +47,7 @@ class AppTheme {
   static const double spaceXXL = 32;
 
   static const double radiusSM = 8;
-  static const double radiusMD = 12;
+  static const double radiusMD = 16;
   static const double radiusLG = 24;
 
   static const double iconXS = 12;
@@ -138,7 +138,7 @@ class AppTheme {
 
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
-        scrolledUnderElevation: 1,
+        scrolledUnderElevation: 2,
         iconTheme: IconThemeData(size: iconLG * iconScale),
       ),
 
@@ -186,7 +186,7 @@ class AppTheme {
 
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(radiusLG * radiusScale),
+          borderRadius: BorderRadius.circular(radiusMD * radiusScale),
         ),
       ),
 
