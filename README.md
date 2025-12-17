@@ -6,7 +6,7 @@
   <p>A modern, cross-platform Download Manager</p>
   <p>
     <a href="https://github.com/izaz4141/nadekodon-rs/releases"><img src="https://img.shields.io/github/v/release/izaz4141/nadekodon-rs?style=for-the-badge&labelColor=101418&color=9ccbfb" alt="GitHub release"></a>
-    <a href="https://github.com/izaz4141/nadekodon-rs/blob/master/LICENSE"><img src="https://img.shields.io/github/license/izaz4141/nadekodon-rs?style=for-the-badge&labelColor=101418&color=b9c8da" alt="GitHub License"></a>
+    <a href="https://github.com/izaz4141/nadekodon-rs/blob/main/LICENSE.md"><img src="https://img.shields.io/github/license/izaz4141/nadekodon-rs?style=for-the-badge&labelColor=101418&color=b9c8da" alt="GitHub License"></a>
     <a href="https://github.com/izaz4141/nadekodon-rs/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/izaz4141/nadekodon-rs/build.yml?branch=main&style=for-the-badge&labelColor=101418&color=a6e3a1&label=BUILD" alt="Build Status"></a>
   </p>
   
@@ -21,7 +21,9 @@
 
 </div>
 
-Nadeko~don is a open-source download manager designed for efficiency and a seamless user experience across multiple operating systems. By leveraging a Rust backend for heavy lifting and a Flutter frontend for a rich, responsive UI, Nadeko~don offers a powerful and reliable tool for managing all your downloads.
+<p>
+Nadeko~don is a open-source download manager designed for efficiency and a seamless user experience across multiple operating systems. By leveraging a Rust backend for heavy lifting and a Flutter frontend for a rich, responsive UI, it offers a powerful and reliable tool for managing all your downloads.
+</p>
 
 ## Features
 
@@ -69,7 +71,7 @@ You can download the latest pre-built binaries for your operating system from th
 
 ### From Source
 
-If you prefer to compile the application yourself, you can follow these steps. Make sure you have Flutter and Rust installed on your system. For more detailed instructions, refer to the [DEVELOPMENT.md](DEVELOPMENT.md) file.
+If you prefer to compile the application yourself, you can follow these steps. Make sure you have Flutter and Rust installed on your system. For more detailed instructions, refer to the [DEVELOPMENT](DEVELOPMENT.md) file.
 
 1.  **Clone the repository:**
     ```sh
@@ -90,4 +92,4 @@ If you prefer to compile the application yourself, you can follow these steps. M
 
 ## License
 
-This project is licensed under the AGPL-3.0 License. See the [**LICENSE**](LICENSE) file for details.
+This project is licensed under the AGPL-3.0 License. See the [**LICENSE**](LICENSE.md) file for details.
