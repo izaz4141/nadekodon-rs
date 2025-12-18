@@ -30,7 +30,8 @@ Nadeko~don is a open-source download manager designed for efficiency and a seaml
 - **High Performance**: The core logic is written in Rust, utilizing async operations to handle multiple downloads concurrently with minimal resource consumption.
 - **Cross-Platform**: A single codebase supports Linux, Windows, and Android, providing a consistent experience everywhere.
 - **Browser Integration**: A companion browser extension, [**NadeCon**](https://github.com/izaz4141/NadeCon), captures download links directly from your browser. This is facilitated by a local server that runs alongside the application.
-- **YT-DLP Support**: Download videos and audio from thousands of websites by pasting a URL. Nadeko~don integrates `yt-dlp` to handle the extraction.
+- **Multiple Protocol Support**: Support for HTTP/HTTPS with resume capability, BitTorrent, and Magnet links—all handled natively in one unified interface.
+- **YT-DLP Support**: Download videos and audio from 1000+ websites by pasting a URL. Uses your system's `yt-dlp` installation. **Note**: This feature is not available on Android.
 - **System Tray Operation**: The application can be minimized to the system tray, allowing it to run in the background without cluttering your desktop.
 - **Modern UI**: A clean and intuitive user interface built with Flutter, following Material Design 3 principles.
 
