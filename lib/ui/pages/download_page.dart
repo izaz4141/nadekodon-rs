@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:nadekodon/ui/widgets/components/download_card.dart';
-import 'package:nadekodon/ui/widgets/dialog/delete_multiple_download.dart';
+import 'package:nadekodon/ui/widgets/dialog/delete_download.dart';
 import 'package:rinf/rinf.dart';
 
 import '../../theme/app_theme.dart';
@@ -252,7 +252,7 @@ class _DownloadPageState extends State<DownloadPage>
 
     if (selectedItems.isEmpty) return;
 
-    await showDeleteMultipleDownloadsDialog(
+    await showDeleteDownloadsDialog(
       context,
       selectedItems,
       onDeleted: () => _unselectAll(state),
@@ -662,6 +662,11 @@ class _DownloadListTabState extends State<_DownloadListTab>
                     context,
                     details.globalPosition,
                     item,
+                    onDelete:
+                        (state.isSelectionMode &&
+                            state.selectedIds.contains(item.id))
+                        ? widget.onDeleteSelected
+                        : null,
                   );
                 },
                 onMenuPressed: (details) {
@@ -669,6 +674,11 @@ class _DownloadListTabState extends State<_DownloadListTab>
                     context,
                     details.globalPosition,
                     item,
+                    onDelete:
+                        (state.isSelectionMode &&
+                            state.selectedIds.contains(item.id))
+                        ? widget.onDeleteSelected
+                        : null,
                   );
                 },
                 onPauseResume: () {

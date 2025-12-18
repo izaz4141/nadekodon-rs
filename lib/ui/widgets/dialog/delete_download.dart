@@ -3,14 +3,19 @@ import 'package:flutter/material.dart';
 import '../../../utils/helper.dart';
 import '../app_snackbar.dart';
 import '../../../src/bindings/bindings.dart';
+import '../../../theme/app_theme.dart';
 
-/// Shows a dialog to confirm deletion of a download
-Future<void> showDeleteDownloadDialog(
+/// Shows a dialog to confirm deletion of one or more downloads
+Future<void> showDeleteDownloadsDialog(
   BuildContext context,
-  DownloadItem item,
-) async {
+  List<DownloadItem> items, {
+  VoidCallback? onDeleted,
+}) async {
+  if (items.isEmpty) return;
+
   bool deleteFromList = true;
   bool deleteFile = false;
+  final isMultiple = items.length > 1;
 
   final result = await showDialog<bool>(
     context: context,
@@ -20,10 +25,25 @@ Future<void> showDeleteDownloadDialog(
       return StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            title: Text('Delete Download', style: textTheme.titleMedium),
+            title: Text(
+              isMultiple ? 'Delete Selected' : 'Delete Download',
+              style: textTheme.titleMedium,
+            ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (isMultiple)
+                  Text(
+                    'Are you sure you want to delete ${items.length} items?',
+                    style: textTheme.bodyMedium,
+                  )
+                else
+                  Text(
+                    'Are you sure you want to delete this download?',
+                    style: textTheme.bodyMedium,
+                  ),
+                const SizedBox(height: AppTheme.spaceMD),
                 CheckboxListTile(
                   title: Text('Remove from list', style: textTheme.bodyMedium),
                   value: deleteFromList,
@@ -32,10 +52,14 @@ Future<void> showDeleteDownloadDialog(
                       deleteFromList = value ?? true;
                     });
                   },
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
                 ),
                 CheckboxListTile(
                   title: Text(
-                    'Delete downloaded file',
+                    isMultiple
+                        ? 'Delete downloaded files'
+                        : 'Delete downloaded file',
                     style: textTheme.bodyMedium,
                   ),
                   value: deleteFile,
@@ -44,6 +68,8 @@ Future<void> showDeleteDownloadDialog(
                       deleteFile = value ?? false;
                     });
                   },
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
                 ),
               ],
             ),
@@ -65,15 +91,19 @@ Future<void> showDeleteDownloadDialog(
 
   if (result != true || !context.mounted) return;
 
-  // Remove from list if requested
-  if (deleteFromList) {
-    DeleteDownload(id: item.id, deleteFile: deleteFile).sendSignalToRust();
-    if (context.mounted) {
-      AppSnackBar.show(
-        context,
-        "Download removed from list",
-        type: SnackType.success,
-      );
+  int successCount = 0;
+  for (final item in items) {
+    if (deleteFromList) {
+      DeleteDownload(id: item.id, deleteFile: deleteFile).sendSignalToRust();
     }
+    successCount++;
+  }
+
+  if (context.mounted) {
+    final message = isMultiple
+        ? "Deleted $successCount items"
+        : "Download removed from list";
+    AppSnackBar.show(context, message, type: SnackType.success);
+    onDeleted?.call();
   }
 }

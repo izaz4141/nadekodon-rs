@@ -14,8 +14,9 @@ import 'update_url_dialog.dart';
 Future<void> showDownloadContextMenu(
   BuildContext context,
   Offset position,
-  DownloadItem item,
-) async {
+  DownloadItem item, {
+  VoidCallback? onDelete,
+}) async {
   final RenderBox overlay =
       Overlay.of(context).context.findRenderObject() as RenderBox;
   final textTheme = Theme.of(context).textTheme;
@@ -160,7 +161,11 @@ Future<void> showDownloadContextMenu(
       );
       break;
     case 'delete':
-      await showDeleteDownloadDialog(context, item);
+      if (onDelete != null) {
+        onDelete();
+      } else {
+        await showDeleteDownloadsDialog(context, [item]);
+      }
       break;
   }
 }
