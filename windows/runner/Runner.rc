@@ -90,7 +90,7 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "id.glicole.nadekodon" "\0"
-            VALUE "FileDescription", "nadekodon" "\0"
+            VALUE "FileDescription", "Download Manager" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "nadekodon" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2025 id.glicole.nadekodon. All rights reserved." "\0"

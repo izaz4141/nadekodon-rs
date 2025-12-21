@@ -13,6 +13,7 @@ AppDir:
   app_info:
     id: id.glicole.nadekodon
     name: Nadeko~don
+    description: Download Manager
     icon: nadeko-don
     version: latest
     exec: nadekodon

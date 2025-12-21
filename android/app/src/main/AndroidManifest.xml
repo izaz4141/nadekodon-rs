@@ -16,7 +16,8 @@
         tools:ignore="ScopedStorage" />
     
     <application
-        android:label="nadekodon"
+        android:label="Nadeko~don"
+        android:description="Download Manager"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon"
         android:requestLegacyExternalStorage="true"> 
