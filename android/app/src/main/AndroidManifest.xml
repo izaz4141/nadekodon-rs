@@ -17,7 +17,7 @@
     
     <application
         android:label="Nadeko~don"
-        android:description="Download Manager"
+        android:description="@string/app_description"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon"
         android:requestLegacyExternalStorage="true"> 
