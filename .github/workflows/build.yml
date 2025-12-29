@@ -253,10 +253,11 @@ jobs:
             --executable build/linux/x64/release/bundle/nadekodon \
             --desktop-file linux/nadekodon.desktop \
             --icon-file assets/icons/nadeko-don-512.png \
+            --icon-filename nadeko-don.png
             --output appimage
           
           # Rename output
-          mv Nadeko_don-*.AppImage ${{ matrix.artifact_path }}
+          mv Nadeko*don*.AppImage ${{ matrix.artifact_path }}
 
       - name: Package Windows build
         if: matrix.target == 'windows'
