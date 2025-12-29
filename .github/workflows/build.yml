@@ -252,7 +252,7 @@ jobs:
           ./linuxdeploy --appdir AppDir \
             --executable build/linux/x64/release/bundle/nadekodon \
             --desktop-file linux/nadekodon.desktop \
-            --icon-file assets/icons/nadeko-don.png \
+            --icon-file assets/icons/nadeko-don-1024.png \
             --output appimage
           
           # Rename output
