@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Nadeko~don
+Comment=Download Manager
+Exec=nadekodon
+Icon=nadeko-don
+Type=Application
+Categories=Utility;Network;
+Terminal=false
