@@ -12,7 +12,7 @@ import 'utils/notification_service.dart';
 import 'utils/log_service.dart';
 import 'utils/settings.dart';
 import 'utils/logger.dart';
-import 'utils/permission_helper.dart';
+
 import 'utils/updater.dart';
 import 'utils/ws_status_service.dart';
 import 'utils/single_instance.dart';
@@ -41,7 +41,7 @@ Future<void> main() async {
 
       NotificationService().startListening();
       if (Platform.isAndroid) {
-        await checkAndRequestPermission();
+        // Permissions are now handled in App.dart via PermissionHelper
       } else {
         await SingleInstance.init(() async {
           await windowManager.show();

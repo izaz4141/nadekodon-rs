@@ -12,6 +12,7 @@ class SettingsManager {
   static late String configPath;
   static late Directory? downloadsDir;
   static late Directory? configDir;
+  static bool isFirstRun = false;
 
   // Your ValueNotifiers
   static final retreatToTray = ValueNotifier<bool>(
@@ -68,6 +69,7 @@ class SettingsManager {
       _applyFromJson(data);
       log(configPath);
     } else {
+      isFirstRun = true;
       applyDefaultSettings();
       regenerateApiKey();
       await _saveAll();

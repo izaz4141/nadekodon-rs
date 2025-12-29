@@ -11,6 +11,7 @@ import 'theme/app_theme.dart';
 import 'ui/pages/home_page.dart';
 import 'ui/widgets/dialog/add_download.dart';
 import 'ui/widgets/dialog/update_url_dialog.dart';
+import 'ui/widgets/dialog/permission_dialog.dart';
 import 'utils/helper.dart';
 import 'utils/logger.dart';
 import 'utils/settings.dart';
@@ -48,8 +49,18 @@ class _NadekoDonState extends State<NadekoDon> {
       },
     );
 
-    // Only set up intent handling on Android
     if (Platform.isAndroid) {
+      if (SettingsManager.isFirstRun) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final context = navigatorKey.currentContext;
+          if (context != null) {
+            showDialog(
+              context: context,
+              builder: (context) => const PermissionDialog(),
+            );
+          }
+        });
+      }
       _initAppLinks();
       _initFileShareIntent();
     }

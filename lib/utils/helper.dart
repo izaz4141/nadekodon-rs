@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:nadekodon/utils/logger.dart';
 
 enum DownloadStatus {
@@ -120,6 +121,14 @@ Future<ResultType> openFile(String filePath) async {
   }
 
   try {
+    if (Platform.isAndroid && filePath.toLowerCase().endsWith('.apk')) {
+      if (!await Permission.requestInstallPackages.isGranted) {
+        final status = await Permission.requestInstallPackages.request();
+        if (!status.isGranted) {
+          return ResultType.permissionDenied;
+        }
+      }
+    }
     final result = await OpenFilex.open(filePath);
     return result.type;
   } catch (e) {
