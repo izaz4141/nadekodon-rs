@@ -257,7 +257,7 @@ class _SidebarOverlayHandlerState extends State<SidebarOverlayHandler>
             child: Align(
               alignment: Alignment.centerRight,
               child: SvgPicture.asset(
-                'assets/icons/nadeko-don-outlined.svg',
+                'assets/icons/nadeko-don-filled.svg',
                 width: AppTheme.iconXL * AppTheme.iconScale(context),
                 height: AppTheme.iconXL * AppTheme.iconScale(context),
                 colorFilter: ColorFilter.mode(colors.primary, BlendMode.srcIn),
