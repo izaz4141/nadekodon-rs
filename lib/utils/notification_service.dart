@@ -7,13 +7,14 @@ import 'package:nadekodon/utils/helper.dart';
 import 'package:nadekodon/src/bindings/bindings.dart';
 import 'package:rinf/rinf.dart';
 import 'package:flutter_local_notifications_linux/src/model/hint.dart';
+import 'package:window_manager/window_manager.dart';
 
 @pragma('vm:entry-point')
-void notificationTapBackground(NotificationResponse details) {
+Future<void> notificationTapBackground(NotificationResponse details) async {
   final actionId = details.actionId;
   final payload = details.payload;
 
-  if (payload != null && actionId != null) {
+  if (payload != null) {
     final SendPort? sendPort = IsolateNameServer.lookupPortByName(
       NotificationService.notificationPortName,
     );
@@ -24,12 +25,20 @@ void notificationTapBackground(NotificationResponse details) {
     } else {
       // Main isolate is dead, initialize Rust and handle directly
       initializeRust(assignRustSignal);
-      _handleAction(actionId, payload);
+      await _handleAction(actionId, payload);
     }
   }
 }
 
-void _handleAction(String actionId, String id) {
+Future<void> _handleAction(String? actionId, String id) async {
+  if (actionId == null || actionId == 'Open') {
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      await windowManager.show();
+      await windowManager.restore();
+      await windowManager.focus();
+    }
+    return;
+  }
   switch (actionId) {
     case 'pause':
       PauseDownload(id: id).sendSignalToRust();
@@ -70,11 +79,11 @@ class NotificationService {
       _port!.sendPort,
       notificationPortName,
     );
-    _port!.listen((dynamic data) {
+    _port!.listen((dynamic data) async {
       if (data is List && data.length == 2) {
-        final actionId = data[0] as String;
+        final actionId = data[0] as String?;
         final id = data[1] as String;
-        _handleAction(actionId, id);
+        await _handleAction(actionId, id);
       }
     });
 
@@ -104,12 +113,12 @@ class NotificationService {
     await flutterLocalNotificationsPlugin.initialize(
       initializationSettings,
       onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
-      onDidReceiveNotificationResponse: (NotificationResponse details) {
+      onDidReceiveNotificationResponse: (NotificationResponse details) async {
         final actionId = details.actionId;
         final payload = details.payload;
 
-        if (payload != null && actionId != null) {
-          _handleAction(actionId, payload);
+        if (payload != null) {
+          await _handleAction(actionId, payload);
         }
       },
     );
