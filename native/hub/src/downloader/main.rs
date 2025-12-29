@@ -1865,6 +1865,13 @@ impl DownloadManager {
             interval.tick().await;
             let global_limit = self.settings.read().await.speed_limit;
             if global_limit == 0 {
+                let active = self.active.lock().await;
+                let workers = self.workers.lock().await;
+                for id in active.iter() {
+                    if let Some(w) = workers.get(id) {
+                        w.change_speed_limit(0).await;
+                    }
+                }
                 continue;
             }
 
