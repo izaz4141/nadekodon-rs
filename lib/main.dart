@@ -138,7 +138,7 @@ Future<void> _initTray() async {
   await trayManager.setIcon(
     Platform.isWindows
         ? 'assets/icons/nadeko-don.ico'
-        : 'assets/icons/nadeko-don.png',
+        : 'assets/icons/nadeko-don-32.png',
   );
   if (!Platform.isLinux) {
     await trayManager.setToolTip(

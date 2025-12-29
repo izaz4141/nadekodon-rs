@@ -113,3 +113,9 @@ To maintain code quality and consistency, please format and lint your code befor
     ```sh
     cargo clippy -- -D warnings
     ```
+
+## Miscellanous
+
+### Icons
+-   Generating android icon: `magick assets/icons/nadeko-don-1024.png -resize 75% -background none -gravity center -extent 1024x1024 assets/icons/nadeko-don-sm-1024.png`
+-   Generating flutter icons: `fvm dart run flutter_launcher_icons`

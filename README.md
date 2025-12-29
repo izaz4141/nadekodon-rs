@@ -1,6 +1,6 @@
 <div align="center">
   <a href="https://github.com/izaz4141/nadekodon-rs">
-    <img src="assets/icons/nadeko-don.png" alt="Nadeko~don Logo" width="150">
+    <img src="assets/icons/nadeko-don-1024.png" alt="Nadeko~don Logo" width="150">
   </a>
   <h3>Nadeko~don</h3>
   <p>A modern, cross-platform Download Manager</p>

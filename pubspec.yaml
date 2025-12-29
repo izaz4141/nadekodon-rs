@@ -115,16 +115,16 @@ flutter:
   # see https://flutter.dev/to/font-from-package
 
 flutter_launcher_icons:
-  image_path: "assets/icons/nadeko-don.png"
+  image_path: "assets/icons/nadeko-don-1024.png"
   android: "launcher_icon"
   min_sdk_android: 21 # android min sdk min:16, default 21
-  adaptive_icon_background: "#FFFFFF"
-  adaptive_icon_foreground: "assets/icons/nadeko-don-sm.png"
+  adaptive_icon_background: "#B8860B"
+  adaptive_icon_foreground: "assets/icons/nadeko-don-sm-1024.png"
   adaptive_icon_monochrome: "assets/icons/nadeko-don-outlined-sm.png"
   ios: false
   web:
     generate: true
-    background_color: "#000000"
+    background_color: "#B8860B"
     theme_color: "#FC0FC0"
   windows:
     generate: true

@@ -3,7 +3,7 @@
     "short_name": "nadekodon",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#000000",
+    "background_color": "#B8860B",
     "theme_color": "#FC0FC0",
     "description": "A new Flutter project.",
     "orientation": "portrait-primary",

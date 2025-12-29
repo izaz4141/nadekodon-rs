@@ -93,7 +93,7 @@ class NotificationService {
     final LinuxInitializationSettings initializationSettingsLinux =
         LinuxInitializationSettings(
           defaultActionName: 'Open',
-          defaultIcon: AssetsLinuxIcon('assets/icons/nadeko-don.png'),
+          defaultIcon: AssetsLinuxIcon('assets/icons/nadeko-don-128.png'),
         );
 
     final WindowsInitializationSettings initializationSettingsWindows =
@@ -101,7 +101,7 @@ class NotificationService {
           appName: 'Nadeko~don',
           appUserModelId: 'id.glicole.nadekodon',
           guid: '2c336594-33b6-4f6b-8ab1-1234567890ab',
-          iconPath: 'assets/icons/nadeko-don.png',
+          iconPath: 'assets/icons/nadeko-don-128.png',
         );
     final InitializationSettings initializationSettings =
         InitializationSettings(

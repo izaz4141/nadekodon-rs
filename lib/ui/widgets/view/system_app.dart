@@ -157,7 +157,7 @@ class _SystemAppState extends State<SystemApp> {
         children: [
           SizedBox(
             height: AppTheme.iconXXL * 2 * AppTheme.iconScale(context),
-            child: Image.asset('assets/icons/nadeko-don.png'),
+            child: Image.asset('assets/icons/nadeko-don-1024.png'),
           ),
           SizedBox(height: AppTheme.spaceLG),
           Text('Nadeko~don', style: textTheme.titleLarge),
