@@ -6,7 +6,7 @@ script:
   - cp -r build/linux/x64/release/bundle AppDir
   - mkdir -p AppDir/usr/share/icons
   - cp assets/icons/nadeko-don.png AppDir/usr/share/icons/
-  - cp linux/nadekodon.desktop AppDir/
+  - cp linux/nadekodon.desktop AppDir/id.glicole.nadekodon.desktop
 
 AppDir:
   path: ./AppDir
