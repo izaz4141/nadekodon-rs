@@ -2,7 +2,7 @@
 Name=Nadeko~don
 Comment=Download Manager
 Exec=nadekodon
-Icon=nadeko-don
+Icon=nadeko-don-512
 Type=Application
 Categories=Utility;Network;
 Terminal=false
