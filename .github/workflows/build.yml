@@ -263,6 +263,7 @@ jobs:
           
           # Rename output
           mv Nadeko*.AppImage ${{ matrix.artifact_path }}
+          mv Nadeko*.zsync ${{ matrix.artifact_path }}.zsync
 
       - name: Package Windows build
         if: matrix.target == 'windows'
