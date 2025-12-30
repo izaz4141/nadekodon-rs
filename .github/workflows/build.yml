@@ -236,20 +236,25 @@ jobs:
         run: |
           echo "Building AppImage using linuxdeploy..."
           
-          # Install linuxdeploy
+          # Install linuxdeploy and appimage plugin
           wget -O linuxdeploy https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
-          chmod +x linuxdeploy
+          wget -O linuxdeploy-plugin-appimage https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage
+          chmod +x linuxdeploy linuxdeploy-plugin-appimage
           
           # Prepare AppDir for extra artifacts
           mkdir -p AppDir/usr/bin
-          mkdir -p AppDir/usr/lib
+          # Copy whole bundle to usr/bin
+          cp -r build/linux/x64/release/bundle/* AppDir/usr/bin/
           
-          # Copy extra artifacts (lib and data)
-          cp -r build/linux/x64/release/bundle/lib/* AppDir/usr/lib/
-          cp -r build/linux/x64/release/bundle/data AppDir/usr/bin/data
-          
+          # Determine Update Info
+          if [[ "${{ needs.setup.outputs.is_nightly }}" == "true" ]]; then
+            export UPDATE_INFORMATION="gh-releases-zsync|izaz4141|nadekodon-rs|nightly|nadekodon-linux-x64.AppImage.zsync"
+          else
+            export UPDATE_INFORMATION="gh-releases-zsync|izaz4141|nadekodon-rs|latest|nadekodon-linux-x64.AppImage.zsync"
+          fi
+
           # Run linuxdeploy
-          ./linuxdeploy --appdir AppDir \
+          VERSION="${{ needs.setup.outputs.version_name }}" ./linuxdeploy --appdir AppDir \
             --executable build/linux/x64/release/bundle/nadekodon \
             --desktop-file linux/nadekodon.desktop \
             --icon-file assets/icons/nadeko-don-512.png \
@@ -258,6 +263,7 @@ jobs:
           
           # Rename output
           mv Nadeko*don*.AppImage ${{ matrix.artifact_path }}
+          mv Nadeko*don*.AppImage.zsync ${{ matrix.artifact_path }}.zsync
 
       - name: Package Windows build
         if: matrix.target == 'windows'
@@ -275,7 +281,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ARTIFACT_NAME }}-${{ matrix.target }}
-          path: ${{ matrix.artifact_path }}
+          path: ${{ matrix.artifact_path }}*
 
   release:
     name: Create GitHub Release
