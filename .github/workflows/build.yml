@@ -236,10 +236,11 @@ jobs:
         run: |
           echo "Building AppImage using linuxdeploy..."
           
-          # Install linuxdeploy and appimage plugin
+          # Install linuxdeploy and plugins
           wget -O linuxdeploy https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
           wget -O linuxdeploy-plugin-appimage https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage
-          chmod +x linuxdeploy linuxdeploy-plugin-appimage
+          wget -O linuxdeploy-plugin-gtk https://github.com/linuxdeploy/linuxdeploy-plugin-gtk/releases/download/continuous/linuxdeploy-plugin-gtk-x86_64.AppImage
+          chmod +x linuxdeploy linuxdeploy-plugin-appimage linuxdeploy-plugin-gtk
           
           # Prepare AppDir for extra artifacts
           mkdir -p AppDir/usr/bin
@@ -259,6 +260,7 @@ jobs:
             --desktop-file linux/nadekodon.desktop \
             --icon-file assets/icons/nadeko-don-512.png \
             --icon-filename nadeko-don \
+            --plugin gtk \
             --output appimage
           
           # Rename output
