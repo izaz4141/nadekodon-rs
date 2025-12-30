@@ -68,7 +68,13 @@ class SingleInstance {
 
   static Future<void> dispose() async {
     if (_lockFile != null) {
-      await _lockFile!.delete();
+      try {
+        if (await _lockFile!.exists()) {
+          await _lockFile!.delete();
+        }
+      } catch (e) {
+        // Ignore errors during disposal
+      }
     }
   }
 }

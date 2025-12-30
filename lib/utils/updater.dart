@@ -5,6 +5,8 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pub_semver/pub_semver.dart';
 import 'package:nadekodon/utils/logger.dart';
+import 'package:nadekodon/utils/app_lifecycle.dart';
+import 'package:nadekodon/utils/single_instance.dart';
 
 import 'package:archive/archive_io.dart';
 
@@ -301,12 +303,16 @@ Future<bool> downloadAndReplaceAppImage(
 
     log('Update successful! Restarting application...');
 
+    // Release the single instance lock so the new process can start
+    await SingleInstance.dispose();
+
     await Process.start(
       currentAppImagePath,
       [],
       mode: ProcessStartMode.detached,
     );
 
+    await closeApp();
     exit(0);
   } catch (e) {
     log('Error updating AppImage: $e', isError: true);
@@ -391,12 +397,16 @@ Future<bool> downloadAndReplaceWindows(
 
     log('Update successful! Restarting application...');
 
+    // Release the single instance lock so the new process can start
+    await SingleInstance.dispose();
+
     await Process.start(
       Platform.resolvedExecutable,
       [],
       mode: ProcessStartMode.detached,
     );
 
+    await closeApp();
     exit(0);
   } catch (e) {
     log('Error updating Windows app: $e', isError: true);
