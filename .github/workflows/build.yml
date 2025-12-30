@@ -239,13 +239,13 @@ jobs:
           # Install linuxdeploy and plugins
           wget -O linuxdeploy https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
           wget -O linuxdeploy-plugin-appimage https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage
-          wget -O linuxdeploy-plugin-gtk https://github.com/linuxdeploy/linuxdeploy-plugin-gtk/releases/download/continuous/linuxdeploy-plugin-gtk-x86_64.AppImage
-          chmod +x linuxdeploy linuxdeploy-plugin-appimage linuxdeploy-plugin-gtk
+          wget -c https://raw.githubusercontent.com/linuxdeploy/linuxdeploy-plugin-gtk/master/linuxdeploy-plugin-gtk.sh
+          chmod +x linuxdeploy linuxdeploy-plugin-appimage linuxdeploy-plugin-gtk.sh
           
           # Prepare AppDir for extra artifacts
-          mkdir -p AppDir/usr/bin
-          # Copy whole bundle to usr/bin
-          cp -r build/linux/x64/release/bundle/* AppDir/usr/bin/
+          mkdir -p AppDir/usr
+          # Copy whole bundle to usr
+          cp -r build/linux/x64/release/bundle/* AppDir/usr/
           
           # Determine Update Info
           if [[ "${{ needs.setup.outputs.is_nightly }}" == "true" ]]; then
@@ -256,7 +256,7 @@ jobs:
 
           # Run linuxdeploy
           VERSION="${{ needs.setup.outputs.version_name }}" ./linuxdeploy --appdir AppDir \
-            --executable build/linux/x64/release/bundle/nadekodon \
+            --executable AppDir/usr/nadekodon \
             --desktop-file linux/nadekodon.desktop \
             --icon-file assets/icons/nadeko-don-512.png \
             --icon-filename nadeko-don \
