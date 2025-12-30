@@ -196,15 +196,20 @@ jobs:
           cache-key: "flutter-:os:-:channel:-:version:-:arch:-:hash:"
           cache-path: "${{ runner.tool_cache }}/flutter/:channel:-:version:-:arch:"
 
-      - name: Install rinf_cli
-        shell: bash
+      - name: Generate rinf bindings
         run: |
           if ! command -v rinf &> /dev/null; then
             cargo install rinf_cli
           fi
+          rinf gen
 
-      - name: Generate rinf bindings
-        run: rinf gen
+      - name: Generate Cargo licenses
+        run: |
+          if ! command -v cargo-license &> /dev/null; then
+            cargo install cargo-license
+          fi
+          mkdir -p assets/licenses
+          cargo license --json > assets/licenses/cargo_licenses.json
 
       - name: Get Flutter packages
         run: flutter pub get

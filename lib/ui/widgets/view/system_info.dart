@@ -38,7 +38,7 @@ class _SystemInfoState extends State<SystemInfo> {
       } else if (Platform.isLinux) {
         final info = await _deviceInfoPlugin.linuxInfo;
         deviceData = {
-          'Device': info.name,
+          'Device': Platform.localHostname,
           'OS Version': '${info.prettyName} (${info.versionId})',
           'ID': info.machineId ?? 'Unknown',
         };

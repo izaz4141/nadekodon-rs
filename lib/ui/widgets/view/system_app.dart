@@ -5,6 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:nadekodon/theme/app_theme.dart';
 import 'package:nadekodon/ui/widgets/app_snackbar.dart';
 import 'package:nadekodon/ui/widgets/dialog/view_logs.dart';
+import 'package:nadekodon/ui/widgets/dialog/licenses_dialog.dart';
 import 'package:nadekodon/utils/settings.dart';
 import 'package:nadekodon/utils/updater.dart';
 import 'package:nadekodon/utils/logger.dart';
@@ -202,6 +203,24 @@ class _SystemAppState extends State<SystemApp> {
                 size: AppTheme.iconMD * AppTheme.iconScale(context),
               ),
               label: Text('View Logs', style: textTheme.bodyMedium),
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.symmetric(
+              vertical: AppTheme.spaceSM * AppTheme.spaceScale(context),
+            ),
+            child: ElevatedButton.icon(
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => const LicensesDialog(),
+                );
+              },
+              icon: Icon(
+                Icons.description_outlined,
+                size: AppTheme.iconMD * AppTheme.iconScale(context),
+              ),
+              label: Text('Licenses', style: textTheme.bodyMedium),
             ),
           ),
         ],
