@@ -234,18 +234,22 @@ jobs:
       - name: Build AppImage
         if: matrix.target == 'linux-x64'
         run: |
-          echo "Building AppImage using linuxdeploy..."
+          echo "Building AppImage using go-appimage appimagetool..."
           
-          # Install linuxdeploy and plugins
-          wget -O linuxdeploy https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
-          wget -O linuxdeploy-plugin-appimage https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage
-          wget -c https://raw.githubusercontent.com/linuxdeploy/linuxdeploy-plugin-gtk/master/linuxdeploy-plugin-gtk.sh
-          chmod +x linuxdeploy linuxdeploy-plugin-appimage linuxdeploy-plugin-gtk.sh
+          # Download appimagetool (go-appimage)
+          wget -c https://github.com/$(wget -q https://github.com/probonopd/go-appimage/releases/expanded_assets/continuous -O - | grep "appimagetool-.*-x86_64.AppImage" | head -n 1 | cut -d '"' -f 2)
+          chmod +x appimagetool-*.AppImage
           
-          # Prepare AppDir for extra artifacts
-          mkdir -p AppDir/usr
-          # Copy whole bundle to usr
-          cp -r build/linux/x64/release/bundle/* AppDir/usr/
+          # Prepare AppDir
+          mkdir -p AppDir/usr/bin
+          cp -r build/linux/x64/release/bundle/* AppDir/usr/bin/
+          
+          # Copy icon and desktop file to root of AppDir
+          cp assets/icons/nadeko-don-512.png AppDir/nadeko-don.png
+          cp linux/nadekodon.desktop AppDir/
+          
+          # Create AppRun symlink
+          ln -s usr/bin/nadekodon AppDir/AppRun
           
           # Determine Update Info
           if [[ "${{ needs.setup.outputs.is_nightly }}" == "true" ]]; then
@@ -254,18 +258,8 @@ jobs:
             export UPDATE_INFORMATION="gh-releases-zsync|izaz4141|nadekodon-rs|latest|nadekodon-linux-x64.AppImage.zsync"
           fi
 
-          # Run linuxdeploy
-          VERSION="${{ needs.setup.outputs.version_name }}" ./linuxdeploy --appdir AppDir \
-            --executable AppDir/usr/nadekodon \
-            --desktop-file linux/nadekodon.desktop \
-            --icon-file assets/icons/nadeko-don-512.png \
-            --icon-filename nadeko-don \
-            --plugin gtk \
-            --output appimage
-          
-          # Rename output
-          mv Nadeko*don*.AppImage ${{ matrix.artifact_path }}
-          mv Nadeko*don*.AppImage.zsync ${{ matrix.artifact_path }}.zsync
+          # Generate AppImage
+          VERSION="${{ needs.setup.outputs.version_name }}" ./appimagetool-*.AppImage -n -u "$UPDATE_INFORMATION" AppDir ${{ matrix.artifact_path }}
 
       - name: Package Windows build
         if: matrix.target == 'windows'
