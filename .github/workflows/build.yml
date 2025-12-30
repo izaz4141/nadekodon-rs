@@ -259,7 +259,7 @@ jobs:
           fi
 
           # Generate AppImage
-          VERSION="${{ needs.setup.outputs.version_name }}" ./appimagetool-*.AppImage -n -u "$UPDATE_INFORMATION" AppDir ${{ matrix.artifact_path }}
+          VERSION="${{ needs.setup.outputs.version_name }}" ./appimagetool-*.AppImage AppDir ${{ matrix.artifact_path }}
 
       - name: Package Windows build
         if: matrix.target == 'windows'
