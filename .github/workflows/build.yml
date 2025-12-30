@@ -237,8 +237,8 @@ jobs:
           echo "Building AppImage using go-appimage appimagetool..."
           
           # Download appimagetool (go-appimage)
-          wget -c https://github.com/$(wget -q https://github.com/probonopd/go-appimage/releases/expanded_assets/continuous -O - | grep "appimagetool-.*-x86_64.AppImage" | head -n 1 | cut -d '"' -f 2)
-          chmod +x appimagetool-*.AppImage
+          wget -O appimagetool https://github.com/$(wget -q https://github.com/probonopd/go-appimage/releases/expanded_assets/continuous -O - | grep "appimagetool-.*-x86_64.AppImage" | head -n 1 | cut -d '"' -f 2)
+          chmod +x appimagetool
           
           # Prepare AppDir
           mkdir -p AppDir/usr/bin
@@ -259,7 +259,10 @@ jobs:
           fi
 
           # Generate AppImage
-          VERSION="${{ needs.setup.outputs.version_name }}" ./appimagetool-*.AppImage AppDir ${{ matrix.artifact_path }}
+          VERSION="${{ needs.setup.outputs.version_name }}" ./appimagetool ./AppDir
+          
+          # Rename output
+          mv Nadeko*.AppImage ${{ matrix.artifact_path }}
 
       - name: Package Windows build
         if: matrix.target == 'windows'
