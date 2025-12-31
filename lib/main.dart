@@ -55,6 +55,7 @@ Future<void> main() async {
         await windowManager.ensureInitialized();
         await windowManager.setPreventClose(true);
         const windowOptions = WindowOptions(
+          size: Size(800, 600),
           center: true,
           // skipTaskbar: false,
           titleBarStyle: TitleBarStyle.hidden,
