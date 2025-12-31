@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';
 import 'dart:isolate';
@@ -30,16 +31,37 @@ Future<void> notificationTapBackground(NotificationResponse details) async {
   }
 }
 
-Future<void> _handleAction(String? actionId, String id) async {
-  if (actionId == null || actionId == 'Open') {
-    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-      await windowManager.show();
-      await windowManager.restore();
-      await windowManager.focus();
-    }
+Future<void> _handleAction(String? actionId, String? payload) async {
+  // Handle default action (opening the app)
+  if (actionId == null || actionId == 'Open' || actionId == 'View') {
+    await _bringAppToForeground();
     return;
   }
+
+  // Parse payload
+  String id = payload ?? '';
+  String? path;
+
+  if (payload != null && payload.startsWith('{')) {
+    try {
+      final data = jsonDecode(payload);
+      id = data['id'] ?? '';
+      path = data['path'];
+    } catch (_) {
+      // Fallback to treating payload as ID if JSON parsing fails
+      id = payload;
+    }
+  }
+
+  if (id.isEmpty) return;
+
+  // Handle specific actions
   switch (actionId) {
+    case 'open_file':
+      if (path != null) {
+        await openFile(path);
+      }
+      break;
     case 'pause':
       PauseDownload(id: id).sendSignalToRust();
       break;
@@ -49,6 +71,14 @@ Future<void> _handleAction(String? actionId, String id) async {
     case 'cancel':
       CancelDownload(id: id).sendSignalToRust();
       break;
+  }
+}
+
+Future<void> _bringAppToForeground() async {
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    await windowManager.show();
+    await windowManager.restore();
+    await windowManager.focus();
   }
 }
 
@@ -82,8 +112,8 @@ class NotificationService {
     _port!.listen((dynamic data) async {
       if (data is List && data.length == 2) {
         final actionId = data[0] as String?;
-        final id = data[1] as String;
-        await _handleAction(actionId, id);
+        final payload = data[1] as String;
+        await _handleAction(actionId, payload);
       }
     });
 
@@ -92,7 +122,7 @@ class NotificationService {
 
     final LinuxInitializationSettings initializationSettingsLinux =
         LinuxInitializationSettings(
-          defaultActionName: 'Open',
+          defaultActionName: 'View',
           defaultIcon: AssetsLinuxIcon('assets/icons/nadeko-don-128.png'),
         );
 
@@ -208,7 +238,7 @@ class NotificationService {
         status: item.state == "Running"
             ? DownloadStatus.running
             : DownloadStatus.seeding,
-        payload: id,
+        payload: jsonEncode({'id': id}),
       );
     }
 
@@ -257,7 +287,7 @@ class NotificationService {
               : 0,
           speed: "", // No speed for stopped items
           status: status,
-          payload: id,
+          payload: jsonEncode({'id': id, 'path': item.dest}),
         );
 
         subscription?.cancel();
@@ -311,6 +341,12 @@ class NotificationService {
           playSound: false,
           enableVibration: false,
           actions: <AndroidNotificationAction>[
+            if (isCompleted)
+              const AndroidNotificationAction(
+                'open_file',
+                'Open',
+                showsUserInterface: false,
+              ),
             if (isRunning)
               const AndroidNotificationAction(
                 'pause',
@@ -347,6 +383,8 @@ class NotificationService {
               ),
           ],
           actions: <LinuxNotificationAction>[
+            if (isCompleted)
+              const LinuxNotificationAction(key: 'open_file', label: 'Open'),
             if (isRunning)
               const LinuxNotificationAction(key: 'pause', label: 'Pause'),
             if (isPaused)
@@ -369,6 +407,8 @@ class NotificationService {
               ),
           ],
           actions: <WindowsAction>[
+            if (isCompleted)
+              const WindowsAction(arguments: 'open_file', content: 'Open'),
             if (isRunning)
               const WindowsAction(arguments: 'pause', content: 'Pause'),
             if (isPaused)
