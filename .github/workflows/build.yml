@@ -197,6 +197,7 @@ jobs:
           cache-path: "${{ runner.tool_cache }}/flutter/:channel:-:version:-:arch:"
 
       - name: Generate rinf bindings
+        shell: bash
         run: |
           if ! command -v rinf &> /dev/null; then
             cargo install rinf_cli
@@ -204,6 +205,7 @@ jobs:
           rinf gen
 
       - name: Generate Cargo licenses
+        shell: bash
         run: |
           if ! command -v cargo-license &> /dev/null; then
             cargo install cargo-license
