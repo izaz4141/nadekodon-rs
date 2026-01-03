@@ -17,4 +17,7 @@ class DefaultSettings {
   static const int customColor = 0xFFFF4081;
 
   static const bool checkNightly = false;
+
+  static const int speedMode = 0; // 0: Fixed, 1: Scheduled
+  static const List<Map<String, dynamic>> speedSchedule = [];
 }

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'package:nadekodon/theme/app_theme.dart';
 
-class DoubleSpinBox extends StatefulWidget {
+class DoubleSpinBox extends StatelessWidget {
   const DoubleSpinBox({
     super.key,
     required this.title,
@@ -26,10 +26,55 @@ class DoubleSpinBox extends StatefulWidget {
   final double width;
 
   @override
-  State<DoubleSpinBox> createState() => _DoubleSpinBoxState();
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return ListTile(
+      title: Text(title, style: textTheme.bodyMedium),
+      subtitle: subtitle.isNotEmpty
+          ? Text(
+              subtitle,
+              style: textTheme.bodySmall?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+            )
+          : null,
+      trailing: DoubleSpinControls(
+        valueListenable: valueListenable,
+        min: min,
+        max: max,
+        step: step,
+        decimalPlaces: decimalPlaces,
+        width: width,
+      ),
+    );
+  }
 }
 
-class _DoubleSpinBoxState extends State<DoubleSpinBox> {
+class DoubleSpinControls extends StatefulWidget {
+  const DoubleSpinControls({
+    super.key,
+    required this.valueListenable,
+    required this.min,
+    required this.max,
+    this.step = 1.0,
+    this.decimalPlaces = 2,
+    this.width = AppTheme.spaceXXL * 2.5,
+  });
+
+  final ValueNotifier<double> valueListenable;
+  final double min;
+  final double max;
+  final double step;
+  final int decimalPlaces;
+  final double width;
+
+  @override
+  State<DoubleSpinControls> createState() => _DoubleSpinControlsState();
+}
+
+class _DoubleSpinControlsState extends State<DoubleSpinControls> {
   late TextEditingController _controller;
   late FocusNode _focusNode;
   bool _isEditing = false;
@@ -116,73 +161,65 @@ class _DoubleSpinBoxState extends State<DoubleSpinBox> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
-    return ListTile(
-      title: Text(widget.title, style: textTheme.bodyMedium),
-      subtitle: Text(
-        widget.subtitle,
-        style: textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: AppTheme.spaceSM * AppTheme.spaceScale(context),
-            ),
-            child: IconButton(
-              icon: const Icon(Icons.remove),
-              iconSize: AppTheme.iconMD * AppTheme.iconScale(context),
-              onPressed: _decrement,
-            ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: AppTheme.spaceSM * AppTheme.spaceScale(context),
           ),
-          SizedBox(
-            width: widget.width * AppTheme.spaceScale(context),
-            child: TextField(
-              controller: _controller,
-              focusNode: _focusNode,
-              keyboardType: TextInputType.number,
-              textAlign: TextAlign.center,
-              style: textTheme.bodyMedium,
-              decoration: InputDecoration(
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: AppTheme.spaceSM * AppTheme.spaceScale(context),
-                  vertical: AppTheme.spaceSM * AppTheme.spaceScale(context),
-                ),
-                isDense: true,
+          child: IconButton(
+            icon: const Icon(Icons.remove),
+            iconSize: AppTheme.iconMD * AppTheme.iconScale(context),
+            onPressed: _decrement,
+          ),
+        ),
+        SizedBox(
+          width: widget.width * AppTheme.spaceScale(context),
+          child: TextField(
+            controller: _controller,
+            focusNode: _focusNode,
+            keyboardType: TextInputType.number,
+            textAlign: TextAlign.center,
+            style: textTheme.bodyMedium,
+            decoration: InputDecoration(
+              border: OutlineInputBorder(),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: AppTheme.spaceSM * AppTheme.spaceScale(context),
+                vertical: AppTheme.spaceSM * AppTheme.spaceScale(context),
               ),
-              onChanged: (value) {
-                // Update the value as the user types
-                final doubleValue = double.tryParse(value);
-                if (doubleValue != null &&
-                    doubleValue >= widget.min &&
-                    doubleValue <= widget.max) {
-                  widget.valueListenable.value = double.parse(
-                    doubleValue.toStringAsFixed(widget.decimalPlaces),
-                  );
-                }
-              },
-              onSubmitted: (value) {
-                _saveValue();
-                _focusNode.unfocus();
-              },
+              isDense: true,
             ),
+            onChanged: (value) {
+              // Update the value as the user types
+              final doubleValue = double.tryParse(value);
+              if (doubleValue != null &&
+                  doubleValue >= widget.min &&
+                  doubleValue <= widget.max) {
+                widget.valueListenable.value = double.parse(
+                  doubleValue.toStringAsFixed(widget.decimalPlaces),
+                );
+              }
+            },
+            onSubmitted: (value) {
+              _saveValue();
+              _focusNode.unfocus();
+            },
           ),
-          Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: AppTheme.spaceSM * AppTheme.spaceScale(context),
-            ),
-            child: IconButton(
-              icon: const Icon(Icons.add),
-              iconSize: AppTheme.iconMD * AppTheme.spaceScale(context),
-              onPressed: _increment,
-            ),
+        ),
+        Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: AppTheme.spaceSM * AppTheme.spaceScale(context),
           ),
-        ],
-      ),
+          child: IconButton(
+            icon: const Icon(Icons.add),
+            iconSize: AppTheme.iconMD * AppTheme.spaceScale(context),
+            onPressed: _increment,
+          ),
+        ),
+      ],
     );
   }
 }

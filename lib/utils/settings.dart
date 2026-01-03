@@ -1,11 +1,14 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:synchronized/synchronized.dart';
 
 import 'package:nadekodon/src/bindings/bindings.dart';
 import 'package:nadekodon/utils/defaults.dart';
 import 'package:nadekodon/utils/logger.dart';
+import 'package:nadekodon/utils/speed_scheduler.dart';
 
 class SettingsManager {
   static late File _file;
@@ -22,6 +25,10 @@ class SettingsManager {
   static final serverPort = ValueNotifier<int>(DefaultSettings.serverPort);
   static final serverApiKey = ValueNotifier<String>('');
   static final speedLimit = ValueNotifier<double>(DefaultSettings.speedLimit);
+  // Speed Scheduler
+  static final speedMode = ValueNotifier<SpeedMode>(SpeedMode.fixed);
+  static final speedSchedule = ValueNotifier<List<ScheduleRule>>([]);
+
   static final downloadThreads = ValueNotifier<int>(
     DefaultSettings.downloadThreads,
   );
@@ -76,6 +83,7 @@ class SettingsManager {
     }
 
     _attachAutoSave();
+    SpeedScheduler.init();
   }
 
   static void _applyFromJson(Map<String, dynamic> json) {
@@ -90,6 +98,16 @@ class SettingsManager {
     }
     speedLimit.value = (json['speed_limit'] ?? DefaultSettings.speedLimit)
         .toDouble();
+
+    // Speed Scheduler
+    speedMode.value =
+        SpeedMode.values[json['speed_mode'] ?? DefaultSettings.speedMode];
+    if (json['speed_schedule'] != null) {
+      speedSchedule.value = (json['speed_schedule'] as List)
+          .map((e) => ScheduleRule.fromJson(e))
+          .toList();
+    }
+
     downloadThreads.value =
         json['download_threads'] ?? DefaultSettings.downloadThreads;
     concurrencyLimit.value =
@@ -117,6 +135,8 @@ class SettingsManager {
     'server_port': serverPort.value,
     'server_api_key': serverApiKey.value,
     'speed_limit': speedLimit.value,
+    'speed_mode': speedMode.value.index,
+    'speed_schedule': speedSchedule.value.map((e) => e.toJson()).toList(),
     'download_threads': downloadThreads.value,
     'concurrency_limit': concurrencyLimit.value,
     'download_timeout': downloadTimeout.value,
@@ -130,24 +150,38 @@ class SettingsManager {
   };
 
   /// Save entire config (initial only)
+  static final _ioLock = Lock();
+
   static Future<void> _saveAll() async {
-    await _file.writeAsString(
-      const JsonEncoder.withIndent('  ').convert(_toJson()),
-    );
+    await _ioLock.synchronized(() async {
+      await _file.writeAsString(
+        const JsonEncoder.withIndent('  ').convert(_toJson()),
+      );
+    });
   }
 
-  /// Save only one changed key/value
   static Future<void> _saveChanged(String key, dynamic value) async {
-    Map<String, dynamic> data = {};
-
-    if (await _file.exists()) {
-      data = jsonDecode(await _file.readAsString());
-    }
-
-    data[key] = value;
+    // Fire-and-forget logic for runtime application
     _sendSettings(key, value);
 
-    await _file.writeAsString(const JsonEncoder.withIndent('  ').convert(data));
+    // Synchronize file I/O to prevent race conditions
+    await _ioLock.synchronized(() async {
+      Map<String, dynamic> data = {};
+
+      if (await _file.exists()) {
+        try {
+          data = jsonDecode(await _file.readAsString());
+        } catch (e) {
+          log("Error reading config file: $e");
+          data = _toJson();
+        }
+      }
+
+      data[key] = value;
+      await _file.writeAsString(
+        const JsonEncoder.withIndent('  ').convert(data),
+      );
+    });
   }
 
   static void _attachAutoSave() {
@@ -162,6 +196,15 @@ class SettingsManager {
       () => _saveChanged('server_api_key', serverApiKey.value),
     );
     speedLimit.addListener(() => _saveChanged('speed_limit', speedLimit.value));
+    speedMode.addListener(
+      () => _saveChanged('speed_mode', speedMode.value.index),
+    );
+    speedSchedule.addListener(
+      () => _saveChanged(
+        'speed_schedule',
+        speedSchedule.value.map((e) => e.toJson()).toList(),
+      ),
+    );
     downloadThreads.addListener(
       () => _saveChanged('download_threads', downloadThreads.value),
     );
@@ -199,11 +242,9 @@ class SettingsManager {
   static void _sendSettings(String key, dynamic value) {
     switch (key) {
       case 'speed_limit':
-        UpdateSettings(
-          speedLimit: Uint64.fromBigInt(
-            BigInt.from((value * 1024 * 1024).round()),
-          ),
-        ).sendSignalToRust();
+        if (speedMode.value == SpeedMode.fixed) {
+          sendSpeedLimit(value);
+        }
         break;
       case 'download_threads':
         UpdateSettings(downloadThreads: value).sendSignalToRust();
@@ -244,6 +285,12 @@ class SettingsManager {
     ).sendSignalToRust();
   }
 
+  static void sendSpeedLimit(double value) {
+    UpdateSettings(
+      speedLimit: Uint64.fromBigInt(BigInt.from((value * 1024 * 1024).round())),
+    ).sendSignalToRust();
+  }
+
   static void applyDefaultSettings() {
     retreatToTray.value = DefaultSettings.retreatToTray;
     downloadFolder.value = DefaultSettings.downloadFolder;
@@ -260,6 +307,9 @@ class SettingsManager {
     useDynamicColor.value = DefaultSettings.useDynamicColor;
     customColor.value = DefaultSettings.customColor;
     checkNightly.value = DefaultSettings.checkNightly;
+
+    speedMode.value = SpeedMode.values[DefaultSettings.speedMode];
+    speedSchedule.value = [];
   }
 
   static Future<String> getDatabasePath() async {

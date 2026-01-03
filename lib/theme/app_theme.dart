@@ -162,6 +162,19 @@ class AppTheme {
           borderRadius: BorderRadius.circular(radiusLG * radiusScale),
         ),
         backgroundColor: scheme.surfaceContainerHigh,
+        titleTextStyle: TextStyle(
+          fontSize: textLG * textScale,
+          fontWeight: FontWeight.w600,
+          color: scheme.onSurface,
+        ),
+      ),
+
+      timePickerTheme: TimePickerThemeData(
+        helpTextStyle: TextStyle(
+          fontSize: textLG * textScale,
+          fontWeight: FontWeight.w600,
+          color: scheme.onSurface,
+        ),
       ),
 
       bottomSheetTheme: BottomSheetThemeData(

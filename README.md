@@ -57,7 +57,7 @@ Here are some of the features and improvements planned for future releases:
 - [ ] Proxy support
 - [ ] Open the app from link
 - [ ] Web & Docker support
-- [ ] Variable/scheduled download bandwith
+- [x] Variable/scheduled download bandwith
 
 ## Installation
 
