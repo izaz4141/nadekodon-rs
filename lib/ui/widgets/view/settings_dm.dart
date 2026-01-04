@@ -17,6 +17,7 @@ class SettingsDM extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
+    final isDesktop = AppTheme.isDesktop(context);
 
     return Column(
       children: [
@@ -57,21 +58,31 @@ class SettingsDM extends StatelessWidget {
           valueListenable: SettingsManager.speedMode,
           builder: (context, mode, _) {
             return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Title row
                 ListTile(
                   title: Text("Speed Limit", style: textTheme.bodyMedium),
                   subtitle: Text(
-                    "Maximum global download speed (MB/s)",
+                    "Global download speed limit (MB/s)",
                     style: textTheme.bodySmall?.copyWith(
                       color: colors.onSurfaceVariant,
                     ),
                   ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
+                ),
+                // Controls row
+                Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppTheme.spaceSM * AppTheme.spaceScale(context),
+                    vertical: AppTheme.spaceSM * AppTheme.spaceScale(context),
+                  ),
+                  child: Row(
                     children: [
+                      // Mode chips on the left
                       SettingsChip(
                         label: "Fixed",
                         icon: Icons.speed_rounded,
+                        iconOnly: !isDesktop,
                         isSelected: mode == SpeedMode.fixed,
                         onSelected: () {
                           SettingsManager.speedMode.value = SpeedMode.fixed;
@@ -83,47 +94,56 @@ class SettingsDM extends StatelessWidget {
                       SettingsChip(
                         label: "Scheduled",
                         icon: Icons.schedule_rounded,
+                        iconOnly: !isDesktop,
                         isSelected: mode == SpeedMode.scheduled,
                         onSelected: () {
                           SettingsManager.speedMode.value = SpeedMode.scheduled;
                         },
                       ),
-                      if (mode == SpeedMode.fixed) ...[
-                        SizedBox(
-                          width:
-                              AppTheme.spaceMD * AppTheme.spaceScale(context),
-                        ),
+                      const Spacer(),
+                      // Speed control on the right
+                      if (mode == SpeedMode.fixed)
                         DoubleSpinControls(
                           valueListenable: SettingsManager.speedLimit,
                           min: 0.00,
                           max: 999999,
                           step: 0.1,
                           decimalPlaces: 2,
-                        ),
-                      ] else ...[
-                        SizedBox(
-                          width:
-                              AppTheme.spaceLG * AppTheme.spaceScale(context),
-                        ),
+                        )
+                      else
                         ValueListenableBuilder<double>(
                           valueListenable: SpeedScheduler.currentSpeed,
                           builder: (context, currentSpeed, _) {
-                            return Text(
-                              currentSpeed == 0
-                                  ? "∞ MB/s"
-                                  : "${currentSpeed.toStringAsFixed(2)} MB/s",
-                              style: textTheme.bodyMedium?.copyWith(
-                                color: colors.onSurface,
-                                fontWeight: FontWeight.bold,
+                            return Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal:
+                                    AppTheme.spaceMD *
+                                    AppTheme.spaceScale(context),
+                                vertical:
+                                    AppTheme.spaceSM *
+                                    AppTheme.spaceScale(context),
+                              ),
+                              decoration: BoxDecoration(
+                                color: colors.surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(
+                                  AppTheme.radiusSM,
+                                ),
+                                border: Border.all(
+                                  color: colors.outline.withAlpha(64),
+                                ),
+                              ),
+                              child: Text(
+                                currentSpeed == 0
+                                    ? "∞ MB/s"
+                                    : "${currentSpeed.toStringAsFixed(2)} MB/s",
+                                style: textTheme.bodyMedium?.copyWith(
+                                  color: colors.onSurface,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             );
                           },
                         ),
-                        SizedBox(
-                          width:
-                              AppTheme.spaceLG * AppTheme.spaceScale(context),
-                        ),
-                      ],
                     ],
                   ),
                 ),
@@ -225,29 +245,131 @@ class _ScheduleListState extends State<_ScheduleList> {
 
             // The list of rules (collapsible)
             if (_isExpanded && rules.isNotEmpty)
-              ...rules.map((rule) {
-                return ListTile(
-                  contentPadding: EdgeInsets.only(
-                    left: AppTheme.spaceXL * AppTheme.spaceScale(context),
+              ...rules.asMap().entries.map((entry) {
+                final index = entry.key;
+                final rule = entry.value;
+                final isLast = index == rules.length - 1;
+
+                return Padding(
+                  padding: EdgeInsets.only(
+                    left: AppTheme.spaceLG * AppTheme.spaceScale(context),
                     right: AppTheme.spaceMD * AppTheme.spaceScale(context),
                   ),
-                  title: Text(
-                    "${rule.startTime.format(context)} - ${rule.endTime.format(context)}",
-                    style: textTheme.bodyMedium,
-                  ),
-                  subtitle: Text(
-                    "${rule.speedLimit.toStringAsFixed(2)} MB/s",
-                    style: textTheme.bodySmall?.copyWith(
-                      color: colors.onSurfaceVariant,
+                  child: IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Vertical connector line
+                        SizedBox(
+                          width:
+                              AppTheme.spaceMD * AppTheme.spaceScale(context),
+                          child: Column(
+                            children: [
+                              // Top half line
+                              Expanded(
+                                child: Container(
+                                  width: 2,
+                                  color: colors.outlineVariant,
+                                ),
+                              ),
+                              // Dot indicator
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: colors.primary,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              // Bottom half line (hidden for last item)
+                              Expanded(
+                                child: Container(
+                                  width: 2,
+                                  color: isLast
+                                      ? Colors.transparent
+                                      : colors.outlineVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        SizedBox(
+                          width:
+                              AppTheme.spaceSM * AppTheme.spaceScale(context),
+                        ),
+                        // Rule content
+                        Expanded(
+                          child: Container(
+                            margin: EdgeInsets.symmetric(
+                              vertical:
+                                  AppTheme.spaceXS *
+                                  AppTheme.spaceScale(context),
+                            ),
+                            padding: EdgeInsets.symmetric(
+                              horizontal:
+                                  AppTheme.spaceMD *
+                                  AppTheme.spaceScale(context),
+                              vertical:
+                                  AppTheme.spaceSM *
+                                  AppTheme.spaceScale(context),
+                            ),
+                            decoration: BoxDecoration(
+                              color: colors.surfaceContainerHighest.withAlpha(
+                                128,
+                              ),
+                              borderRadius: BorderRadius.circular(
+                                AppTheme.radiusSM,
+                              ),
+                              border: Border.all(
+                                color: colors.outlineVariant.withAlpha(64),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        "${rule.startTime.format(context)} - ${rule.endTime.format(context)}",
+                                        style: textTheme.bodyMedium,
+                                      ),
+                                      SizedBox(
+                                        height:
+                                            AppTheme.spaceXS *
+                                            AppTheme.spaceScale(context),
+                                      ),
+                                      Text(
+                                        "${rule.speedLimit.toStringAsFixed(2)} MB/s",
+                                        style: textTheme.bodySmall?.copyWith(
+                                          color: colors.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.delete_outline,
+                                    color: colors.onSurfaceVariant,
+                                  ),
+                                  onPressed: () {
+                                    final newRules = List<ScheduleRule>.from(
+                                      rules,
+                                    );
+                                    newRules.remove(rule);
+                                    SettingsManager.speedSchedule.value =
+                                        newRules;
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  trailing: IconButton(
-                    icon: Icon(Icons.delete_outline, color: colors.onSurface),
-                    onPressed: () {
-                      final newRules = List<ScheduleRule>.from(rules);
-                      newRules.remove(rule);
-                      SettingsManager.speedSchedule.value = newRules;
-                    },
                   ),
                 );
               }),
