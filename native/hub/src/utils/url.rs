@@ -1,6 +1,7 @@
 use anyhow::Result;
 use librqbit::{AddTorrent, AddTorrentOptions, AddTorrentResponse, Session, SessionOptions};
-use reqwest::{Client, Url, header};
+use percent_encoding::percent_decode_str;
+use reqwest::{header, Client, Url};
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -137,10 +138,13 @@ pub async fn get_url_info(
                 let trimmed = part.trim();
                 if trimmed.starts_with("filename=") {
                     Some(
-                        trimmed
-                            .trim_start_matches("filename=")
-                            .trim_matches('"')
-                            .to_string(),
+                        percent_decode_str(
+                            trimmed
+                                .trim_start_matches("filename=")
+                                .trim_matches('"'),
+                        )
+                        .decode_utf8_lossy()
+                        .to_string(),
                     )
                 } else {
                     None
@@ -155,7 +159,7 @@ pub async fn get_url_info(
                 .and_then(|u| {
                     u.path_segments()
                         .and_then(|segments| segments.last())
-                        .map(|s| s.to_string())
+                        .map(|s| percent_decode_str(s).decode_utf8_lossy().to_string())
                 })
                 .unwrap_or_else(|| "download.bin".to_string())
         });
