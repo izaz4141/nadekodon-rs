@@ -6,7 +6,6 @@ import 'package:flutter/foundation.dart';
 import 'package:nadekodon/src/bindings/bindings.dart';
 import 'package:nadekodon/utils/settings.dart';
 import 'package:nadekodon/utils/logger.dart';
-import 'package:nadekodon/utils/cookie_service.dart';
 
 class APIService {
   static final ValueNotifier<bool> isOnline = ValueNotifier(false);
@@ -15,14 +14,9 @@ class APIService {
   static Future<void> init() async {
     // Check for cookie on web
     if (kIsWeb) {
-      final apiKey = getApiKeyFromCookie();
-      if (apiKey != null && apiKey.isNotEmpty) {
-        log('Found API key in cookie: $apiKey');
-        SettingsManager.serverApiKey.value = apiKey;
-        final success = await login(apiKey: apiKey);
-        if (success) {
-          SettingsManager.isLoggedIn.value = true;
-        }
+      final success = await login(username: '', password: '');
+      if (success) {
+        SettingsManager.isLoggedIn.value = true;
       }
     }
 
@@ -37,26 +31,6 @@ class APIService {
         _tryDecryptPassword();
       }
     });
-  }
-
-  /// Store API key in cookie
-  static void _saveApiKeyCookie(String apiKey) {
-    if (!kIsWeb) return;
-    CookieService.setCookie('nadeko_api_key', apiKey, days: 30);
-  }
-
-  /// Get API key from cookie
-  static String? getApiKeyFromCookie() {
-    if (!kIsWeb) return null;
-    return CookieService.getCookie('nadeko_api_key');
-  }
-
-  static void logout() {
-    SettingsManager.serverApiKey.value = '';
-    SettingsManager.isLoggedIn.value = false;
-    if (kIsWeb) {
-      CookieService.deleteCookie('nadeko_api_key');
-    }
   }
 
   static Future<void> _tryDecryptPassword() async {
@@ -92,24 +66,13 @@ class APIService {
   }
 
   static Future<bool> login({
-    String? username,
-    String? password,
-    String? apiKey,
+    required String username,
+    required String password,
   }) async {
     try {
       late final Map<String, dynamic> body;
 
-      if (apiKey != null && apiKey.isNotEmpty) {
-        body = {'auth_type': 'api_key', 'api_key': apiKey};
-      } else if (username != null && password != null) {
-        body = {
-          'auth_type': 'credentials',
-          'username': username,
-          'password': password,
-        };
-      } else {
-        throw ArgumentError('Provide either apiKey OR username and password');
-      }
+      body = {'username': username, 'password': password};
 
       final response = await http.post(
         Uri.parse('$baseUrl/api/nadeko/login'),
@@ -123,7 +86,6 @@ class APIService {
 
         if (returnedApiKey is String && returnedApiKey.isNotEmpty) {
           SettingsManager.serverApiKey.value = returnedApiKey;
-          _saveApiKeyCookie(returnedApiKey);
           return true;
         }
       } else {

@@ -106,14 +106,9 @@ pub async fn check_api_key(
 
 #[derive(Deserialize)]
 #[serde(tag = "auth_type", rename_all = "snake_case")]
-enum LoginRequest {
-    Credentials {
-        username: String,
-        password: String,
-    },
-    ApiKey {
-        api_key: String,
-    },
+struct LoginRequest {
+    username: String,
+    password: String,
 }
 
 async fn handle_login(
@@ -121,14 +116,19 @@ async fn handle_login(
     jar: CookieJar,
     Json(payload): Json<LoginRequest>,
 ) -> impl IntoResponse {
-    let authorized = match payload {
-        LoginRequest::Credentials { username, password } => {
-            username == state.username && password == state.password
+    let mut authorized = false;
+    if let Some(cookie) = jar.get("nadeko_api_key") {
+        if cookie.value() == state.api_key {
+            authorized = true;
         }
-        LoginRequest::ApiKey { api_key } => {
-            api_key == state.api_key
-        }
-    };
+    }
+    if !authorized {
+        authorized = match payload {
+            LoginRequest { username, password } => {
+                username == state.username && password == state.password
+            }
+        };
+    }
 
     if !authorized {
         return (
@@ -142,7 +142,7 @@ async fn handle_login(
         .path("/")
         .secure(true)
         .http_only(true)
-        .same_site(SameSite::Strict)
+        .same_site(SameSite::Lax)
         .build();
 
     let jar = jar.add(cookie);
