@@ -1,20 +1,19 @@
 import 'dart:ui';
-import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:file_share_intent/file_share_intent.dart';
-import 'package:app_links/app_links.dart';
-import 'package:window_manager/window_manager.dart';
 
-import 'theme/app_theme.dart';
-import 'ui/pages/home_page.dart';
-import 'ui/widgets/dialog/add_download.dart';
-import 'ui/widgets/dialog/update_url_dialog.dart';
-import 'ui/widgets/dialog/permission_dialog.dart';
-import 'utils/helper.dart';
-import 'utils/logger.dart';
-import 'utils/settings.dart';
+import 'package:nadekodon/ui/theme/app_theme.dart';
+import 'package:nadekodon/ui/pages/home_page.dart';
+import 'package:nadekodon/ui/widgets/dialog/add_download.dart';
+import 'package:nadekodon/ui/widgets/dialog/update_url_dialog.dart';
+import 'package:nadekodon/ui/widgets/dialog/permission_dialog.dart';
+import 'package:nadekodon/utils/helper.dart';
+import 'package:nadekodon/utils/logger.dart';
+import 'package:nadekodon/utils/settings.dart';
+import 'package:nadekodon/utils/platform_service.dart';
 
 import 'package:rinf/rinf.dart';
 import 'package:nadekodon/src/bindings/bindings.dart';
@@ -36,20 +35,20 @@ class _NadekoDonState extends State<NadekoDon> {
   /// properly dropping Rust objects before shutdown,
   /// creating this listener is not necessary.
   late final AppLifecycleListener _listener;
-  StreamSubscription? _intentStreamSubscription;
-  StreamSubscription? _linkSubscription;
 
   @override
   void initState() {
     super.initState();
     _listener = AppLifecycleListener(
       onExitRequested: () async {
-        finalizeRust(); // This line shuts down the async Rust runtime.
+        if (!kIsWeb) {
+          finalizeRust(); // This line shuts down the async Rust runtime.
+        }
         return AppExitResponse.exit;
       },
     );
 
-    if (Platform.isAndroid) {
+    if (PlatformService.isMobile) {
       if (SettingsManager.isFirstRun) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           final context = navigatorKey.currentContext;
@@ -61,16 +60,21 @@ class _NadekoDonState extends State<NadekoDon> {
           }
         });
       }
-      _initAppLinks();
-      _initFileShareIntent();
     }
+
+    PlatformService().init(
+      onUrlReceived: (url) => _handleIncomingUrl(url),
+      onMediaReceived: (media) => _handleSharedMedia(media),
+    );
+
     _initExtSignals();
   }
 
   void _initExtSignals() {
+    if (kIsWeb) return;
     RequestAddDownload.rustSignalStream.listen((signal) async {
       final message = signal.message;
-      await _focusWindow();
+      await PlatformService().focusWindow();
 
       if (UpdateUrlDialog.isOpen) {
         return;
@@ -90,71 +94,13 @@ class _NadekoDonState extends State<NadekoDon> {
     });
   }
 
-  /// Brings the window to focus on desktop platforms
-  Future<void> _focusWindow() async {
-    // Only focus window on desktop platforms
-    if (!Platform.isLinux && !Platform.isWindows && !Platform.isMacOS) {
-      return;
-    }
-
-    try {
-      await windowManager.show();
-      await windowManager.restore();
-      await windowManager.focus();
-      // Temporarily set always on top to ensure window pops to front
-      await windowManager.setAlwaysOnTop(true);
-      await windowManager.setAlwaysOnTop(false);
-    } catch (e) {
-      // Silently handle errors
-    }
-  }
-
-  Future<void> _initFileShareIntent() async {
-    // Handle initial intent
-    try {
-      FileShareIntent.instance.getInitialMedia().then((value) {
-        if (value.isNotEmpty) {
-          // Small delay to ensure context is ready
-          Future.delayed(const Duration(milliseconds: 500), () {
-            _handleSharedMedia(value);
-          });
-        }
-        FileShareIntent.instance.reset();
-      });
-    } catch (e) {
-      // Silently handle errors
-    }
-
-    // Listen for new intents while app is running
-    _intentStreamSubscription = FileShareIntent.instance
-        .getMediaStream()
-        .listen(
-          (List<SharedMediaFile> value) {
-            if (value.isNotEmpty) {
-              _handleSharedMedia(value);
-            }
-          },
-          onError: (err) {
-            // Silently handle errors
-          },
-        );
-  }
-
-  Future<void> _initAppLinks() async {
-    final appLinks = AppLinks();
-
-    _linkSubscription = appLinks.uriLinkStream.listen((uri) {
-      _handleIncomingUri(uri);
-    });
-  }
-
-  void _handleIncomingUri(Uri uri) {
+  void _handleIncomingUrl(String url) {
     // Small delay to ensure context is ready
     Future.delayed(const Duration(milliseconds: 500), () {
       final context = navigatorKey.currentContext;
       if (context != null) {
         // ignore: use_build_context_synchronously
-        showAddDownloadDialog(context, initialUrl: uri.toString());
+        showAddDownloadDialog(context, initialUrl: url);
       }
     });
   }
@@ -189,8 +135,7 @@ class _NadekoDonState extends State<NadekoDon> {
   @override
   void dispose() {
     _listener.dispose();
-    _intentStreamSubscription?.cancel();
-    _linkSubscription?.cancel();
+    PlatformService().dispose();
     super.dispose();
   }
 

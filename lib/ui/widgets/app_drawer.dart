@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-import '../../theme/app_theme.dart';
-import '../pages/home_page.dart';
+import 'package:nadekodon/ui/theme/app_theme.dart';
+import 'package:nadekodon/ui/pages/home_page.dart';
 
 const double railWidth = 72;
 const double sidebarWidth = 360.00;

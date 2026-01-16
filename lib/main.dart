@@ -1,21 +1,22 @@
 import 'dart:async';
-import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'package:rinf/rinf.dart';
-import 'src/bindings/bindings.dart';
+import 'package:nadekodon/src/bindings/bindings.dart';
 
-import 'app.dart';
-import 'utils/notification_service.dart';
-import 'utils/log_service.dart';
-import 'utils/settings.dart';
-import 'utils/logger.dart';
-
-import 'utils/updater.dart';
-import 'utils/ws_status_service.dart';
-import 'utils/single_instance.dart';
-import 'utils/app_lifecycle.dart';
+import 'package:nadekodon/ui/app.dart';
+import 'package:nadekodon/utils/notification_service.dart';
+import 'package:nadekodon/utils/log_service.dart';
+import 'package:nadekodon/utils/settings.dart';
+import 'package:nadekodon/utils/logger.dart';
+import 'package:nadekodon/utils/system_service.dart';
+import 'package:nadekodon/utils/updater.dart';
+import 'package:nadekodon/utils/api_service.dart';
+import 'package:nadekodon/utils/single_instance.dart';
+import 'package:nadekodon/utils/app_lifecycle.dart';
+import 'package:nadekodon/utils/platform_service.dart';
 
 final _windowListener = _WindowListener();
 
@@ -23,43 +24,40 @@ Future<void> main() async {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
-
-      await LogService.init();
+      if (!kIsWeb) {
+        await LogService.init();
+        await initializeRust(assignRustSignal);
+        initRustSignalLogger();
+      }
       await SettingsManager.init();
+      await SystemService().init();
 
-      await cleanupOldFiles();
+      if (!kIsWeb) {
+        await cleanupOldFiles();
+        await SettingsManager.sendAllSettings();
+        final torrentPath = await SettingsManager.getTorrentPersistencePath();
+        InitTorrentPersistence(path: torrentPath).sendSignalToRust();
+        final dbPath = await SettingsManager.getDatabasePath();
+        InitDatabase(path: dbPath).sendSignalToRust();
+        NotificationService().startListening();
+      }
 
-      await initializeRust(assignRustSignal);
-      initRustSignalLogger();
-
-      await SettingsManager.sendAllSettings();
-      final torrentPath = await SettingsManager.getTorrentPersistencePath();
-      InitTorrentPersistence(path: torrentPath).sendSignalToRust();
-      final dbPath = await SettingsManager.getDatabasePath();
-      InitDatabase(path: dbPath).sendSignalToRust();
-
-      NotificationService().startListening();
-      if (Platform.isAndroid) {
-        // Permissions are now handled in App.dart via PermissionHelper
-      } else {
+      if (PlatformService.isDesktop) {
         await SingleInstance.init(() async {
-          await windowManager.show();
-          await windowManager.restore();
-          await windowManager.focus();
+          await PlatformService().focusWindow();
         });
         StartServer(
           port: SettingsManager.serverPort.value,
           apiKey: SettingsManager.serverApiKey.value,
+          username: SettingsManager.username.value,
+          password: SettingsManager.password.value,
         ).sendSignalToRust();
-        WebsocketStatusService.init();
-        await windowManager.ensureInitialized();
-        await windowManager.setPreventClose(true);
-        const windowOptions = WindowOptions(
-          size: Size(800, 600),
-          center: true,
-          // skipTaskbar: false,
-          titleBarStyle: TitleBarStyle.hidden,
-          windowButtonVisibility: false,
+        APIService.init();
+        await PlatformService().initWindow(
+          listener: _windowListener,
+          onReady: () async {
+            await PlatformService().focusWindow();
+          },
         );
 
         if (SettingsManager.retreatToTray.value) {
@@ -73,12 +71,8 @@ Future<void> main() async {
             await removeTray();
           }
         });
-
-        windowManager.addListener(_windowListener);
-        windowManager.waitUntilReadyToShow(windowOptions, () async {
-          await windowManager.show();
-          await windowManager.focus();
-        });
+      } else {
+        APIService.init();
       }
 
       runApp(const NadekoDon());
@@ -100,7 +94,9 @@ class _WindowListener extends WindowListener {
   @override
   void onWindowClose() async {
     if (SettingsManager.retreatToTray.value) {
-      await windowManager.hide();
+      if (PlatformService.isDesktop) {
+        await PlatformService().hideWindow();
+      }
     } else {
       await closeApp();
     }

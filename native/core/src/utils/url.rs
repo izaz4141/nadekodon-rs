@@ -1,7 +1,7 @@
 use anyhow::Result;
 use librqbit::{AddTorrent, AddTorrentOptions, AddTorrentResponse, Session, SessionOptions};
 use percent_encoding::percent_decode_str;
-use reqwest::{header, Client, Url};
+use reqwest::{Client, Url, header};
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -139,9 +139,7 @@ pub async fn get_url_info(
                 if trimmed.starts_with("filename=") {
                     Some(
                         percent_decode_str(
-                            trimmed
-                                .trim_start_matches("filename=")
-                                .trim_matches('"'),
+                            trimmed.trim_start_matches("filename=").trim_matches('"'),
                         )
                         .decode_utf8_lossy()
                         .to_string(),

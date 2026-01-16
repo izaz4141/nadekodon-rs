@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:nadekodon/theme/app_theme.dart';
+import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/utils/log_service.dart';
 
 class LogsDialog extends StatefulWidget {
@@ -156,9 +156,10 @@ class _LogsDialogState extends State<LogsDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () {
+          onPressed: () async {
+            await LogService.clearLogs();
+            if (!mounted) return;
             setState(() {
-              LogService.clearLogs();
               _selectedLogs.clear();
             });
           },

@@ -56,7 +56,27 @@ class SpeedScheduler {
 
   static void init() {
     _isActive = true;
-    _checkAndApply();
+
+    // Determine initial speed without sending signal yet.
+    // main.dart's sendAllSettings() will handle the first signal.
+    double targetSpeed;
+    if (SettingsManager.speedMode.value == SpeedMode.fixed) {
+      targetSpeed = SettingsManager.speedLimit.value;
+    } else {
+      final now = TimeOfDay.now();
+      double? scheduledSpeed;
+      for (final rule in SettingsManager.speedSchedule.value) {
+        if (rule.isTimeInSpan(now)) {
+          scheduledSpeed = rule.speedLimit;
+          break;
+        }
+      }
+      targetSpeed = scheduledSpeed ?? 0.0;
+    }
+
+    _lastSentSpeed = targetSpeed;
+    currentSpeed.value = targetSpeed;
+
     _timer = Timer.periodic(const Duration(minutes: 1), (timer) {
       _checkAndApply();
     });

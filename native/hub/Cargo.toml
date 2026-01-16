@@ -17,23 +17,17 @@ expect_used = "deny"
 wildcard_imports = "deny"
 
 [dependencies]
+nadekodon-core = { path = "../core" }
+nadekodon-server = { path = "../server" }
 rinf = "8.7.2"
-serde = { version = "1.0.219", features = ["derive"] }
 tokio = { version = "1.45.0", features = ["full"] }
 reqwest = { version = "0.12.23", features = ["json", "stream", "gzip", "brotli", "deflate", "http2", "rustls-tls", "blocking", "cookies"] }
 uuid = { version = "1.18.0", features = ["v4"] }
 time = { version = "0.3.41", features = ["macros", "formatting", "parsing"] }
-futures = "0.3.31"
-anyhow = "1.0.99"
 openssl = { version = "0.10.74", features = ["vendored"] }
-indexmap = { version = "2.2.6", features = ["serde"] }
-serde_json = "1.0"
-sqlx = { version = "0.8.2", features = ["sqlite", "runtime-tokio"] }
-librqbit = "8.1.1"
-hex = "0.4.3"
-axum = { version = "0.7.5", features = ["multipart", "ws"] }
-axum-extra = { version = "0.9.0", features = ["cookie"] }
-percent-encoding = "2.3.2"
+serde = { version = "1.0.219", features = ["derive"] }
+axum = "0.7.5"
+
 
 # Uncomment below to target the web.
 # tokio_with_wasm = { version = "0.8.5", features = ["rt", "macros", "time"] }

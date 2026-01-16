@@ -1,83 +1,113 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:synchronized/synchronized.dart';
+import 'package:flutter/services.dart';
 
 import 'package:nadekodon/src/bindings/bindings.dart';
-import 'package:nadekodon/utils/defaults.dart';
+import 'package:nadekodon/utils/platform_service.dart';
 import 'package:nadekodon/utils/logger.dart';
 import 'package:nadekodon/utils/speed_scheduler.dart';
+import 'package:nadekodon/utils/io_service.dart';
+import 'package:nadekodon/utils/api_service.dart';
 
 class SettingsManager {
-  static late File _file;
+  static late IOService _ioService;
   static late String configPath;
-  static late Directory? downloadsDir;
-  static late Directory? configDir;
   static bool isFirstRun = false;
+  static Map<String, dynamic> _defaults = {};
 
   // Your ValueNotifiers
-  static final retreatToTray = ValueNotifier<bool>(
-    DefaultSettings.retreatToTray,
-  );
+  static final retreatToTray = ValueNotifier<bool>(true);
   static final downloadFolder = ValueNotifier<String>('');
-  static final serverPort = ValueNotifier<int>(DefaultSettings.serverPort);
-  static final serverApiKey = ValueNotifier<String>('');
-  static final speedLimit = ValueNotifier<double>(DefaultSettings.speedLimit);
+  static final serverHost = ValueNotifier<String>(_getInitialServerHost());
+  static final serverPort = ValueNotifier<int>(_getInitialServerPort());
+  static final serverApiKey = ValueNotifier<String>(_getInitialServerApiKey());
+  static final username = ValueNotifier<String>('');
+  static final password = ValueNotifier<String>('');
+  static final salt = ValueNotifier<String>('');
+
   // Speed Scheduler
+  static final speedLimit = ValueNotifier<double>(0.0);
   static final speedMode = ValueNotifier<SpeedMode>(SpeedMode.fixed);
   static final speedSchedule = ValueNotifier<List<ScheduleRule>>([]);
 
-  static final downloadThreads = ValueNotifier<int>(
-    DefaultSettings.downloadThreads,
-  );
-  static final concurrencyLimit = ValueNotifier<int>(
-    DefaultSettings.concurrencyLimit,
-  );
-  static final downloadTimeout = ValueNotifier<int>(
-    DefaultSettings.downloadTimeout,
-  );
-  static final downloadRetries = ValueNotifier<int>(
-    DefaultSettings.downloadRetries,
-  );
-  static final seedingRatio = ValueNotifier<double>(
-    DefaultSettings.seedingRatio,
-  );
-  static final seedingTime = ValueNotifier<int>(DefaultSettings.seedingTime);
+  static final downloadThreads = ValueNotifier<int>(8);
+  static final concurrencyLimit = ValueNotifier<int>(3);
+  static final downloadTimeout = ValueNotifier<int>(30);
+  static final downloadRetries = ValueNotifier<int>(5);
+  static final seedingRatio = ValueNotifier<double>(1.0);
+  static final seedingTime = ValueNotifier<int>(30);
 
   // Theme Settings
-  static final themeMode = ValueNotifier<ThemeMode>(DefaultSettings.themeMode);
-  static final useDynamicColor = ValueNotifier<bool>(
-    DefaultSettings.useDynamicColor,
-  );
-  static final customColor = ValueNotifier<int>(
-    DefaultSettings.customColor,
-  ); // PinkAccent default
+  static final themeMode = ValueNotifier<ThemeMode>(ThemeMode.system);
+  static final useDynamicColor = ValueNotifier<bool>(true);
+  static final customColor = ValueNotifier<int>(0xFFFF4081);
 
-  static final checkNightly = ValueNotifier<bool>(DefaultSettings.checkNightly);
+  static final checkNightly = ValueNotifier<bool>(false);
 
-  /// Init config system (call at app startup)
-  static Future<void> init() async {
-    // On Android, use the public Downloads directory via external storage
-    if (Platform.isAndroid) {
-      downloadsDir = Directory('/storage/emulated/0/Download');
-      DefaultSettings.downloadFolder = downloadsDir!.path;
-    } else {
-      downloadsDir = await getDownloadsDirectory();
-      DefaultSettings.downloadFolder = downloadsDir?.path ?? '';
+  static Future<void> _loadDefaults() async {
+    try {
+      final String response = await rootBundle.loadString(
+        'assets/docs/default.json',
+      );
+      _defaults = json.decode(response);
+    } catch (e) {
+      log('Error loading default settings asset: $e');
     }
-    configDir = await getApplicationSupportDirectory();
-    configPath = '${configDir!.path}/config.json';
-    _file = File(configPath);
+  }
 
-    if (await _file.exists()) {
-      final data = jsonDecode(await _file.readAsString());
-      _applyFromJson(data);
+  static Future<void> init() async {
+    _ioService = IOServiceFactory.create();
+    await _loadDefaults();
+
+    if (kIsWeb) {
+      await _loadFromBackend();
+      _attachAutoSave();
+      SpeedScheduler.init();
+      return;
+    }
+
+    String baseDir = const String.fromEnvironment('NADEKO_HOME');
+    if (baseDir.isEmpty && !kIsWeb) {
+      baseDir = _getEnv('NADEKO_HOME');
+    }
+
+    final downloadsDir = await _ioService.getDownloadsDir();
+    final defaultConfigDir = await _ioService.getConfigDir();
+
+    final configDir = baseDir.isNotEmpty ? '$baseDir/config' : defaultConfigDir;
+
+    String defaultDownloadFolder = '';
+    if (baseDir.isNotEmpty) {
+      defaultDownloadFolder = '$baseDir/downloads';
+    } else if (PlatformService.isAndroid) {
+      defaultDownloadFolder = '/storage/emulated/0/Download';
+    } else {
+      defaultDownloadFolder = downloadsDir;
+    }
+
+    if (defaultDownloadFolder.isNotEmpty) {
+      final exists = await _ioService.directoryExists(defaultDownloadFolder);
+      if (!exists) {
+        await _ioService.createDirectory(
+          defaultDownloadFolder,
+          recursive: true,
+        );
+      }
+    }
+
+    configPath = '$configDir/config.json';
+    final configExists = await _ioService.fileExists(configPath);
+
+    if (configExists) {
+      final data = jsonDecode(await _ioService.readFile(configPath));
+      await _applyFromJson(data);
       log(configPath);
     } else {
       isFirstRun = true;
-      applyDefaultSettings();
+      downloadFolder.value = defaultDownloadFolder;
+      await applyDefaultSettings();
       regenerateApiKey();
       await _saveAll();
     }
@@ -86,22 +116,55 @@ class SettingsManager {
     SpeedScheduler.init();
   }
 
-  static void _applyFromJson(Map<String, dynamic> json) {
+  static Future<void> _applyFromJson(Map<String, dynamic> json) async {
     retreatToTray.value =
-        json['retreat_to_tray'] ?? DefaultSettings.retreatToTray;
-    downloadFolder.value =
-        json['download_folder'] ?? DefaultSettings.downloadFolder;
-    serverPort.value = json['server_port'] ?? DefaultSettings.serverPort;
-    serverApiKey.value = json['server_api_key'] ?? '';
+        json['retreat_to_tray'] ?? _defaults['retreat_to_tray'] ?? true;
+    downloadFolder.value = json['download_folder'] ?? '';
+
+    // Server settings: Environment variables override saved settings
+    final envHost = _getEnv('NADEKO_SERVER_HOST');
+    serverHost.value = envHost.isNotEmpty
+        ? envHost
+        : (json['server_host'] ??
+              (kIsWeb ? '' : (_defaults['server_host'] ?? '127.0.0.1')));
+
+    final envPort = _getEnv('NADEKO_SERVER_PORT');
+    int defaultPort = _defaults['server_port'] ?? 8080;
+    serverPort.value = envPort.isNotEmpty
+        ? int.tryParse(envPort) ?? (json['server_port'] ?? defaultPort)
+        : (json['server_port'] ?? defaultPort);
+
+    final envApiKey = _getEnv('NADEKO_SERVER_API_KEY');
+    serverApiKey.value = envApiKey.isNotEmpty
+        ? envApiKey
+        : (json['server_api_key'] ?? '');
+
     if (serverApiKey.value.isEmpty) {
       regenerateApiKey();
     }
-    speedLimit.value = (json['speed_limit'] ?? DefaultSettings.speedLimit)
-        .toDouble();
+    salt.value = json['salt'] ?? '';
+    if (salt.value.isEmpty) {
+      await _generateSalt();
+    }
+    username.value = json['username'] ?? _defaults['username'] ?? 'admin';
+    if (username.value.isEmpty && _defaults['username'] == "") {
+      // Only fallback to admin if both are truly empty/missing
+      if (username.value.isEmpty) username.value = 'admin';
+    }
+
+    final encodedPassword = json['password'] as String?;
+    if (encodedPassword != null && encodedPassword.isNotEmpty) {
+      password.value = await _decryptPassword(encodedPassword);
+    } else {
+      password.value = _defaults['password'] ?? 'admin';
+      if (password.value.isEmpty) password.value = 'admin';
+    }
 
     // Speed Scheduler
+    speedLimit.value = (json['speed_limit'] ?? _defaults['speed_limit'] ?? 0.0)
+        .toDouble();
     speedMode.value =
-        SpeedMode.values[json['speed_mode'] ?? DefaultSettings.speedMode];
+        SpeedMode.values[json['speed_mode'] ?? _defaults['speed_mode'] ?? 0];
     if (json['speed_schedule'] != null) {
       speedSchedule.value = (json['speed_schedule'] as List)
           .map((e) => ScheduleRule.fromJson(e))
@@ -109,31 +172,72 @@ class SettingsManager {
     }
 
     downloadThreads.value =
-        json['download_threads'] ?? DefaultSettings.downloadThreads;
+        json['download_threads'] ?? _defaults['download_threads'] ?? 8;
     concurrencyLimit.value =
-        json['concurrency_limit'] ?? DefaultSettings.concurrencyLimit;
+        json['concurrency_limit'] ?? _defaults['concurrency_limit'] ?? 3;
     downloadTimeout.value =
-        json['download_timeout'] ?? DefaultSettings.downloadTimeout;
+        json['download_timeout'] ?? _defaults['download_timeout'] ?? 30;
     downloadRetries.value =
-        json['download_retries'] ?? DefaultSettings.downloadRetries;
+        json['download_retries'] ?? _defaults['download_retries'] ?? 5;
 
-    seedingRatio.value = json['seeding_ratio'] ?? DefaultSettings.seedingRatio;
-    seedingTime.value = json['seeding_time'] ?? DefaultSettings.seedingTime;
+    seedingRatio.value =
+        (json['seeding_ratio'] ?? _defaults['seeding_ratio'] ?? 1.0).toDouble();
+    seedingTime.value = json['seeding_time'] ?? _defaults['seeding_time'] ?? 30;
 
     // Theme Settings
     if (json['theme_mode'] != null) {
       themeMode.value = ThemeMode.values[json['theme_mode']];
+    } else if (_defaults['theme_mode'] != null) {
+      themeMode.value = ThemeMode.values[_defaults['theme_mode']];
     }
-    useDynamicColor.value = json['use_dynamic_color'] ?? true;
-    customColor.value = json['custom_color'] ?? 0xFFFF4081;
-    checkNightly.value = json['check_nightly'] ?? DefaultSettings.checkNightly;
+    useDynamicColor.value =
+        json['use_dynamic_color'] ?? _defaults['use_dynamic_color'] ?? true;
+    customColor.value =
+        json['custom_color'] ?? _defaults['custom_color'] ?? 0xFFFF4081;
+    checkNightly.value =
+        json['check_nightly'] ?? _defaults['check_nightly'] ?? false;
   }
 
-  static Map<String, dynamic> _toJson() => {
+  static String _getEnv(String key) {
+    switch (key) {
+      case 'NADEKO_HOME':
+        return const String.fromEnvironment('NADEKO_HOME');
+      case 'NADEKO_SERVER_HOST':
+        return const String.fromEnvironment('NADEKO_SERVER_HOST');
+      case 'NADEKO_SERVER_PORT':
+        return const String.fromEnvironment('NADEKO_SERVER_PORT');
+      case 'NADEKO_SERVER_API_KEY':
+        return const String.fromEnvironment('NADEKO_SERVER_API_KEY');
+      default:
+        return '';
+    }
+  }
+
+  static String _getInitialServerHost() {
+    final env = _getEnv('NADEKO_SERVER_HOST');
+    if (env.isNotEmpty) return env;
+    return kIsWeb ? '' : '127.0.0.1';
+  }
+
+  static int _getInitialServerPort() {
+    final env = _getEnv('NADEKO_SERVER_PORT');
+    if (env.isNotEmpty) return int.tryParse(env) ?? 8080;
+    return 8080;
+  }
+
+  static String _getInitialServerApiKey() {
+    return _getEnv('NADEKO_SERVER_API_KEY');
+  }
+
+  static Future<Map<String, dynamic>> _toJson() async => {
     'retreat_to_tray': retreatToTray.value,
     'download_folder': downloadFolder.value,
+    'server_host': serverHost.value,
     'server_port': serverPort.value,
     'server_api_key': serverApiKey.value,
+    'salt': salt.value,
+    'username': username.value,
+    'password': await _encryptPassword(password.value),
     'speed_limit': speedLimit.value,
     'speed_mode': speedMode.value.index,
     'speed_schedule': speedSchedule.value.map((e) => e.toJson()).toList(),
@@ -149,39 +253,47 @@ class SettingsManager {
     'check_nightly': checkNightly.value,
   };
 
-  /// Save entire config (initial only)
-  static final _ioLock = Lock();
-
   static Future<void> _saveAll() async {
-    await _ioLock.synchronized(() async {
-      await _file.writeAsString(
-        const JsonEncoder.withIndent('  ').convert(_toJson()),
-      );
-    });
+    if (kIsWeb) {
+      await _saveToBackend();
+      return;
+    }
+    final jsonMap = await _toJson();
+    await _ioService.writeFile(
+      configPath,
+      const JsonEncoder.withIndent('  ').convert(jsonMap),
+    );
   }
 
   static Future<void> _saveChanged(String key, dynamic value) async {
-    // Fire-and-forget logic for runtime application
-    _sendSettings(key, value);
+    if (!kIsWeb) {
+      _sendSettings(key, value);
+    } else {
+      await _saveToBackend();
+      return;
+    }
 
-    // Synchronize file I/O to prevent race conditions
-    await _ioLock.synchronized(() async {
-      Map<String, dynamic> data = {};
+    Map<String, dynamic> data = {};
 
-      if (await _file.exists()) {
-        try {
-          data = jsonDecode(await _file.readAsString());
-        } catch (e) {
-          log("Error reading config file: $e");
-          data = _toJson();
-        }
+    final configExists = await _ioService.fileExists(configPath);
+    if (configExists) {
+      try {
+        data = jsonDecode(await _ioService.readFile(configPath));
+      } catch (e) {
+        log("Error reading config file: $e");
+        data = await _toJson();
       }
+    }
 
+    if (key == 'password') {
+      data[key] = await _encryptPassword(value);
+    } else {
       data[key] = value;
-      await _file.writeAsString(
-        const JsonEncoder.withIndent('  ').convert(data),
-      );
-    });
+    }
+    await _ioService.writeFile(
+      configPath,
+      const JsonEncoder.withIndent('  ').convert(data),
+    );
   }
 
   static void _attachAutoSave() {
@@ -191,10 +303,14 @@ class SettingsManager {
     downloadFolder.addListener(
       () => _saveChanged('download_folder', downloadFolder.value),
     );
+    serverHost.addListener(() => _saveChanged('server_host', serverHost.value));
     serverPort.addListener(() => _saveChanged('server_port', serverPort.value));
     serverApiKey.addListener(
       () => _saveChanged('server_api_key', serverApiKey.value),
     );
+    username.addListener(() => _saveChanged('username', username.value));
+    password.addListener(() => _saveChanged('password', password.value));
+    salt.addListener(() => _saveChanged('salt', salt.value));
     speedLimit.addListener(() => _saveChanged('speed_limit', speedLimit.value));
     speedMode.addListener(
       () => _saveChanged('speed_mode', speedMode.value.index),
@@ -241,6 +357,9 @@ class SettingsManager {
 
   static void _sendSettings(String key, dynamic value) {
     switch (key) {
+      case 'download_folder':
+        UpdateSettings(downloadDir: value).sendSignalToRust();
+        break;
       case 'speed_limit':
         if (speedMode.value == SpeedMode.fixed) {
           sendSpeedLimit(value);
@@ -272,9 +391,11 @@ class SettingsManager {
   }
 
   static Future<void> sendAllSettings() async {
+    if (kIsWeb) return;
     UpdateSettings(
+      downloadDir: downloadFolder.value,
       speedLimit: Uint64.fromBigInt(
-        BigInt.from((speedLimit.value * 1024 * 1024).round()),
+        BigInt.from((SpeedScheduler.currentSpeed.value * 1024 * 1024).round()),
       ),
       downloadThreads: downloadThreads.value,
       concurrencyLimit: concurrencyLimit.value,
@@ -286,52 +407,166 @@ class SettingsManager {
   }
 
   static void sendSpeedLimit(double value) {
+    if (kIsWeb) return;
     UpdateSettings(
       speedLimit: Uint64.fromBigInt(BigInt.from((value * 1024 * 1024).round())),
     ).sendSignalToRust();
   }
 
-  static void applyDefaultSettings() {
-    retreatToTray.value = DefaultSettings.retreatToTray;
-    downloadFolder.value = DefaultSettings.downloadFolder;
-    serverPort.value = DefaultSettings.serverPort;
-    speedLimit.value = DefaultSettings.speedLimit;
-    downloadThreads.value = DefaultSettings.downloadThreads;
-    concurrencyLimit.value = DefaultSettings.concurrencyLimit;
-    downloadTimeout.value = DefaultSettings.downloadTimeout;
-    downloadRetries.value = DefaultSettings.downloadRetries;
-    seedingRatio.value = DefaultSettings.seedingRatio;
-    seedingTime.value = DefaultSettings.seedingTime;
+  static Future<void> applyDefaultSettings() async {
+    retreatToTray.value = _defaults['retreat_to_tray'] ?? true;
+    // downloadFolder is usually not reset to default from asset as it's environment dependent
+    username.value = _defaults['username'] ?? 'admin';
+    if (username.value.isEmpty) username.value = 'admin';
+    password.value = _defaults['password'] ?? 'admin';
+    if (password.value.isEmpty) password.value = 'admin';
 
-    themeMode.value = DefaultSettings.themeMode;
-    useDynamicColor.value = DefaultSettings.useDynamicColor;
-    customColor.value = DefaultSettings.customColor;
-    checkNightly.value = DefaultSettings.checkNightly;
+    if (salt.value.isEmpty) {
+      await _generateSalt();
+    }
+    serverPort.value = _defaults['server_port'] ?? 8080;
+    speedLimit.value = (_defaults['speed_limit'] ?? 0.0).toDouble();
+    downloadThreads.value = _defaults['download_threads'] ?? 8;
+    concurrencyLimit.value = _defaults['concurrency_limit'] ?? 3;
+    downloadTimeout.value = _defaults['download_timeout'] ?? 30;
+    downloadRetries.value = _defaults['download_retries'] ?? 5;
+    seedingRatio.value = (_defaults['seeding_ratio'] ?? 1.0).toDouble();
+    seedingTime.value = _defaults['seeding_time'] ?? 30;
 
-    speedMode.value = SpeedMode.values[DefaultSettings.speedMode];
+    if (_defaults['theme_mode'] != null) {
+      themeMode.value = ThemeMode.values[_defaults['theme_mode']];
+    }
+    useDynamicColor.value = _defaults['use_dynamic_color'] ?? true;
+    customColor.value = _defaults['custom_color'] ?? 0xFFFF4081;
+    checkNightly.value = _defaults['check_nightly'] ?? false;
+
+    speedMode.value = SpeedMode.values[_defaults['speed_mode'] ?? 0];
     speedSchedule.value = [];
   }
 
   static Future<String> getDatabasePath() async {
-    final dir = await getApplicationSupportDirectory();
-    return '${dir.path}/nadekodon.db';
+    return _ioService.getDatabasePath();
   }
 
   static Future<String> getTorrentPersistencePath() async {
-    final dir = await getApplicationSupportDirectory();
-    return '${dir.path}/torrent_data';
+    return _ioService.getTorrentPersistencePath();
   }
 
   static Future<void> regenerateApiKey() async {
+    if (kIsWeb) return;
     RequestNewApiKey().sendSignalToRust();
     final signal = await NewApiKey.rustSignalStream.first;
     serverApiKey.value = signal.message.key;
   }
 
   static void restartServer() {
+    if (kIsWeb) return;
     StartServer(
       port: serverPort.value,
       apiKey: serverApiKey.value,
+      username: username.value,
+      password: password.value,
     ).sendSignalToRust();
+  }
+
+  static Future<void> _generateSalt() async {
+    if (kIsWeb) {
+      final newSalt = await APIService.generateSalt();
+      if (newSalt != null) salt.value = newSalt;
+    } else {
+      final id = DateTime.now().microsecondsSinceEpoch.toString();
+      final stream = SaltOutput.rustSignalStream.where(
+        (signal) => signal.message.id == id,
+      );
+      GenerateSalt(id: id).sendSignalToRust();
+      final signal = await stream.first;
+      salt.value = signal.message.salt;
+    }
+  }
+
+  static Future<String> _encryptPassword(String plainText) async {
+    if (plainText.isEmpty) return '';
+    try {
+      if (kIsWeb) {
+        final encrypted = await APIService.encryptPassword(
+          plainText,
+          salt.value,
+        );
+        if (encrypted != null) return encrypted;
+      } else {
+        final id = DateTime.now().microsecondsSinceEpoch.toString();
+        final stream = EncryptionOutput.rustSignalStream.where(
+          (signal) => signal.message.id == id,
+        );
+        EncryptPassword(
+          id: id,
+          plainText: plainText,
+          salt: salt.value,
+        ).sendSignalToRust();
+        final signal = await stream.first;
+        if (signal.message.encryptedText != null) {
+          return signal.message.encryptedText!;
+        }
+      }
+
+      // Fallback: If server is not available, we can't encrypt.
+      // Returning plain text would be wrong if it's expected to be JSON.
+      // But for now, let's return base64 of plain text as a last resort.
+      return base64.encode(utf8.encode(plainText));
+    } catch (e) {
+      log("Encryption error: $e");
+      return base64.encode(utf8.encode(plainText));
+    }
+  }
+
+  static Future<String> _decryptPassword(String stored) async {
+    if (stored.isEmpty) return '';
+    try {
+      if (kIsWeb) {
+        final decrypted = await APIService.decryptPassword(stored, salt.value);
+        if (decrypted != null) return decrypted;
+      } else {
+        final id = DateTime.now().microsecondsSinceEpoch.toString();
+        final stream = DecryptionOutput.rustSignalStream.where(
+          (signal) => signal.message.id == id,
+        );
+        DecryptPassword(
+          id: id,
+          encryptedText: stored,
+          salt: salt.value,
+        ).sendSignalToRust();
+        final signal = await stream.first;
+        if (signal.message.plainText != null) {
+          return signal.message.plainText!;
+        }
+      }
+    } catch (e) {
+      log("Decryption error: $e");
+    }
+
+    // Fallback for migration or plain Base64
+    try {
+      return utf8.decode(base64.decode(stored));
+    } catch (_) {
+      return stored;
+    }
+  }
+
+  static Future<void> _loadFromBackend() async {
+    final data = await APIService.getSettings();
+    if (data != null) {
+      await _applyFromJson(data);
+    } else {
+      log('Failed to load settings from backend, using default settings');
+      await applyDefaultSettings();
+    }
+  }
+
+  static Future<void> _saveToBackend() async {
+    final jsonMap = await _toJson();
+    final success = await APIService.saveSettings(jsonMap);
+    if (!success) {
+      log('Failed to save settings to backend');
+    }
   }
 }

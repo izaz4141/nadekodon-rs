@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 
-import '../../../theme/app_theme.dart';
+import 'package:nadekodon/ui/theme/app_theme.dart';
 
 class DirChoose extends StatelessWidget {
   final ValueNotifier<String> selectedDir;

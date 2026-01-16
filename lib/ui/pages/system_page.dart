@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:nadekodon/theme/app_theme.dart';
+import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/ui/widgets/view/system_app.dart';
 import 'package:nadekodon/ui/widgets/view/system_deps.dart';
 import 'package:nadekodon/ui/widgets/view/system_info.dart';

@@ -1,9 +1,11 @@
-import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:nadekodon/theme/app_theme.dart';
+
+import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/ui/widgets/components/section_header.dart';
 import 'package:nadekodon/utils/settings.dart';
 import 'package:nadekodon/ui/widgets/dialog/permission_dialog.dart';
+import 'package:nadekodon/utils/platform_service.dart';
 
 class SettingsMisc extends StatelessWidget {
   const SettingsMisc({super.key});
@@ -43,7 +45,7 @@ class SettingsMisc extends StatelessWidget {
             );
           },
         ),
-        if (Platform.isAndroid) ...[
+        if (!kIsWeb && PlatformService.isAndroid) ...[
           ListTile(
             title: Text("Check Permissions", style: textTheme.bodyMedium),
             subtitle: Text(

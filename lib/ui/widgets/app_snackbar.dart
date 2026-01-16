@@ -2,7 +2,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 
-import '../../theme/app_theme.dart';
+import 'package:nadekodon/ui/theme/app_theme.dart';
 
 enum SnackType { success, error, info }
 

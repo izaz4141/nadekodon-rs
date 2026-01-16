@@ -1,14 +1,13 @@
-// lib/ui/pages/home_page.dart
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:window_manager/window_manager.dart';
+import 'package:flutter/foundation.dart';
 
-import '../../theme/app_theme.dart';
-import '../widgets/window_controls.dart';
-import '../widgets/app_drawer.dart';
+import 'package:nadekodon/utils/platform_service.dart';
+import 'package:nadekodon/ui/theme/app_theme.dart';
+import 'package:nadekodon/ui/widgets/window_controls.dart';
+import 'package:nadekodon/ui/widgets/app_drawer.dart';
 import 'package:nadekodon/ui/pages/system_page.dart';
-import 'settings_page.dart';
-import 'download_page.dart';
+import 'package:nadekodon/ui/pages/settings_page.dart';
+import 'package:nadekodon/ui/pages/download_page.dart';
 
 /// Shared state for navigation index
 final ValueNotifier<int> navIndexNotifier = ValueNotifier<int>(1);
@@ -76,9 +75,7 @@ class HomePage extends StatelessWidget {
                 ],
               ),
             ),
-            if (!Platform.isAndroid &&
-                !Platform.isIOS &&
-                !Platform.isFuchsia) ...[
+            if (!kIsWeb && PlatformService.isDesktop) ...[
               Positioned(
                 top: 0,
                 left: 0,
@@ -87,13 +84,13 @@ class HomePage extends StatelessWidget {
                 child: GestureDetector(
                   behavior: HitTestBehavior.translucent,
                   onPanStart: (details) {
-                    windowManager.startDragging();
+                    PlatformService().startDragging();
                   },
                   onDoubleTap: () async {
-                    if (await windowManager.isMaximized()) {
-                      await windowManager.unmaximize();
+                    if (await PlatformService().isMaximized()) {
+                      await PlatformService().unmaximize();
                     } else {
-                      await windowManager.maximize();
+                      await PlatformService().maximize();
                     }
                   },
                 ),

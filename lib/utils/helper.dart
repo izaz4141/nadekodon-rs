@@ -1,9 +1,13 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
+
 import 'package:collection/collection.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:permission_handler/permission_handler.dart';
+
 import 'package:nadekodon/utils/logger.dart';
+import 'package:nadekodon/utils/platform_service.dart';
 
 enum DownloadStatus {
   queued,
@@ -109,11 +113,13 @@ bool isUrl(String url) {
 }
 
 Future<bool> fileExist(String path) async {
+  if (kIsWeb) return false;
   final type = await FileSystemEntity.type(path);
   return type != FileSystemEntityType.notFound;
 }
 
 Future<ResultType> openFile(String filePath) async {
+  if (kIsWeb) return ResultType.error;
   final file = File(filePath);
 
   if (!await file.exists()) {
@@ -121,7 +127,7 @@ Future<ResultType> openFile(String filePath) async {
   }
 
   try {
-    if (Platform.isAndroid && filePath.toLowerCase().endsWith('.apk')) {
+    if (PlatformService.isAndroid && filePath.toLowerCase().endsWith('.apk')) {
       if (!await Permission.requestInstallPackages.isGranted) {
         final status = await Permission.requestInstallPackages.request();
         if (!status.isGranted) {
@@ -138,6 +144,7 @@ Future<ResultType> openFile(String filePath) async {
 }
 
 Future<bool> showInFolder(String filePath) async {
+  if (kIsWeb) return false;
   final file = File(filePath);
 
   if (!await file.exists()) {
@@ -145,13 +152,13 @@ Future<bool> showInFolder(String filePath) async {
   }
 
   try {
-    if (Platform.isWindows) {
+    if (PlatformService.isWindows) {
       await Process.run('explorer', ['/select,', filePath]);
       return true;
-    } else if (Platform.isMacOS) {
+    } else if (PlatformService.isMacOS) {
       await Process.run('open', ['-R', filePath]);
       return true;
-    } else if (Platform.isAndroid) {
+    } else if (PlatformService.isAndroid) {
       // On Android, try multiple methods to open the directory
       final directory = file.parent.path;
 
@@ -177,7 +184,7 @@ Future<bool> showInFolder(String filePath) async {
 
       // If both methods fail, return false
       return false;
-    } else if (Platform.isLinux) {
+    } else if (PlatformService.isLinux) {
       // On Linux, try to open with the default file manager
       final directory = file.parent.path;
       try {

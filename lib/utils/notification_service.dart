@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';
 import 'dart:isolate';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:nadekodon/utils/helper.dart';
 import 'package:nadekodon/src/bindings/bindings.dart';
@@ -75,6 +76,7 @@ Future<void> _handleAction(String? actionId, String? payload) async {
 }
 
 Future<void> _bringAppToForeground() async {
+  if (kIsWeb) return;
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     await windowManager.show();
     await windowManager.restore();
@@ -136,8 +138,8 @@ class NotificationService {
     final InitializationSettings initializationSettings =
         InitializationSettings(
           android: initializationSettingsAndroid,
-          linux: initializationSettingsLinux,
-          windows: initializationSettingsWindows,
+          linux: kIsWeb ? null : initializationSettingsLinux,
+          windows: kIsWeb ? null : initializationSettingsWindows,
         );
 
     await flutterLocalNotificationsPlugin.initialize(
@@ -153,7 +155,7 @@ class NotificationService {
       },
     );
 
-    if (Platform.isAndroid) {
+    if (!kIsWeb && Platform.isAndroid) {
       const AndroidNotificationChannel channel = AndroidNotificationChannel(
         'download_channel',
         'Downloads',
@@ -320,7 +322,7 @@ class NotificationService {
     final isPaused = status == DownloadStatus.paused;
     final isCancelled = status == DownloadStatus.cancelled;
 
-    if ((Platform.isWindows || Platform.isLinux) && isRunning) {
+    if (!kIsWeb && (Platform.isWindows || Platform.isLinux) && isRunning) {
       return;
     }
 

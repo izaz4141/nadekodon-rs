@@ -1,11 +1,11 @@
-import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import 'package:nadekodon/theme/app_theme.dart';
+import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/utils/settings.dart';
-
 import 'package:nadekodon/ui/widgets/components/section_header.dart';
 import 'package:nadekodon/ui/widgets/components/settings_chip.dart';
+import 'package:nadekodon/utils/platform_service.dart';
 
 class SettingsUI extends StatelessWidget {
   const SettingsUI({super.key});
@@ -141,7 +141,7 @@ class SettingsUI extends StatelessWidget {
             );
           },
         ),
-        if (!Platform.isAndroid)
+        if (!kIsWeb && PlatformService.isDesktop)
           ValueListenableBuilder<bool>(
             valueListenable: SettingsManager.retreatToTray,
             builder: (context, value, _) {

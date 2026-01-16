@@ -61,6 +61,8 @@ dependencies:
   pub_semver: ^2.2.0
   device_info_plus: ^12.3.0
   synchronized: ^3.4.0
+  encrypt: ^5.0.3
+  pointycastle: ^3.9.1
 
 dev_dependencies:
   flutter_test:
@@ -87,6 +89,7 @@ flutter:
   assets:
     - assets/icons/
     - assets/licenses/
+    - assets/docs/
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 

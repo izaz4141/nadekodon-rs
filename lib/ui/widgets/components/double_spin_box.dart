@@ -1,7 +1,7 @@
 // lib/ui/widgets/double_spin_box.dart
 import 'package:flutter/material.dart';
 
-import 'package:nadekodon/theme/app_theme.dart';
+import 'package:nadekodon/ui/theme/app_theme.dart';
 
 class DoubleSpinBox extends StatelessWidget {
   const DoubleSpinBox({

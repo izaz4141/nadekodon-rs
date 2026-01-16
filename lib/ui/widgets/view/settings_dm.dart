@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 
-import 'package:nadekodon/ui/widgets/components/section_header.dart';
-import '../../../theme/app_theme.dart';
-import '../../../utils/settings.dart';
-import '../components/spin_box.dart';
-import '../components/double_spin_box.dart';
+import 'package:nadekodon/utils/settings.dart';
 import 'package:nadekodon/utils/speed_scheduler.dart';
+import 'package:nadekodon/ui/widgets/components/section_header.dart';
+import 'package:nadekodon/ui/theme/app_theme.dart';
+import 'package:nadekodon/ui/widgets/components/spin_box.dart';
+import 'package:nadekodon/ui/widgets/components/double_spin_box.dart';
 import 'package:nadekodon/ui/widgets/dialog/add_schedule_rule.dart';
 import 'package:nadekodon/ui/widgets/components/settings_chip.dart';
 

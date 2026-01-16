@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../../../utils/helper.dart';
-import '../app_snackbar.dart';
-import '../../../src/bindings/bindings.dart';
-import '../../../theme/app_theme.dart';
+import 'package:nadekodon/utils/helper.dart';
+import 'package:nadekodon/ui/widgets/app_snackbar.dart';
+import 'package:nadekodon/ui/theme/app_theme.dart';
+import 'package:nadekodon/utils/download_service.dart';
 
 /// Shows a dialog to confirm deletion of one or more downloads
 Future<void> showDeleteDownloadsDialog(
@@ -94,7 +94,7 @@ Future<void> showDeleteDownloadsDialog(
   int successCount = 0;
   for (final item in items) {
     if (deleteFromList) {
-      DeleteDownload(id: item.id, deleteFile: deleteFile).sendSignalToRust();
+      DownloadService().deleteDownload(item.id, deleteFile);
     }
     successCount++;
   }

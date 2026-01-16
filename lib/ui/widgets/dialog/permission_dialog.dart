@@ -1,8 +1,8 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:nadekodon/utils/platform_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:nadekodon/theme/app_theme.dart';
+import 'package:nadekodon/ui/theme/app_theme.dart';
 
 class PermissionDialog extends StatefulWidget {
   const PermissionDialog({super.key});
@@ -28,7 +28,7 @@ class _PermissionDialogState extends State<PermissionDialog> {
     bool notification = false;
     bool battery = false;
 
-    if (Platform.isAndroid) {
+    if (PlatformService.isAndroid) {
       final androidInfo = await DeviceInfoPlugin().androidInfo;
       if (androidInfo.version.sdkInt >= 30) {
         storage = await Permission.manageExternalStorage.isGranted;
@@ -50,7 +50,7 @@ class _PermissionDialogState extends State<PermissionDialog> {
   }
 
   Future<void> _requestStorage() async {
-    if (Platform.isAndroid) {
+    if (PlatformService.isAndroid) {
       final androidInfo = await DeviceInfoPlugin().androidInfo;
       if (androidInfo.version.sdkInt >= 30) {
         await Permission.manageExternalStorage.request();

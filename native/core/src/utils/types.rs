@@ -11,6 +11,7 @@ pub struct DMSettings {
     pub download_retries: u8,
     pub seeding_ratio: f32,
     pub seeding_time: u64,
+    pub download_dir: String,
 }
 
 #[derive(Debug)]
@@ -92,6 +93,7 @@ pub struct DownloadInfo {
     pub download_type: DownloadType,
     pub torrent_hash: Option<String>,
     pub referer: Option<String>,
+    pub category: Option<String>,
 }
 
 #[derive(Debug, Clone)]

@@ -71,6 +71,7 @@ impl DownloadWorker {
         cookie: Option<String>,
         user_agent: Option<String>,
         referer: Option<String>,
+        category: Option<String>,
     ) -> Arc<Self> {
         let speed_limit = settings.read().await.speed_limit;
         Arc::new(Self {
@@ -96,6 +97,7 @@ impl DownloadWorker {
                 download_type: DownloadType::Normal,
                 torrent_hash: None,
                 referer,
+                category,
             }),
             client: client,
             threads: settings.clone().read().await.download_threads as u64,
@@ -936,8 +938,14 @@ impl DownloadWorker {
             let add_torrent = if is_magnet_url(url) {
                 AddTorrent::from_url(url)
             } else {
-                // It's a torrent file, download it first
-                let bytes = client.get(url).send().await?.bytes().await?;
+                // Check if it's a local file path
+                let path = std::path::Path::new(url);
+                let bytes = if path.is_file() {
+                    tokio::fs::read(path).await?
+                } else {
+                    // It's a torrent file URL, download it first
+                    client.get(url).send().await?.bytes().await?.to_vec()
+                };
                 AddTorrent::from_bytes(bytes)
             };
 
@@ -1398,7 +1406,7 @@ impl std::fmt::Debug for DownloadWorker {
 }
 
 pub struct DownloadManager {
-    client: reqwest::Client,
+    pub client: reqwest::Client,
     pub settings: Arc<RwLock<DMSettings>>,
     workers: Arc<Mutex<IndexMap<Uuid, Arc<DownloadWorker>>>>,
     active: Arc<Mutex<HashSet<Uuid>>>,
@@ -1578,6 +1586,7 @@ impl DownloadManager {
         cookie: Option<String>,
         user_agent: Option<String>,
         referer: Option<String>,
+        category: Option<String>,
     ) -> Result<Uuid> {
         let id = Uuid::new_v4();
         let worker = DownloadWorker::new(
@@ -1591,6 +1600,7 @@ impl DownloadManager {
             cookie,
             user_agent,
             referer,
+            category,
         )
         .await;
         self.workers.lock().await.insert(id, worker);
@@ -1931,6 +1941,7 @@ impl DownloadManager {
             let mut settings = self.settings.write().await;
             concurrency_changed = settings.concurrency_limit != new.concurrency_limit;
 
+            settings.download_dir = new.download_dir;
             settings.speed_limit = new.speed_limit;
             settings.download_threads = new.download_threads;
             settings.concurrency_limit = new.concurrency_limit;

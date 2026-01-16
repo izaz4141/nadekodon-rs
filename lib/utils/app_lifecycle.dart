@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:nadekodon/utils/notification_service.dart';
@@ -16,7 +17,7 @@ class _AppTrayListener extends TrayListener {
 
   @override
   void onTrayIconRightMouseDown() {
-    if (!Platform.isLinux) {
+    if (!kIsWeb && !Platform.isLinux) {
       trayManager.popUpContextMenu();
     }
   }
@@ -34,6 +35,7 @@ class _AppTrayListener extends TrayListener {
 }
 
 Future<void> initTray() async {
+  if (kIsWeb) return;
   await trayManager.setIcon(
     Platform.isWindows
         ? 'assets/icons/nadeko-don.ico'
@@ -61,6 +63,7 @@ Future<void> removeTray() async {
 }
 
 Future<void> closeApp() async {
+  if (kIsWeb) return;
   await SingleInstance.dispose();
   NotificationService().stopListening();
   await removeTray();

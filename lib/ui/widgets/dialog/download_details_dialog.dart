@@ -3,9 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nadekodon/src/bindings/bindings.dart';
-import 'package:nadekodon/theme/app_theme.dart';
+import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/utils/helper.dart';
 import 'package:nadekodon/ui/widgets/app_snackbar.dart';
+import 'package:nadekodon/utils/download_service.dart';
 
 class DownloadDetailsDialog extends StatefulWidget {
   final DownloadItem item;
@@ -35,7 +36,7 @@ class _DownloadDetailsDialogState extends State<DownloadDetailsDialog> {
   }
 
   void _sendSignal() {
-    GetDownloadDetails(id: widget.item.id).sendSignalToRust();
+    DownloadService().fetchDetails(widget.item.id);
   }
 
   @override
@@ -53,18 +54,16 @@ class _DownloadDetailsDialogState extends State<DownloadDetailsDialog> {
       ),
       content: SizedBox(
         width: AppTheme.dialogWidth(context),
-        child: StreamBuilder(
-          stream: DownloadDetails.rustSignalStream,
+        child: StreamBuilder<DownloadDetails>(
+          stream: DownloadService().getDetailsStream(widget.item.id),
           builder: (context, snapshot) {
-            final signalPack = snapshot.data;
-            if (signalPack == null) {
+            final details = snapshot.data;
+            if (details == null) {
               return const SizedBox(
                 height: 100,
                 child: Center(child: CircularProgressIndicator()),
               );
             }
-
-            final details = signalPack.message;
             if (details.id != widget.item.id) {
               return const SizedBox(
                 height: 100,

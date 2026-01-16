@@ -1,75 +1,17 @@
 use crate::signals::{NewApiKey, RequestAddDownload, RequestNewApiKey, StartServer};
 use crate::utils::logger;
-use crate::{downloader::main::DownloadManager, utils::types::WorkerEvent};
+use axum::Router;
 use axum::{
-    Router,
-    extract::{
-        State,
-        ws::{Message, WebSocket, WebSocketUpgrade},
-    },
-    response::IntoResponse,
-    routing::any,
+    Json, extract::State, http::StatusCode, middleware, response::IntoResponse, routing::post,
 };
-use futures::{sink::SinkExt, stream::StreamExt};
+use nadekodon_core::downloader::DownloadManager;
+use nadekodon_server::{
+    qbittorrent::get_router,
+    server::{AppState, check_api_key, create_nadeko_router, run_server},
+};
 use rinf::{DartSignal, RustSignal};
-use serde::{Deserialize, Serialize};
-use std::{net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 use uuid::Uuid;
-
-#[derive(Clone)]
-struct AppState {
-    dm: Arc<DownloadManager>,
-    api_key: String,
-}
-
-#[derive(Deserialize, Debug)]
-#[serde(tag = "type")]
-enum ClientMessage {
-    #[serde(rename = "download")]
-    Download {
-        url: String,
-        filename: Option<String>,
-        cookie: Option<String>,
-        user_agent: Option<String>,
-        referer: Option<String>,
-    },
-    #[serde(rename = "ping")]
-    Ping,
-}
-
-#[derive(Serialize, Debug)]
-#[serde(tag = "type")]
-enum ServerMessage {
-    #[serde(rename = "event")]
-    Event {
-        event: String,
-        id: String,
-        data: Option<String>,
-    },
-    #[serde(rename = "pong")]
-    Pong,
-}
-
-pub async fn start_server_listener(dm: Arc<DownloadManager>) {
-    let receiver = StartServer::get_dart_signal_receiver();
-    let mut server_handle: Option<tokio::task::JoinHandle<()>> = None;
-
-    while let Some(signal_pack) = receiver.recv().await {
-        let msg = signal_pack.message;
-        let port = msg.port;
-        let api_key = msg.api_key;
-        let dm_clone = dm.clone();
-
-        if let Some(handle) = server_handle {
-            handle.abort();
-            logger::debug("Aborted previous WebSocket server");
-        }
-
-        server_handle = Some(tokio::spawn(async move {
-            run_server_loop(dm_clone, port, api_key).await;
-        }));
-    }
-}
 
 pub async fn handle_api_key_generation() {
     let receiver = RequestNewApiKey::get_dart_signal_receiver();
@@ -79,111 +21,67 @@ pub async fn handle_api_key_generation() {
     }
 }
 
-async fn run_server_loop(dm: Arc<DownloadManager>, port: u16, api_key: String) {
-    let state = AppState { dm, api_key };
-
-    let app = Router::new()
-        .route("/ws", any(ws_handler))
-        .with_state(state);
-
-    let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    logger::debug(&format!("WebSocket server listening on {}", addr));
-    match tokio::net::TcpListener::bind(addr).await {
-        Ok(listener) => {
-            if let Err(e) = axum::serve(listener, app).await {
-                logger::error(&format!("WebSocket server error: {}", e));
-            }
-        }
-        Err(e) => logger::error(&format!("Failed to bind WebSocket server: {}", e)),
-    }
-}
-
-async fn ws_handler(
-    ws: WebSocketUpgrade,
-    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
-    State(state): State<AppState>,
+async fn handle_add_download(
+    State(_state): State<AppState>,
+    Json(payload): Json<RequestAddDownload>,
 ) -> impl IntoResponse {
-    if let Some(provided_key) = params.get("key") {
-        if provided_key != &state.api_key {
-            return (axum::http::StatusCode::UNAUTHORIZED, "Invalid API Key").into_response();
-        }
-    } else {
-        return (axum::http::StatusCode::UNAUTHORIZED, "Missing API Key").into_response();
-    }
-    ws.on_upgrade(|socket| handle_socket(socket, state))
+    payload.send_signal_to_dart();
+    (StatusCode::OK, "Download request sent".to_string())
 }
 
-async fn handle_socket(socket: WebSocket, state: AppState) {
-    let (mut sender, mut receiver) = socket.split();
-    let mut rx = state.dm.broadcast_tx.subscribe();
+pub async fn start_server_listener(dm: Arc<DownloadManager>) {
+    let mut current_server: Option<(tokio::task::JoinHandle<()>, Arc<tokio::sync::Notify>)> = None;
+    let receiver = StartServer::get_dart_signal_receiver();
 
-    loop {
-        tokio::select! {
-            // Receive broadcast events from DownloadManager
-            event = rx.recv() => {
-                if let Ok(event) = event {
-                    let msg = match event {
-                        WorkerEvent::Completed(id) => ServerMessage::Event {
-                            event: "completed".to_string(),
-                            id: id.to_string(),
-                            data: None,
-                        },
-                        WorkerEvent::Cancelled(id) => ServerMessage::Event {
-                            event: "cancelled".to_string(),
-                            id: id.to_string(),
-                            data: None,
-                        },
-                        WorkerEvent::Error(id, err) => ServerMessage::Event {
-                            event: "error".to_string(),
-                            id: id.to_string(),
-                            data: Some(err),
-                        },
-                    };
+    while let Some(signal_pack) = receiver.recv().await {
+        let msg = signal_pack.message;
+        logger::debug(&format!("Starting server on port {}", msg.port));
 
-                    if let Ok(json) = serde_json::to_string(&msg) {
-                        if sender.send(Message::Text(json)).await.is_err() {
-                            break;
-                        }
-                    }
-                }
-            }
-            // Receive messages from client
-            client_msg = receiver.next() => {
-                match client_msg {
-                    Some(Ok(Message::Text(text))) => {
-                        if let Ok(client_msg) = serde_json::from_str::<ClientMessage>(&text) {
-                            match client_msg {
-                                ClientMessage::Download { url, filename, cookie, user_agent, referer } => {
-                                    let signal = RequestAddDownload {
-                                        url,
-                                        filename,
-                                        cookie,
-                                        user_agent,
-                                        referer,
-                                    };
-                                    signal.send_signal_to_dart();
-                                    logger::debug("Sent RequestAddDownload signal to Dart");
-                                }
-                                ClientMessage::Ping => {
-                                    let pong = ServerMessage::Pong;
-                                    if let Ok(json) = serde_json::to_string(&pong) {
-                                        if sender.send(Message::Text(json)).await.is_err() {
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Some(Ok(_)) => {
-                        // Ignore other message types
-                    }
-                    _ => {
-                        // Connection closed or error
-                        break;
-                    }
-                }
-            }
+        if let Some((old_handle, old_notify)) = current_server.take() {
+            old_notify.notify_one();
+            let _ = old_handle.await; // Wait for the port to be released
         }
+
+        let config_val = nadekodon_server::server::load_config();
+        let salt = config_val["salt"].as_str().unwrap_or("");
+
+        let password = if msg.password.contains("\"iv\":") && msg.password.contains("\"data\":") {
+            nadekodon_core::utils::security::decrypt_password(&msg.password, salt)
+                .unwrap_or(msg.password)
+        } else {
+            msg.password
+        };
+
+        let config = Arc::new(tokio::sync::RwLock::new(config_val));
+        let restart_signal = Arc::new(tokio::sync::Notify::new());
+        let state = AppState {
+            dm: dm.clone(),
+            api_key: msg.api_key,
+            username: msg.username,
+            password,
+            config,
+            restart_signal: restart_signal.clone(),
+        };
+
+        let qbt_router = get_router(state.clone());
+        let nadeko_router = create_nadeko_router(state.clone());
+        let ext_router = Router::new()
+            .route("/add-download", post(handle_add_download))
+            .layer(middleware::from_fn_with_state(
+                state.api_key.clone(),
+                check_api_key,
+            ))
+            .with_state(state.clone());
+        let router = Router::new()
+            .nest("/api/v2", qbt_router)
+            .nest("/api/nadeko", nadeko_router)
+            .nest("/api/nadeko", ext_router)
+            .with_state(state);
+
+        let rs_clone = restart_signal.clone();
+        let new_handle = tokio::spawn(async move {
+            run_server(router, msg.port, rs_clone).await;
+        });
+        current_server = Some((new_handle, restart_signal));
     }
 }

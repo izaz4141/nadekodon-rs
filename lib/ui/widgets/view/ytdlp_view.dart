@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'package:nadekodon/theme/app_theme.dart';
+import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/utils/helper.dart';
 import 'package:nadekodon/ui/widgets/components/dir_choose.dart';
 
@@ -12,7 +12,7 @@ class YtdlpView extends StatefulWidget {
   final void Function() onDownload;
   final ValueChanged<YtdlFormat?> onVideoChanged;
   final ValueChanged<YtdlFormat?> onAudioChanged;
-  final YtdlQueryOutput? directOutput;
+  final YtdlQueryOutput? output;
 
   const YtdlpView({
     super.key,
@@ -21,7 +21,7 @@ class YtdlpView extends StatefulWidget {
     required this.onDownload,
     required this.onVideoChanged,
     required this.onAudioChanged,
-    this.directOutput,
+    required this.output,
   });
 
   @override
@@ -39,28 +39,26 @@ class _YtdlpView extends State<YtdlpView> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.directOutput != null) {
-      return _buildView(widget.directOutput!);
+    if (widget.output == null) {
+      return const Center(child: CircularProgressIndicator());
     }
 
-    return StreamBuilder(
-      stream: YtdlQueryOutput.rustSignalStream,
-      builder: (context, snapshot) {
-        final signalPack = snapshot.data;
-        if (signalPack == null) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final ytdlOutput = signalPack.message;
-
-        return _buildView(ytdlOutput);
-      },
-    );
+    return _buildView(widget.output!);
   }
 
   Widget _buildView(YtdlQueryOutput ytdlOutput) {
     final colors = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
+
+    if (ytdlOutput.error != null) {
+      return Center(
+        child: Text(
+          ytdlOutput.error!,
+          style: textTheme.bodyMedium?.copyWith(color: colors.error),
+        ),
+      );
+    }
+
     widget.nameController.text = ytdlOutput.name;
     final isDesktop = AppTheme.isDesktop(context);
 

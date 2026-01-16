@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
@@ -34,7 +35,10 @@ class VersionInfo {
     Version? overriddenVersion,
   }) {
     String? downloadUrl;
-    String targetName = Platform.isWindows ? _windowsZipName : _appImageName;
+    String targetName = "";
+    if (!kIsWeb) {
+      targetName = Platform.isWindows ? _windowsZipName : _appImageName;
+    }
 
     if (json['assets'] != null) {
       for (var asset in json['assets']) {
@@ -415,6 +419,8 @@ Future<bool> downloadAndReplaceWindows(
 }
 
 Future<void> cleanupOldFiles() async {
+  if (kIsWeb) return;
+
   if (Platform.isWindows) {
     try {
       final currentDir = File(Platform.resolvedExecutable).parent;
@@ -450,7 +456,7 @@ Future<void> cleanupOldFiles() async {
 }
 
 Future<bool?> checkAndUpdate({Function(double progress)? onProgress}) async {
-  if (!Platform.isLinux && !Platform.isWindows) {
+  if (kIsWeb || (!Platform.isLinux && !Platform.isWindows)) {
     log('Auto-update only supported on Linux AppImage and Windows');
     return null;
   }

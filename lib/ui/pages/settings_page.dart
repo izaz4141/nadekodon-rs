@@ -1,12 +1,11 @@
-// lib/ui/pages/settings_page.dart
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:nadekodon/utils/platform_service.dart';
 
-import '../../theme/app_theme.dart';
+import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/ui/widgets/view/settings_dm.dart';
 import 'package:nadekodon/ui/widgets/view/settings_misc.dart';
 import 'package:nadekodon/ui/widgets/view/settings_ui.dart';
-import 'package:nadekodon/ui/widgets/view/settings_ws.dart';
+import 'package:nadekodon/ui/widgets/view/settings_sec.dart';
 import 'package:nadekodon/ui/widgets/components/settings_actions_bar.dart';
 
 class SettingsPage extends StatelessWidget {
@@ -31,7 +30,7 @@ class SettingsPage extends StatelessWidget {
                 SettingsDM(),
                 Divider(),
                 SettingsUI(),
-                if (!Platform.isAndroid) ...[Divider(), SettingsWS()],
+                if (!PlatformService.isAndroid) ...[Divider(), SettingsSec()],
                 Divider(),
                 SettingsMisc(),
                 SizedBox(height: 120 * AppTheme.heightScale(context)),

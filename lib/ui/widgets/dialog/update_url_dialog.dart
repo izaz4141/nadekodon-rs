@@ -2,8 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:nadekodon/ui/widgets/app_snackbar.dart';
-import 'package:nadekodon/theme/app_theme.dart';
+import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/src/bindings/bindings.dart';
+import 'package:nadekodon/utils/download_service.dart';
 
 class UpdateUrlDialog extends StatefulWidget {
   final String id;
@@ -61,7 +62,7 @@ class _UpdateUrlDialogState extends State<UpdateUrlDialog> {
   Future<void> _handleUpdate() async {
     final url = _controller.text.trim();
     if (url.isNotEmpty) {
-      UpdateDownloadUrl(id: widget.id, newUrl: url).sendSignalToRust();
+      DownloadService().updateUrl(widget.id, url);
       if (mounted) {
         Navigator.of(context).pop(url);
       }

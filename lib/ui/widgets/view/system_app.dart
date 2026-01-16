@@ -1,14 +1,16 @@
-import 'dart:io';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:nadekodon/theme/app_theme.dart';
+
+import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/ui/widgets/app_snackbar.dart';
 import 'package:nadekodon/ui/widgets/dialog/view_logs.dart';
 import 'package:nadekodon/ui/widgets/dialog/licenses_dialog.dart';
 import 'package:nadekodon/utils/settings.dart';
 import 'package:nadekodon/utils/updater.dart';
 import 'package:nadekodon/utils/logger.dart';
+import 'package:nadekodon/utils/system_service.dart';
+import 'package:nadekodon/utils/platform_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:pub_semver/pub_semver.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -21,12 +23,7 @@ class SystemApp extends StatefulWidget {
 }
 
 class _SystemAppState extends State<SystemApp> {
-  PackageInfo _packageInfo = PackageInfo(
-    appName: 'Unknown',
-    packageName: 'Unknown',
-    version: 'Unknown',
-    buildNumber: 'Unknown',
-  );
+  PackageInfo _packageInfo = SystemService().packageInfo;
 
   VersionInfo? _latestVersion;
   bool _checkingUpdates = true;
@@ -59,7 +56,7 @@ class _SystemAppState extends State<SystemApp> {
   }
 
   Future<void> _performUpdate() async {
-    if (Platform.isAndroid || _latestVersion == null) return;
+    if (kIsWeb || !PlatformService.isDesktop || _latestVersion == null) return;
 
     // Show confirmation dialog
     final confirmed = await showDialog<bool>(
@@ -103,7 +100,7 @@ class _SystemAppState extends State<SystemApp> {
 
     bool success = false;
 
-    if (Platform.isLinux) {
+    if (PlatformService.isLinux) {
       success = await downloadAndReplaceAppImage(
         _latestVersion!,
         onProgress: (progress) {
@@ -113,7 +110,7 @@ class _SystemAppState extends State<SystemApp> {
           });
         },
       );
-    } else if (Platform.isWindows) {
+    } else if (PlatformService.isWindows) {
       success = await downloadAndReplaceWindows(
         _latestVersion!,
         onProgress: (progress) {
@@ -142,10 +139,9 @@ class _SystemAppState extends State<SystemApp> {
   }
 
   Future<void> _initPackageInfo() async {
-    final info = await PackageInfo.fromPlatform();
     if (!mounted) return;
     setState(() {
-      _packageInfo = info;
+      _packageInfo = SystemService().packageInfo;
     });
   }
 
@@ -262,7 +258,7 @@ class _SystemAppState extends State<SystemApp> {
               Tooltip(
                 message: 'Latest version: ${_latestVersion!.version}',
                 child: InkWell(
-                  onTap: !Platform.isAndroid && !_isUpdating
+                  onTap: !kIsWeb && PlatformService.isDesktop && !_isUpdating
                       ? _performUpdate
                       : null,
                   borderRadius: BorderRadius.circular(AppTheme.radiusMD),

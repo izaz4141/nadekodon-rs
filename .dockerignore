@@ -1,0 +1,16 @@
+.git
+.gitignore
+.vscode
+.idea
+.dart_tool
+.fvm
+build
+target
+*.log
+.DS_Store
+*.iml
+*.ipr
+*.iws
+.packages
+pubspec.lock
+.metadata

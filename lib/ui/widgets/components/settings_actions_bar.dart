@@ -1,9 +1,9 @@
 // lib/ui/widgets/settings/actions_bar.dart
 import 'package:flutter/material.dart';
 
-import '../../../theme/app_theme.dart';
-import '../../../utils/settings.dart';
-import '../app_snackbar.dart';
+import 'package:nadekodon/ui/theme/app_theme.dart';
+import 'package:nadekodon/utils/settings.dart';
+import 'package:nadekodon/ui/widgets/app_snackbar.dart';
 
 class SettingsActionsBar extends StatelessWidget {
   final ColorScheme colors;

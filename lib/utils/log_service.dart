@@ -86,8 +86,28 @@ class LogService {
     }
   }
 
-  static void clearLogs() {
-    logs.clear();
+  static Future<void> clearLogs() async {
+    try {
+      final file = _logFile;
+      if (file == null) {
+        throw StateError('Log file is not initialized');
+      }
+
+      if (await file.exists()) {
+        await file.writeAsString('', flush: true);
+      } else {
+        await file.create(recursive: true);
+      }
+      logs.clear();
+    } catch (e) {
+      logs.add(
+        LogEntry(
+          level: LogLevel.error,
+          timestamp: DateTime.now(),
+          message: 'Failed to clear log: $e',
+        ),
+      );
+    }
   }
 }
 

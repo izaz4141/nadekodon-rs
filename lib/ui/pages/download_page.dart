@@ -2,13 +2,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:nadekodon/ui/widgets/components/download_card.dart';
 import 'package:nadekodon/ui/widgets/dialog/delete_download.dart';
-import 'package:rinf/rinf.dart';
 
-import '../../theme/app_theme.dart';
-import '../../utils/helper.dart';
-import '../../src/bindings/bindings.dart';
-import '../widgets/dialog/add_download.dart';
-import '../widgets/dialog/download_context_menu.dart';
+import 'package:nadekodon/ui/theme/app_theme.dart';
+import 'package:nadekodon/utils/helper.dart';
+import 'package:nadekodon/src/bindings/bindings.dart';
+import 'package:nadekodon/ui/widgets/dialog/add_download.dart';
+import 'package:nadekodon/ui/widgets/dialog/download_context_menu.dart';
+import 'package:nadekodon/utils/download_service.dart';
 
 class DownloadPage extends StatefulWidget {
   const DownloadPage({super.key});
@@ -43,7 +43,7 @@ class _DownloadListState {
 class _DownloadPageState extends State<DownloadPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  late StreamSubscription<RustSignalPack<DownloadList>> _dListSubs;
+  late StreamSubscription<DownloadList> _dListSubs;
   Timer? _pollTimer;
 
   final _activeState = _DownloadListState();
@@ -61,8 +61,9 @@ class _DownloadPageState extends State<DownloadPage>
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
 
-    // Listen for updates from Rust
-    _dListSubs = DownloadList.rustSignalStream.listen(_onDownloadListReceived);
+    // DownloadService is initialized in its singleton constructor.
+    // Listen for updates from DownloadService
+    _dListSubs = DownloadService().listStream.listen(_onDownloadListReceived);
 
     // Start polling
     _pollTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
@@ -84,8 +85,7 @@ class _DownloadPageState extends State<DownloadPage>
     super.dispose();
   }
 
-  void _onDownloadListReceived(RustSignalPack<DownloadList> signal) {
-    final message = signal.message;
+  void _onDownloadListReceived(DownloadList message) {
     final tag = message.tag; // 0 for active, 1 for completed
 
     if (tag == null) return;
@@ -187,16 +187,18 @@ class _DownloadPageState extends State<DownloadPage>
       }
     }).toList();
 
-    GetDownloadList(
-      anchorId: anchorId,
-      before: beforeCount,
-      after: afterCount,
-      statuses: statusStrings,
-      tag: tag,
-      searchQuery: _searchQuery.isNotEmpty ? _searchQuery : null,
-      sortBy: _sortBy,
-      ascending: _ascending,
-    ).sendSignalToRust();
+    DownloadService().fetchList(
+      GetDownloadList(
+        anchorId: anchorId,
+        before: beforeCount,
+        after: afterCount,
+        statuses: statusStrings,
+        tag: tag,
+        searchQuery: _searchQuery.isNotEmpty ? _searchQuery : null,
+        sortBy: _sortBy,
+        ascending: _ascending,
+      ),
+    );
   }
 
   void _toggleSelection(_DownloadListState state, String id) {
@@ -238,7 +240,7 @@ class _DownloadPageState extends State<DownloadPage>
 
     for (final item in selectedItems) {
       if (DownloadPage.activeStatuses.contains(item.status)) {
-        CancelDownload(id: item.id).sendSignalToRust();
+        DownloadService().cancelDownload(item.id);
       }
     }
     _unselectAll(state);
@@ -685,14 +687,14 @@ class _DownloadListTabState extends State<_DownloadListTab>
                   if (item.status == DownloadStatus.running ||
                       item.status == DownloadStatus.seeding ||
                       item.status == DownloadStatus.queued) {
-                    PauseDownload(id: item.id).sendSignalToRust();
+                    DownloadService().pauseDownload(item.id);
                   } else {
-                    ResumeDownload(id: item.id).sendSignalToRust();
+                    DownloadService().resumeDownload(item.id);
                   }
                 },
                 onCancel: () {
                   if (DownloadPage.activeStatuses.contains(item.status)) {
-                    CancelDownload(id: item.id).sendSignalToRust();
+                    DownloadService().cancelDownload(item.id);
                   }
                 },
               );

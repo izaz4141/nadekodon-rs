@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:nadekodon/utils/speed_scheduler.dart';
 import 'package:nadekodon/ui/widgets/components/double_spin_box.dart';
-import 'package:nadekodon/theme/app_theme.dart';
+import 'package:nadekodon/ui/theme/app_theme.dart';
 
 class AddScheduleRuleDialog extends StatefulWidget {
   const AddScheduleRuleDialog({super.key});

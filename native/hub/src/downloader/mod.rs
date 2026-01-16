@@ -1,35 +1,28 @@
-pub mod main;
+// pub mod main;
+
+extern crate nadekodon_core as core;
+use crate::signals;
+use crate::utils::logger;
+use core::downloader;
+use core::signals as csignals;
+use core::utils::types::{DownloadInfo, DownloadState, DownloadType};
 
 use reqwest::Client;
+use rinf::{DartSignal, RustSignal};
+use std::collections::HashMap;
 use std::{
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
+use tokio::sync::oneshot;
 use uuid::Uuid;
 
-use crate::utils::{
-    helper::calc_speed,
-    types::{DMSettings, DownloadInfo, DownloadState, DownloadType},
-    url::get_url_info,
-};
-use main::DownloadManager;
-
-use crate::signals::{
-    CancelDownload, DeleteDownload, DoDownload, DownloadDetails, DownloadGlance, DownloadList,
-    FfmpegResult, GetDownloadDetails, GetDownloadList, InitTorrentPersistence, PartInfo,
-    PauseDownload, QueryUrl, RequestFfmpeg, ResumeDownload, UrlQueryOutput,
-};
-use crate::utils::logger;
-use rinf::{DartSignal, RustSignal};
-use std::collections::HashMap;
-use tokio::sync::oneshot;
-
 static FFMPEG_WAITERS: std::sync::OnceLock<
-    std::sync::Mutex<HashMap<String, oneshot::Sender<FfmpegResult>>>,
+    std::sync::Mutex<HashMap<String, oneshot::Sender<signals::FfmpegResult>>>,
 > = std::sync::OnceLock::new();
 
 pub async fn handle_ffmpeg_results() {
-    let receiver = FfmpegResult::get_dart_signal_receiver();
+    let receiver = signals::FfmpegResult::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
         let result = signal_pack.message;
         let waiters_lock = FFMPEG_WAITERS.get_or_init(|| std::sync::Mutex::new(HashMap::new()));
@@ -52,7 +45,7 @@ pub async fn perform_ffmpeg_request_android(args: Vec<String>) -> Result<bool, S
         }
     }
 
-    RequestFfmpeg {
+    signals::RequestFfmpeg {
         id: id.clone(),
         args,
     }
@@ -71,7 +64,7 @@ pub async fn perform_ffmpeg_request_android(args: Vec<String>) -> Result<bool, S
 }
 
 async fn handle_merge_success(
-    manager: &Arc<DownloadManager>,
+    manager: &Arc<downloader::DownloadManager>,
     video_id: Option<Uuid>,
     audio_id: Option<Uuid>,
     dest: &std::path::PathBuf,
@@ -116,6 +109,7 @@ async fn handle_merge_success(
         download_type: DownloadType::YTDLP,
         torrent_hash: None,
         referer,
+        category: None,
     };
 
     manager.load_snapshot(vec![final_info]).await;
@@ -128,7 +122,10 @@ async fn handle_merge_success(
     }
 }
 
-async fn wait_for_download(manager: Arc<DownloadManager>, id: Uuid) -> Result<(), String> {
+async fn wait_for_download(
+    manager: Arc<downloader::DownloadManager>,
+    id: Uuid,
+) -> Result<(), String> {
     loop {
         match manager.info(id).await {
             Ok(info) => match info.state {
@@ -142,406 +139,83 @@ async fn wait_for_download(manager: Arc<DownloadManager>, id: Uuid) -> Result<()
     }
 }
 
-/// Function to spawn the single global DownloadManager at startup
-pub async fn start_download_manager(client: Client) -> Arc<DownloadManager> {
-    let settings = DMSettings {
-        speed_limit: 0,
-        concurrency_limit: 3,
-        download_threads: 8,
-        download_timeout: 30,
-        download_retries: 5,
-        seeding_ratio: 1.0,
-        seeding_time: 30,
-    };
-    let manager = DownloadManager::new(client, settings).await;
-    manager
-}
-
 pub async fn query_url_info(client: Client) {
-    let receiver = QueryUrl::get_dart_signal_receiver();
+    let receiver = signals::QueryUrl::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
         let data = signal_pack.message;
-        let url = data.url;
-        let cookie = data.cookie;
-        let user_agent = data.user_agent;
-        let referer = data.referer;
-
-        let result = tokio::time::timeout(
-            Duration::from_secs(20),
-            get_url_info(client.clone(), &url, cookie, user_agent, referer),
-        )
-        .await;
-
-        let result = match result {
-            Ok(res) => res,
-            Err(e) => Err(anyhow::anyhow!(e)),
+        let core_query = csignals::QueryUrl {
+            url: data.url,
+            cookie: data.cookie,
+            user_agent: data.user_agent,
+            referer: data.referer,
         };
-
-        match result {
-            Ok(info) => {
-                let is_webpage = match &info.content_type {
-                    Some(ct) => {
-                        let ct_lower = ct.to_ascii_lowercase();
-                        ct_lower.contains("text/html") || ct_lower.contains("application/xhtml+xml")
-                    }
-                    None => false,
-                };
-                UrlQueryOutput {
-                    url: info.url,
-                    name: info.name,
-                    total_size: info.total_size,
-                    accept_ranges: info.accept_ranges,
-                    content_type: info.content_type,
-                    is_webpage: is_webpage,
-                    error: false,
+        match downloader::query_url_info_internal(client.clone(), core_query).await {
+            Ok(u) => {
+                if u.error {
+                    logger::error(&u.name);
                 }
-                .send_signal_to_dart();
-            }
-            Err(e) => {
-                logger::error(&format!("Failed to query info for {}: {:?}", url, e));
-                UrlQueryOutput {
-                    url: url,
-                    name: "Error".to_string(),
-                    total_size: None,
-                    accept_ranges: false,
-                    content_type: None,
-                    is_webpage: false,
-                    error: true,
+                signals::UrlQueryOutput {
+                    name: u.name,
+                    url: u.url,
+                    total_size: u.total_size,
+                    accept_ranges: u.accept_ranges,
+                    content_type: u.content_type,
+                    is_webpage: u.is_webpage,
+                    error: u.error,
                 }
-                .send_signal_to_dart();
+                .send_signal_to_dart()
             }
+            _ => {}
         }
     }
 }
 
-pub async fn spawn_download_worker(manager: Arc<DownloadManager>) {
-    let receiver = DoDownload::get_dart_signal_receiver();
+pub async fn spawn_download_worker(manager: Arc<downloader::DownloadManager>) {
+    let receiver = signals::DoDownload::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
-        let data = signal_pack.message;
-        let mut dest = std::path::PathBuf::from(data.dest);
-        let manager = Arc::clone(&manager);
-
-        if data.is_ytdl {
-            tokio::spawn(async move {
-                let video_format = data.video_format;
-                let audio_format = data.audio_format;
-
-                let temp_dest_base = dest.clone();
-
-                let mut video_dest: Option<std::path::PathBuf> = None;
-                let mut audio_dest: Option<std::path::PathBuf> = None;
-
-                let mut audio_path_base = temp_dest_base.clone();
-                let mut video_path_base = temp_dest_base.clone();
-
-                if audio_format.is_some() && video_format.is_some() {
-                    if let Some(mut file_name) = audio_path_base
-                        .file_name()
-                        .and_then(|s| s.to_string_lossy().into_owned().into())
-                    {
-                        file_name.push_str("_audio");
-                        audio_path_base.set_file_name(file_name);
-                    }
-                    if let Some(mut file_name) = video_path_base
-                        .file_name()
-                        .and_then(|s| s.to_string_lossy().into_owned().into())
-                    {
-                        file_name.push_str("_video");
-                        video_path_base.set_file_name(file_name);
-                    }
-
-                    if let Some(format) = &video_format {
-                        dest = dest.with_extension(format.ext.clone());
-                    }
-                }
-
-                let audio_id = if let Some(format) = audio_format {
-                    let path = audio_path_base.with_extension(format.ext);
-                    audio_dest = Some(path.clone());
-                    match manager
-                        .add_download(format.url.clone(), path, None, None, data.referer.clone())
-                        .await
-                    {
-                        Ok(id) => Some(id),
-                        Err(e) => {
-                            logger::error(&format!("Failed to spawn ytdl audio worker: {:?}", e));
-                            None
-                        }
-                    }
-                } else {
-                    None
-                };
-
-                let video_id = if let Some(format) = video_format {
-                    let path = video_path_base.with_extension(format.ext);
-                    video_dest = Some(path.clone());
-                    match manager
-                        .add_download(format.url.clone(), path, None, None, data.referer.clone())
-                        .await
-                    {
-                        Ok(id) => Some(id),
-                        Err(e) => {
-                            logger::error(&format!("Failed to spawn ytdl video worker: {:?}", e));
-                            None
-                        }
-                    }
-                } else {
-                    None
-                };
-
-                let mut handles = Vec::new();
-                if let Some(vid) = video_id {
-                    let manager_clone = Arc::clone(&manager);
-                    handles.push(tokio::spawn(async move {
-                        wait_for_download(manager_clone, vid).await
-                    }));
-                }
-                if let Some(aid) = audio_id {
-                    let manager_clone = Arc::clone(&manager);
-                    handles.push(tokio::spawn(async move {
-                        wait_for_download(manager_clone, aid).await
-                    }));
-                }
-
-                for handle in handles {
-                    if let Err(e) = handle.await.unwrap() {
-                        logger::error(&format!("Download failed: {}", e));
-                        return;
-                    }
-                }
-
-                if video_id.is_some() && audio_id.is_some() {
-                    logger::debug("Downloads complete, starting merge");
-
-                    if cfg!(target_os = "android") {
-                        let mut args = Vec::new();
-                        if let Some(v_path) = video_dest.as_ref() {
-                            args.push("-i".to_string());
-                            args.push(v_path.to_string_lossy().to_string());
-                        }
-                        if let Some(a_path) = audio_dest.as_ref() {
-                            args.push("-i".to_string());
-                            args.push(a_path.to_string_lossy().to_string());
-                        }
-
-                        let is_webm = dest
-                            .extension()
-                            .and_then(|ext| ext.to_str())
-                            .map(|ext| ext.eq_ignore_ascii_case("webm"))
-                            .unwrap_or(false);
-
-                        if is_webm {
-                            args.push("-c:v".to_string());
-                            args.push("copy".to_string());
-                            args.push("-c:a".to_string());
-                            args.push("libopus".to_string());
-                        } else {
-                            args.push("-c".to_string());
-                            args.push("copy".to_string());
-                        }
-
-                        args.push("-map".to_string());
-                        args.push("0:v:0".to_string());
-                        args.push("-map".to_string());
-                        args.push("1:a:0".to_string());
-                        args.push("-y".to_string());
-                        args.push(dest.to_string_lossy().to_string());
-
-                        match perform_ffmpeg_request_android(args).await {
-                            Ok(_) => {
-                                logger::debug("Merge successful (Android)");
-                                handle_merge_success(
-                                    &manager,
-                                    video_id,
-                                    audio_id,
-                                    &dest,
-                                    &data.url,
-                                    video_dest.as_ref(),
-                                    audio_dest.as_ref(),
-                                    data.referer.clone(),
-                                )
-                                .await;
-                            }
-                            Err(e) => {
-                                logger::error(&format!("ffmpeg error (Android): {}", e));
-                            }
-                        }
-                    } else {
-                        let mut command = tokio::process::Command::new("ffmpeg");
-                        if let Some(v_path) = video_dest.as_ref() {
-                            command.arg("-i").arg(v_path);
-                        }
-                        if let Some(a_path) = audio_dest.as_ref() {
-                            command.arg("-i").arg(a_path);
-                        }
-
-                        let is_webm = dest
-                            .extension()
-                            .and_then(|ext| ext.to_str())
-                            .map(|ext| ext.eq_ignore_ascii_case("webm"))
-                            .unwrap_or(false);
-
-                        if is_webm {
-                            command.arg("-c:v").arg("copy");
-                            command.arg("-c:a").arg("libopus");
-                        } else {
-                            command.arg("-c").arg("copy");
-                        }
-
-                        command.arg("-map").arg("0:v:0");
-                        command.arg("-map").arg("1:a:0");
-                        command.arg("-y");
-                        command.arg(&dest);
-
-                        match command.output().await {
-                            Ok(output) => {
-                                if output.status.success() {
-                                    logger::debug("Merge successful");
-                                    handle_merge_success(
-                                        &manager,
-                                        video_id,
-                                        audio_id,
-                                        &dest,
-                                        &data.url,
-                                        video_dest.as_ref(),
-                                        audio_dest.as_ref(),
-                                        data.referer.clone(),
-                                    )
-                                    .await;
-                                } else {
-                                    logger::error(&format!(
-                                        "ffmpeg error: {}",
-                                        String::from_utf8_lossy(&output.stderr)
-                                    ));
-                                }
-                            }
-                            Err(e) => {
-                                logger::error(&format!("ffmpeg execution failed: {}", e));
-                            }
-                        }
-                    }
-                }
+        let drequest = signal_pack.message;
+        let video_format: Option<csignals::YtdlFormat> =
+            drequest.video_format.map(|vf| csignals::YtdlFormat {
+                format_id: vf.format_id,
+                ext: vf.ext,
+                filesize: vf.filesize,
+                url: vf.url,
+                vcodec: vf.vcodec,
+                acodec: vf.acodec,
+                note: vf.note,
             });
-        } else if let Some(url) = data.url {
-            match manager
-                .add_download(
-                    url.clone(),
-                    dest,
-                    data.cookie,
-                    data.user_agent,
-                    data.referer,
-                )
-                .await
-            {
-                Ok(id) => logger::debug(&format!("Spawned worker for {} with id {}", url, id)),
-                Err(e) => logger::error(&format!("Failed to spawn worker for {}: {:?}", url, e)),
-            }
-        }
-    }
-}
-
-pub async fn get_download_details(manager: Arc<DownloadManager>) {
-    let receiver = GetDownloadDetails::get_dart_signal_receiver();
-    while let Some(signal_pack) = receiver.recv().await {
-        let data = signal_pack.message;
-
-        let id = match Uuid::parse_str(&data.id) {
-            Ok(uuid) => uuid,
-            Err(e) => {
-                logger::error(&format!("Invalid UUID from Dart: {:?}", e));
-                continue;
-            }
+        let audio_format: Option<csignals::YtdlFormat> =
+            drequest.audio_format.map(|af| csignals::YtdlFormat {
+                format_id: af.format_id,
+                ext: af.ext,
+                filesize: af.filesize,
+                url: af.url,
+                vcodec: af.vcodec,
+                acodec: af.acodec,
+                note: af.note,
+            });
+        let coredrequest = csignals::DoDownload {
+            url: drequest.url.clone(),
+            dest: drequest.dest,
+            video_format: video_format,
+            audio_format: audio_format,
+            is_ytdl: drequest.is_ytdl,
+            cookie: drequest.cookie,
+            user_agent: drequest.user_agent,
+            referer: drequest.referer,
         };
-
-        let manager = Arc::clone(&manager);
-        match manager.info(id).await {
-            Ok(info) => {
-                let state_str = info.state.to_string();
-                let speed = calc_speed(info.history);
-                let mut uploaded = None;
-                let mut upload_speed = None;
-                let mut peers = None;
-                let mut ratio = None;
-                let mut eta = None;
-
-                if matches!(info.download_type, DownloadType::Torrent) {
-                    uploaded = Some(info.uploaded);
-                    if let Some(hash) = &info.torrent_hash {
-                        let session_guard = manager.torrent_session.read().await;
-                        if let Some(session) = session_guard.as_ref() {
-                            let handle_opt = session.with_torrents(|torrents| {
-                                for (_, handle) in torrents {
-                                    if hex::encode(handle.info_hash().0) == *hash {
-                                        return Some(handle.clone());
-                                    }
-                                }
-                                None
-                            });
-
-                            if let Some(handle) = handle_opt {
-                                let stats = handle.stats();
-                                if let Some(live_stats) = stats.live {
-                                    upload_speed =
-                                        Some((live_stats.upload_speed.mbps * 125_000.0) as f64);
-                                    if let Some(duration) = live_stats.time_remaining {
-                                        eta = Some(duration.to_string());
-                                    }
-                                    peers = Some(live_stats.snapshot.peer_stats.live as u64);
-                                }
-
-                                if stats.progress_bytes > 0 {
-                                    ratio = Some(
-                                        stats.uploaded_bytes as f64 / stats.progress_bytes as f64,
-                                    );
-                                } else {
-                                    ratio = Some(0.0);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                DownloadDetails {
-                    id: info.id.to_string(),
-                    name: info
-                        .dest
-                        .file_name()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("")
-                        .to_string(),
-                    url: info.url,
-                    dest: info.dest.display().to_string(),
-                    total_size: info.total_size,
-                    downloaded: info.downloaded,
-                    speed: speed,
-                    state: state_str,
-                    part_info: info
-                        .parts
-                        .iter()
-                        .map(|p| PartInfo {
-                            start: p.start,
-                            end: p.end,
-                            current: p.current,
-                        })
-                        .collect(),
-                    uploaded,
-                    upload_speed,
-                    peers,
-                    ratio,
-                    eta,
-                    referer: info.referer,
-                }
-                .send_signal_to_dart();
-            }
-            Err(e) => {
-                logger::error(&format!("Failed to get download details: {:?}", e));
-            }
-        }
+        match downloader::spawn_download_worker_internal(&manager, coredrequest).await {
+            Ok(_) => logger::debug(&format!("Spawned worker for {:?}", &drequest.url)),
+            Err(e) => logger::error(&format!(
+                "Failed to spawn worker for {:?}: {:?}",
+                &drequest.url, e
+            )),
+        };
     }
 }
 
-pub async fn pause_download(manager: Arc<DownloadManager>) {
-    let receiver = PauseDownload::get_dart_signal_receiver();
+pub async fn pause_download(manager: Arc<downloader::DownloadManager>) {
+    let receiver = signals::PauseDownload::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
         let data = signal_pack.message;
 
@@ -561,8 +235,8 @@ pub async fn pause_download(manager: Arc<DownloadManager>) {
     }
 }
 
-pub async fn resume_download(manager: Arc<DownloadManager>) {
-    let receiver = ResumeDownload::get_dart_signal_receiver();
+pub async fn resume_download(manager: Arc<downloader::DownloadManager>) {
+    let receiver = signals::ResumeDownload::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
         let data = signal_pack.message;
 
@@ -582,8 +256,8 @@ pub async fn resume_download(manager: Arc<DownloadManager>) {
     }
 }
 
-pub async fn cancel_download(manager: Arc<DownloadManager>) {
-    let receiver = CancelDownload::get_dart_signal_receiver();
+pub async fn cancel_download(manager: Arc<downloader::DownloadManager>) {
+    let receiver = signals::CancelDownload::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
         let data = signal_pack.message;
 
@@ -603,8 +277,8 @@ pub async fn cancel_download(manager: Arc<DownloadManager>) {
     }
 }
 
-pub async fn delete_download(manager: Arc<DownloadManager>) {
-    let receiver = DeleteDownload::get_dart_signal_receiver();
+pub async fn delete_download(manager: Arc<downloader::DownloadManager>) {
+    let receiver = signals::DeleteDownload::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
         let data = signal_pack.message;
 
@@ -622,8 +296,8 @@ pub async fn delete_download(manager: Arc<DownloadManager>) {
     }
 }
 
-pub async fn handle_update_download_url(manager: Arc<DownloadManager>) {
-    let receiver = crate::signals::UpdateDownloadUrl::get_dart_signal_receiver();
+pub async fn handle_update_download_url(manager: Arc<downloader::DownloadManager>) {
+    let receiver = signals::UpdateDownloadUrl::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
         let data = signal_pack.message;
 
@@ -643,167 +317,94 @@ pub async fn handle_update_download_url(manager: Arc<DownloadManager>) {
     }
 }
 
-pub async fn get_download_list(manager: Arc<DownloadManager>) {
-    let receiver = GetDownloadList::get_dart_signal_receiver();
-    while let Some(dart_signal) = receiver.recv().await {
-        let query = dart_signal.message;
-
-        match manager.list_all().await {
-            Ok(list) => {
-                // 1. Filter
-                let mut filtered: Vec<DownloadInfo> = list
-                    .into_iter()
-                    .filter(|info| {
-                        let state_str = info.state.to_string();
-
-                        let matches_status = query.statuses.contains(&state_str.to_string());
-
-                        let matches_search = if let Some(q) = &query.search_query {
-                            let q = q.to_lowercase();
-                            let name = info
-                                .dest
-                                .file_name()
-                                .and_then(|s| s.to_str())
-                                .unwrap_or("")
-                                .to_lowercase();
-                            let url = info.url.to_lowercase();
-                            name.contains(&q) || url.contains(&q)
-                        } else {
-                            true
-                        };
-
-                        matches_status && matches_search
-                    })
-                    .collect();
-
-                // 2. Sort
-                let sort_by = query.sort_by.unwrap_or(0);
-                let ascending = query.ascending.unwrap_or(false);
-
-                match sort_by {
-                    1 => {
-                        // Name
-                        filtered.sort_by(|a, b| {
-                            let name_a = a.dest.file_name().and_then(|s| s.to_str()).unwrap_or("");
-                            let name_b = b.dest.file_name().and_then(|s| s.to_str()).unwrap_or("");
-                            if ascending {
-                                name_a.cmp(name_b)
-                            } else {
-                                name_b.cmp(name_a)
-                            }
-                        });
-                    }
-                    2 => {
-                        // Size
-                        filtered.sort_by(|a, b| {
-                            let size_a = a.total_size.unwrap_or(0);
-                            let size_b = b.total_size.unwrap_or(0);
-                            if ascending {
-                                size_a.cmp(&size_b)
-                            } else {
-                                size_b.cmp(&size_a)
-                            }
-                        });
-                    }
-                    3 => {
-                        // Speed
-                        filtered.sort_by(|a, b| {
-                            let speed_a = calc_speed(a.history.clone()) as u64;
-                            let speed_b = calc_speed(b.history.clone()) as u64;
-                            if ascending {
-                                speed_a.cmp(&speed_b)
-                            } else {
-                                speed_b.cmp(&speed_a)
-                            }
-                        });
-                    }
-                    _ => {
-                        // Date (Insertion Order)
-                        filtered.sort_by(|a, b| {
-                            if ascending {
-                                a.added_at.cmp(&b.added_at)
-                            } else {
-                                b.added_at.cmp(&a.added_at)
-                            }
-                        });
-                    }
-                }
-
-                let total_count = filtered.len() as u64;
-
-                // 3. Find Anchor
-                let anchor_index = if let Some(anchor_id_str) = query.anchor_id {
-                    filtered
-                        .iter()
-                        .position(|x| x.id.to_string() == anchor_id_str)
-                } else {
-                    None
-                };
-
-                // 4. Calculate Range
-                let (start, end) = match anchor_index {
-                    Some(idx) => {
-                        let s = idx.saturating_sub(query.before as usize);
-                        let e = (idx + query.after as usize + 1).min(filtered.len());
-                        (s, e)
-                    }
-                    None => {
-                        // If no anchor or anchor not found, start from 0
-                        let s = 0;
-                        let e = (query.after as usize + 1).min(filtered.len());
-                        (s, e)
-                    }
-                };
-
-                // 5. Slice and Map
-                let slice = &filtered[start..end];
-                let mut download_list = Vec::new();
-
-                for info in slice {
-                    let state_str = info.state.to_string();
-                    let dspeed: f64 = calc_speed(info.history.clone());
-                    let uspeed: Option<f64> = match info.uspeed {
-                        Some(s) => Some(s),
-                        _ => None,
-                    };
-                    let glance = DownloadGlance {
-                        id: info.id.to_string(),
-                        download_type: info.download_type.to_string(),
-                        name: info
-                            .dest
-                            .file_name()
-                            .and_then(|s| s.to_str())
-                            .unwrap_or("")
-                            .to_string(),
-                        dest: info.dest.to_string_lossy().to_string(),
-                        total_size: info.total_size,
-                        downloaded: info.downloaded,
-                        uploaded: info.uploaded,
-                        dspeed: dspeed,
-                        uspeed: uspeed,
-                        state: state_str,
-                        referer: info.referer.clone(),
-                    };
-                    download_list.push(glance);
-                }
-
-                DownloadList {
-                    list: download_list,
-                    total_count,
-                    start_index: start as u64,
-                    tag: query.tag,
-                }
-                .send_signal_to_dart();
+pub async fn get_download_details(manager: Arc<downloader::DownloadManager>) {
+    let receiver = signals::GetDownloadDetails::get_dart_signal_receiver();
+    while let Some(signal_pack) = receiver.recv().await {
+        let data = signal_pack.message;
+        let manager = Arc::clone(&manager);
+        if let Ok(Some(details)) =
+            downloader::get_download_details_internal(&manager, &data.id).await
+        {
+            let part_info: Vec<signals::PartInfo> = details
+                .part_info
+                .into_iter()
+                .map(|p| signals::PartInfo {
+                    start: p.start,
+                    end: p.end,
+                    current: p.current,
+                })
+                .collect();
+            signals::DownloadDetails {
+                id: details.id,
+                name: details.name,
+                url: details.url,
+                dest: details.dest,
+                total_size: details.total_size,
+                downloaded: details.downloaded,
+                uploaded: details.uploaded,
+                speed: details.speed,
+                upload_speed: details.upload_speed,
+                state: details.state,
+                part_info: part_info,
+                peers: details.peers,
+                ratio: details.ratio,
+                eta: details.eta,
+                referer: details.referer,
             }
-            Err(e) => {
-                logger::error(&format!("Failed to get download list: {:?}", e));
-            }
+            .send_signal_to_dart();
         }
     }
 }
 
-pub async fn handle_init_torrent_persistence(manager: Arc<DownloadManager>) {
-    let receiver = InitTorrentPersistence::get_dart_signal_receiver();
+pub async fn get_download_list(manager: Arc<downloader::DownloadManager>) {
+    let receiver = signals::GetDownloadList::get_dart_signal_receiver();
+    while let Some(dart_signal) = receiver.recv().await {
+        let query = dart_signal.message;
+        let cquery = csignals::GetDownloadList {
+            anchor_id: query.anchor_id,
+            before: query.before,
+            after: query.after,
+            statuses: query.statuses,
+            tag: query.tag,
+            search_query: query.search_query,
+            sort_by: query.sort_by,
+            ascending: query.ascending,
+        };
+        let manager = Arc::clone(&manager);
+        match downloader::get_download_list_internal(&manager, cquery).await {
+            Ok(list) => {
+                let dl: Vec<signals::DownloadGlance> = list
+                    .list
+                    .into_iter()
+                    .map(|p| signals::DownloadGlance {
+                        id: p.id,
+                        download_type: p.download_type,
+                        name: p.name,
+                        dest: p.dest,
+                        total_size: p.total_size,
+                        downloaded: p.downloaded,
+                        uploaded: p.uploaded,
+                        dspeed: p.dspeed,
+                        uspeed: p.uspeed,
+                        state: p.state,
+                        referer: p.referer,
+                    })
+                    .collect();
+                signals::DownloadList {
+                    list: dl,
+                    total_count: list.total_count,
+                    start_index: list.start_index,
+                    tag: list.tag,
+                }
+                .send_signal_to_dart()
+            }
+            Err(e) => logger::error(&format!("Failed to get download list: {:?}", e)),
+        }
+    }
+}
+
+pub async fn handle_init_torrent_persistence(manager: Arc<downloader::DownloadManager>) {
+    let receiver = signals::InitTorrentPersistence::get_dart_signal_receiver();
     while let Some(signal) = receiver.recv().await {
         let persistence_path = std::path::PathBuf::from(signal.message.path);
         manager.init_torrent_session(persistence_path).await;

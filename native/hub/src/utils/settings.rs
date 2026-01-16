@@ -1,10 +1,12 @@
+extern crate nadekodon_core as core;
+use core::downloader::DownloadManager;
+use core::signals;
+use core::utils::settings::update_settings_internal;
+
 use rinf::DartSignal;
 use std::sync::Arc;
 
-use crate::downloader::main::DownloadManager;
 use crate::signals::UpdateSettings;
-use crate::utils::types::DMSettings;
-
 use crate::utils::logger;
 
 pub async fn update_settings(dm: Arc<DownloadManager>) {
@@ -12,29 +14,17 @@ pub async fn update_settings(dm: Arc<DownloadManager>) {
 
     while let Some(signal_pack) = receiver.recv().await {
         let data = signal_pack.message;
-        let data_clone = Arc::new(data);
-
-        let dm_old = dm.settings.read().await;
-        let dm_new = DMSettings {
-            speed_limit: data_clone.speed_limit.unwrap_or(dm_old.speed_limit),
-            concurrency_limit: data_clone
-                .concurrency_limit
-                .unwrap_or(dm_old.concurrency_limit),
-            download_threads: data_clone
-                .download_threads
-                .unwrap_or(dm_old.download_threads),
-            download_timeout: data_clone
-                .download_timeout
-                .unwrap_or(dm_old.download_timeout),
-            download_retries: data_clone
-                .download_retries
-                .unwrap_or(dm_old.download_retries),
-            seeding_ratio: data_clone.seeding_ratio.unwrap_or(dm_old.seeding_ratio),
-            seeding_time: data_clone.seeding_time.unwrap_or(dm_old.seeding_time),
+        let core_settings = signals::UpdateSettings {
+            download_dir: data.download_dir,
+            download_retries: data.download_retries,
+            download_threads: data.download_threads,
+            download_timeout: data.download_timeout,
+            seeding_time: data.seeding_time,
+            concurrency_limit: data.concurrency_limit,
+            seeding_ratio: data.seeding_ratio,
+            speed_limit: data.speed_limit,
         };
-        drop(dm_old);
-
-        logger::debug(&format!("Updated dm settings to {:?}", &dm_new));
-        let _ = dm.update_settings(dm_new).await;
+        let dm_new = update_settings_internal(dm.clone(), core_settings).await;
+        logger::debug(&format!("Updated DM Settings to {:?}", &dm_new));
     }
 }

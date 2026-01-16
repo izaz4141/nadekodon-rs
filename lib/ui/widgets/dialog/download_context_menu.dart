@@ -1,14 +1,15 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 
-import 'package:nadekodon/ui/widgets/app_snackbar.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:share_plus/share_plus.dart';
-import '../../../theme/app_theme.dart';
-import '../../../utils/helper.dart';
-import 'delete_download.dart';
-import 'download_details_dialog.dart';
-import 'update_url_dialog.dart';
+
+import 'package:nadekodon/utils/platform_service.dart';
+import 'package:nadekodon/ui/widgets/app_snackbar.dart';
+import 'package:nadekodon/ui/theme/app_theme.dart';
+import 'package:nadekodon/utils/helper.dart';
+import 'package:nadekodon/ui/widgets/dialog/delete_download.dart';
+import 'package:nadekodon/ui/widgets/dialog/download_details_dialog.dart';
+import 'package:nadekodon/ui/widgets/dialog/update_url_dialog.dart';
 
 /// Shows a context menu for a download item
 Future<void> showDownloadContextMenu(
@@ -84,7 +85,7 @@ Future<void> showDownloadContextMenu(
           ],
         ),
       ),
-      if (!Platform.isLinux)
+      if (PlatformService.isDesktop && !PlatformService.isLinux)
         PopupMenuItem<String>(
           value: 'share',
           child: Row(
@@ -137,8 +138,7 @@ Future<void> showDownloadContextMenu(
       }
       break;
     case 'share':
-      final file = File(item.dest);
-      if (await file.exists()) {
+      if (await fileExist(item.dest)) {
         final xFile = XFile(item.dest);
         await SharePlus.instance.share(ShareParams(files: [xFile]));
       } else {

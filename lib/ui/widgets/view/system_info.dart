@@ -1,10 +1,7 @@
-import 'dart:io';
-
-import 'package:device_info_plus/device_info_plus.dart';
-
 import 'package:flutter/material.dart';
-import 'package:nadekodon/theme/app_theme.dart';
+import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/ui/widgets/components/section_header.dart';
+import 'package:nadekodon/utils/system_service.dart';
 
 class SystemInfo extends StatefulWidget {
   const SystemInfo({super.key});
@@ -14,7 +11,6 @@ class SystemInfo extends StatefulWidget {
 }
 
 class _SystemInfoState extends State<SystemInfo> {
-  final _deviceInfoPlugin = DeviceInfoPlugin();
   Map<String, String> _deviceData = {};
 
   @override
@@ -24,36 +20,7 @@ class _SystemInfoState extends State<SystemInfo> {
   }
 
   Future<void> _initPlatformState() async {
-    var deviceData = <String, String>{};
-
-    try {
-      if (Platform.isAndroid) {
-        final info = await _deviceInfoPlugin.androidInfo;
-        deviceData = {
-          'Device': '${info.brand} ${info.model}',
-          'OS Version':
-              'Android ${info.version.release} (SDK ${info.version.sdkInt})',
-          'ID': info.id,
-        };
-      } else if (Platform.isLinux) {
-        final info = await _deviceInfoPlugin.linuxInfo;
-        deviceData = {
-          'Device': Platform.localHostname,
-          'OS Version': '${info.prettyName} (${info.versionId})',
-          'ID': info.machineId ?? 'Unknown',
-        };
-      } else if (Platform.isWindows) {
-        final info = await _deviceInfoPlugin.windowsInfo;
-        deviceData = {
-          'Device': info.computerName,
-          'OS Version':
-              'Windows ${info.majorVersion}.${info.minorVersion} (Build ${info.buildNumber})',
-          'ID': info.deviceId,
-        };
-      }
-    } catch (e) {
-      deviceData = {'Error': 'Failed to get device info: $e'};
-    }
+    final deviceData = await SystemService().getDeviceInfo();
 
     if (!mounted) return;
 
@@ -95,7 +62,7 @@ class _SystemInfoState extends State<SystemInfo> {
           ),
           title: Text('Processors', style: textTheme.bodyMedium),
           subtitle: Text(
-            Platform.numberOfProcessors.toString(),
+            SystemService().processorCount.toString(),
             style: textTheme.bodySmall,
           ),
         ),

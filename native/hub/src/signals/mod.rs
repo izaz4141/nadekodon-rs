@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, DartSignal)]
 pub struct UpdateSettings {
+    pub download_dir: Option<String>,
     pub speed_limit: Option<u64>,
     pub download_threads: Option<u8>,
     pub concurrency_limit: Option<u8>,
@@ -176,7 +177,7 @@ pub struct UpdateDownloadUrl {
     pub new_url: String,
 }
 
-#[derive(Serialize, RustSignal)]
+#[derive(Serialize, Deserialize, RustSignal)]
 pub struct RequestAddDownload {
     pub url: String,
     pub filename: Option<String>,
@@ -189,6 +190,8 @@ pub struct RequestAddDownload {
 pub struct StartServer {
     pub port: u16,
     pub api_key: String,
+    pub username: String,
+    pub password: String,
 }
 
 #[derive(Deserialize, DartSignal)]
@@ -209,4 +212,41 @@ pub struct FfmpegResult {
     pub id: String,
     pub success: bool,
     pub log: String,
+}
+
+#[derive(Deserialize, DartSignal)]
+pub struct EncryptPassword {
+    pub id: String,
+    pub plain_text: String,
+    pub salt: String,
+}
+
+#[derive(Serialize, RustSignal)]
+pub struct EncryptionOutput {
+    pub id: String,
+    pub encrypted_text: Option<String>,
+}
+
+#[derive(Deserialize, DartSignal)]
+pub struct DecryptPassword {
+    pub id: String,
+    pub encrypted_text: String,
+    pub salt: String,
+}
+
+#[derive(Serialize, RustSignal)]
+pub struct DecryptionOutput {
+    pub id: String,
+    pub plain_text: Option<String>,
+}
+
+#[derive(Deserialize, DartSignal)]
+pub struct GenerateSalt {
+    pub id: String,
+}
+
+#[derive(Serialize, RustSignal)]
+pub struct SaltOutput {
+    pub id: String,
+    pub salt: String,
 }

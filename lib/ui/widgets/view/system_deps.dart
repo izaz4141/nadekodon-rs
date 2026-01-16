@@ -1,8 +1,8 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
-import 'package:nadekodon/theme/app_theme.dart';
+import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/ui/widgets/components/section_header.dart';
+import 'package:nadekodon/utils/system_service.dart';
+import 'package:nadekodon/utils/api_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SystemDeps extends StatefulWidget {
@@ -19,66 +19,35 @@ class _SystemDepsState extends State<SystemDeps> {
   @override
   void initState() {
     super.initState();
+    _checkVersions();
+    APIService.isOnline.addListener(_checkVersions);
+  }
+
+  @override
+  void dispose() {
+    APIService.isOnline.removeListener(_checkVersions);
+    super.dispose();
+  }
+
+  void _checkVersions() {
     _checkYtdlpVersion();
     _checkFfmpegVersion();
   }
 
   Future<void> _checkYtdlpVersion() async {
-    try {
-      String? version;
-      if (Platform.isAndroid) {
-        // version = await YtDlpAndroid.getYtdlpVersion();
-      } else {
-        final result = await Process.run('yt-dlp', ['--version']);
-        if (result.exitCode == 0) {
-          version = result.stdout.toString().trim();
-        }
-      }
-      if (!mounted) return;
-      setState(() {
-        _ytdlpVersion = version ?? 'Not found';
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _ytdlpVersion = 'Not found';
-      });
-    }
+    final version = await SystemService().getYtdlpVersion();
+    if (!mounted) return;
+    setState(() {
+      _ytdlpVersion = version;
+    });
   }
 
   Future<void> _checkFfmpegVersion() async {
-    try {
-      final result = await Process.run('ffmpeg', ['-version']);
-      if (result.exitCode == 0) {
-        // Extract version from first line (e.g., "ffmpeg version 6.0")
-        final output = result.stdout.toString();
-        final firstLine = output.split('\n').first;
-        final versionMatch = RegExp(
-          r'ffmpeg version ([\S]+)',
-        ).firstMatch(firstLine);
-        if (versionMatch != null) {
-          if (!mounted) return;
-          setState(() {
-            _ffmpegVersion = versionMatch.group(1) ?? 'Unknown';
-          });
-        } else {
-          if (!mounted) return;
-          setState(() {
-            _ffmpegVersion = 'Unknown';
-          });
-        }
-      } else {
-        if (!mounted) return;
-        setState(() {
-          _ffmpegVersion = 'Not found';
-        });
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _ffmpegVersion = 'Not found';
-      });
-    }
+    final version = await SystemService().getFfmpegVersion();
+    if (!mounted) return;
+    setState(() {
+      _ffmpegVersion = version;
+    });
   }
 
   @override

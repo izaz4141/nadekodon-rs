@@ -1,18 +1,17 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../../theme/app_theme.dart';
-import '../../../utils/settings.dart';
-import '../app_snackbar.dart';
+import 'package:nadekodon/utils/settings.dart';
+import 'package:nadekodon/ui/theme/app_theme.dart';
+import 'package:nadekodon/ui/widgets/app_snackbar.dart';
 import 'package:nadekodon/utils/helper.dart';
 import 'package:nadekodon/ui/widgets/view/query_view.dart';
 import 'package:nadekodon/ui/widgets/view/query_result_view.dart';
 import 'package:nadekodon/ui/widgets/view/ytdlp_view.dart';
 import 'package:nadekodon/ui/widgets/dialog/replace_file.dart';
+import 'package:nadekodon/utils/download_service.dart';
 
 import 'package:nadekodon/src/bindings/bindings.dart';
-import 'package:nadekodon/utils/ytdlp_android.dart';
 
 Future<void> showAddDownloadDialog(
   BuildContext context, {
@@ -61,7 +60,8 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
 
   YtdlFormat? ytdlVideo;
   YtdlFormat? ytdlAudio;
-  YtdlQueryOutput? _androidYtdlOutput;
+  YtdlQueryOutput? _ytdlOutput;
+  UrlQueryOutput? _urlOutput;
 
   final _showQueryInfo = ValueNotifier<bool>(false);
   final _queryFinished = ValueNotifier<bool>(false);
@@ -102,21 +102,22 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
 
   Future<void> _onQueryYtdl() async {
     _isQueryingYtdl.value = true;
-    if (Platform.isAndroid) {
-      final result = await YtDlpAndroid.ytdlpExtractInfo(
-        _urlController.text.trim(),
-      );
-      if (mounted) {
-        setState(() {
-          _androidYtdlOutput = result;
-        });
-      }
-    } else {
-      QueryYtdl(url: _urlController.text.trim()).sendSignalToRust();
+    setState(() {
+      _ytdlOutput = null;
+    });
+
+    final result = await DownloadService().queryYtdl(
+      url: _urlController.text.trim(),
+    );
+
+    if (mounted) {
+      setState(() {
+        _ytdlOutput = result;
+      });
     }
   }
 
-  void _queryUrl() {
+  void _queryUrl() async {
     final url = _urlController.text.trim();
     if (url.isEmpty || !isUrl(url)) {
       AppSnackBar.show(
@@ -134,13 +135,24 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
       );
       return;
     }
-    QueryUrl(
+
+    _showQueryInfo.value = true;
+    setState(() {
+      _urlOutput = null;
+    });
+
+    final result = await DownloadService().queryUrl(
       url: url,
       cookie: widget.cookie,
       userAgent: widget.userAgent,
       referer: widget.referer,
-    ).sendSignalToRust();
-    _showQueryInfo.value = true;
+    );
+
+    if (mounted) {
+      setState(() {
+        _urlOutput = result;
+      });
+    }
   }
 
   Future<void> _handleSubmit() async {
@@ -170,14 +182,14 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
     }
     if (!mounted) return;
     Navigator.pop(context);
-    DoDownload(
+    DownloadService().addDownload(
       url: url,
       dest: "${_selectedDir.value}/$name",
       isYtdl: false,
       cookie: widget.cookie,
       userAgent: widget.userAgent,
       referer: widget.referer,
-    ).sendSignalToRust();
+    );
     AppSnackBar.show(context, "Added download");
   }
 
@@ -218,14 +230,14 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
     if (!mounted) return;
     Navigator.pop(context);
 
-    DoDownload(
+    DownloadService().addDownload(
       url: null,
       dest: "${_selectedDir.value}/${_nameController.text}",
       videoFormat: vFormat,
       audioFormat: aFormat,
       isYtdl: true,
       referer: _urlController.text.trim(),
-    ).sendSignalToRust();
+    );
 
     if (!mounted) return;
     AppSnackBar.show(context, "Added ytdl download");
@@ -294,7 +306,7 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
         onDownload: _handleYtdlDownload,
         onVideoChanged: _onSelectYtdlVideo,
         onAudioChanged: _onSelectYtdlAudio,
-        directOutput: _androidYtdlOutput,
+        output: _ytdlOutput,
       );
     }
     return Column(
@@ -315,6 +327,7 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
             isQueryingYtdl: _isQueryingYtdl,
             onDownload: _handleSubmit,
             onQueryYtdl: _onQueryYtdl,
+            output: _urlOutput,
           ),
       ],
     );
