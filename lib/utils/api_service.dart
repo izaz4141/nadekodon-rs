@@ -41,7 +41,7 @@ class APIService {
   static String get baseUrl {
     String host = SettingsManager.serverHost.value;
     if (kIsWeb && host.isEmpty) {
-      host = Uri.base.host;
+      return Uri.base.origin;
     }
     final port = SettingsManager.serverPort.value;
     return 'http://$host:$port';
