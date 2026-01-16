@@ -20,7 +20,7 @@ class SettingsManager {
   // Your ValueNotifiers
   static final retreatToTray = ValueNotifier<bool>(true);
   static final downloadFolder = ValueNotifier<String>('');
-  static final serverHost = ValueNotifier<String>('0.0.0.0');
+  static final serverHost = ValueNotifier<String>('127.0.0.1');
   static final serverPort = ValueNotifier<int>(8080);
   static final serverApiKey = ValueNotifier<String>('');
   static final username = ValueNotifier<String>('');
@@ -118,7 +118,7 @@ class SettingsManager {
 
     // Server settings: Environment variables override saved settings
     serverHost.value =
-        json['server_host'] ?? (_defaults['server_host'] ?? '0.0.0.0');
+        json['server_host'] ?? (_defaults['server_host'] ?? '127.0.0.1');
     serverPort.value =
         json['server_port'] ?? (_defaults['server_port'] ?? 8080);
     serverApiKey.value =
