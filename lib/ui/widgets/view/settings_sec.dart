@@ -48,6 +48,17 @@ class SettingsSec extends StatelessWidget {
             ],
           ),
         ),
+        SwitchListTile(
+          title: Text('Require Login', style: textTheme.bodyMedium),
+          subtitle: Text(
+            'Show login screen on startup',
+            style: textTheme.bodySmall,
+          ),
+          value: SettingsManager.requireLogin.value,
+          onChanged: (value) {
+            SettingsManager.requireLogin.value = value;
+          },
+        ),
         SpinBox(
           title: "Server Port",
           subtitle: "Port to listen on",

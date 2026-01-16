@@ -7,6 +7,7 @@ import 'package:file_share_intent/file_share_intent.dart';
 
 import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/ui/pages/home_page.dart';
+import 'package:nadekodon/ui/pages/login_page.dart';
 import 'package:nadekodon/ui/widgets/dialog/add_download.dart';
 import 'package:nadekodon/ui/widgets/dialog/update_url_dialog.dart';
 import 'package:nadekodon/ui/widgets/dialog/permission_dialog.dart';
@@ -151,25 +152,41 @@ class _NadekoDonState extends State<NadekoDon> {
               valueListenable: SettingsManager.customColor,
               builder: (context, customColorValue, _) {
                 return DynamicColorBuilder(
-                  builder:
-                      (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
-                        final schemes = AppTheme.getColorSchemes(
-                          lightDynamic,
-                          darkDynamic,
-                          customSeed: Color(customColorValue),
-                          useDynamicColor: useDynamicColor,
-                        );
+                  builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
+                    final schemes = AppTheme.getColorSchemes(
+                      lightDynamic,
+                      darkDynamic,
+                      customSeed: Color(customColorValue),
+                      useDynamicColor: useDynamicColor,
+                    );
 
-                        return MaterialApp(
-                          navigatorKey: navigatorKey,
-                          title: 'Nadeko~don',
-                          theme: AppTheme.buildTheme(schemes.light, context),
-                          darkTheme: AppTheme.buildTheme(schemes.dark, context),
-                          themeMode: themeMode,
-                          home: const HomePage(),
-                          debugShowCheckedModeBanner: false,
-                        );
-                      },
+                    return MaterialApp(
+                      navigatorKey: navigatorKey,
+                      title: 'Nadeko~don',
+                      theme: AppTheme.buildTheme(schemes.light, context),
+                      darkTheme: AppTheme.buildTheme(schemes.dark, context),
+                      themeMode: themeMode,
+                      home: ValueListenableBuilder<bool>(
+                        valueListenable: SettingsManager.requireLogin,
+                        builder: (context, requireLogin, _) {
+                          return ValueListenableBuilder<bool>(
+                            valueListenable: SettingsManager.isLoggedIn,
+                            builder: (context, isLoggedIn, _) {
+                              if (requireLogin && !isLoggedIn) {
+                                return LoginPage(
+                                  onLoginSuccess: () {
+                                    // Login handled by page, this callback just triggers rebuild
+                                  },
+                                );
+                              }
+                              return const HomePage();
+                            },
+                          );
+                        },
+                      ),
+                      debugShowCheckedModeBanner: false,
+                    );
+                  },
                 );
               },
             );

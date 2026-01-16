@@ -6,6 +6,7 @@ use core::downloader::DownloadManager;
 use core::utils::database::{init_db, load_downloads, start_db_loop};
 use rinf::DartSignal;
 use std::sync::Arc;
+use std::path::PathBuf;
 use tokio::sync::Notify;
 
 pub async fn start_database_manager(
@@ -16,14 +17,15 @@ pub async fn start_database_manager(
     let receiver = InitDatabase::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
         let path = signal_pack.message.path;
+        let db_path = PathBuf::from(path);
         let dm = dm.clone();
         let shutdown_signal = shutdown_signal.clone();
         let db_done_signal = db_done_signal.clone();
 
         tokio::spawn(async move {
-            match init_db(&path).await {
+            match init_db(&db_path).await {
                 Ok(pool) => {
-                    logger::debug(&format!("Database initialized at {}", path));
+                    logger::debug(&format!("Database initialized at {}", db_path.display()));
 
                     // Load existing downloads
                     match load_downloads(&pool).await {

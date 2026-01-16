@@ -1,15 +1,23 @@
-use serde_json::Value;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use std::path::PathBuf;
+use std::env;
+use tokio::sync::{Notify, RwLock};
 use uuid::Uuid;
 
-use nadekodon_core::downloader::DownloadManager;
-use nadekodon_core::utils::types::DMSettings;
+extern crate nadekodon_core as core;
+use core::downloader::DownloadManager;
+use core::utils::{types::DMSettings, logger};
+use core::utils::database::{start_database_manager};
+
 use nadekodon_server::server;
+use nadekodon_server::server::nadeko_home;
 
 #[tokio::main]
 async fn main() {
-    println!("Initializing Nadeko~don Server...");
+    logger::debug("Initializing Nadeko~don Server...");
+    let cwd = env::current_dir().expect("failed to get current dir");
+    logger::debug(&format!("{}", cwd.display()));
+
 
     let initial_config = server::load_config();
     let mut api_key = initial_config["server_api_key"]
@@ -27,7 +35,7 @@ async fn main() {
     // Decrypt password if it looks encrypted (contains "iv" and "data") 
     // or just try to decrypt it regardless since our decrypt handles fallback
     if !password.is_empty() {
-        if let Some(decrypted) = nadekodon_core::utils::security::decrypt_password(&password, &salt) {
+        if let Some(decrypted) = core::utils::security::decrypt_password(&password, &salt) {
             password = decrypted;
         }
     }
@@ -43,25 +51,28 @@ async fn main() {
         api_key = env_key;
     }
 
-    // Also check for Server Port env var here or let run_server_loop handle it? 
-    // main.rs handles port logic below.
-
-    let client = reqwest::Client::builder()
-        .build()
-        .expect("Failed to create HTTP client");
+    let client = core::utils::url::build_browser_client().await;
 
     let settings = DMSettings {
-        speed_limit: 0,
-        concurrency_limit: 3,
-        download_threads: 4,
-        download_timeout: 300,
-        download_retries: 3,
-        seeding_ratio: 0.0,
-        seeding_time: 0,
-        download_dir: "Downloads".to_string(),
+        speed_limit: initial_config["speed_limit"].as_u64().unwrap_or(0),
+        concurrency_limit: initial_config["concurrency_limit"].as_u64().unwrap_or(3) as u8,
+        download_threads: initial_config["download_threads"].as_u64().unwrap_or(4) as u8,
+        download_timeout: initial_config["download_timeout"].as_u64().unwrap_or(300),
+        download_retries: initial_config["download_retries"].as_u64().unwrap_or(3) as u8,
+        seeding_ratio: initial_config["seeding_ratio"].as_f64().unwrap_or(0.0) as f32,
+        seeding_time: initial_config["seeding_time"].as_u64().unwrap_or(0),
+        download_dir: format!("{}/downloads", nadeko_home()),
     };
 
     let dm = DownloadManager::new(client, settings).await;
+    dm.init_torrent_session(PathBuf::from(format!("{}/config/torrent_data", nadeko_home()))).await;
+    let dm_clone = dm.clone();
+    tokio::spawn(async move {
+        let shutdown_signal = Arc::new(Notify::new());
+        let db_done_signal = Arc::new(Notify::new());
+        let db_path = PathBuf::from(format!("{}/config/nadekodon.db", nadeko_home()));
+        start_database_manager(dm_clone, shutdown_signal, db_done_signal, db_path)
+    });
 
     let state = server::AppState {
         config: Arc::new(RwLock::new(initial_config)),

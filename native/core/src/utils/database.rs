@@ -6,7 +6,7 @@ use std::time::Duration;
 use tokio::time::sleep;
 
 use crate::utils::types::{DownloadInfo, DownloadState, DownloadType, PartInfo};
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 use uuid::Uuid;
 
 use tokio::sync::Notify;
@@ -15,26 +15,38 @@ pub async fn start_database_manager(
     dm: Arc<DownloadManager>,
     shutdown_signal: Arc<Notify>,
     db_done_signal: Arc<Notify>,
-    db_path: &str,
+    db_path: PathBuf,
 ) {
-    match init_db(db_path).await {
+    match init_db(&db_path).await {
         Ok(pool) => {
-            logger::debug(&format!("Database initialized at {}", db_path));
+            logger::debug(&format!(
+                "Database initialized at {}",
+                db_path.display()
+            ));
 
             match load_downloads(&pool).await {
                 Ok(downloads) => {
-                    logger::debug(&format!("Loaded {} downloads from DB", downloads.len()));
+                    logger::debug(&format!(
+                        "Loaded {} downloads from DB",
+                        downloads.len()
+                    ));
                     dm.load_snapshot(downloads).await;
                 }
                 Err(e) => {
-                    logger::error(&format!("Failed to load downloads from DB: {:?}", e));
+                    logger::error(&format!(
+                        "Failed to load downloads from DB: {:?}",
+                        e
+                    ));
                 }
             }
 
             start_db_loop(pool, dm, shutdown_signal, db_done_signal).await;
         }
         Err(e) => {
-            logger::error(&format!("Failed to initialize database: {:?}", e));
+            logger::error(&format!(
+                "Failed to initialize database: {:?}",
+                e
+            ));
         }
     }
 }
@@ -121,16 +133,20 @@ pub async fn load_downloads(pool: &Pool<Sqlite>) -> Result<Vec<DownloadInfo>, sq
     Ok(downloads)
 }
 
-pub async fn init_db(path: &str) -> Result<Pool<Sqlite>, sqlx::Error> {
-    let db_url = format!("sqlite://{}", path);
+pub async fn init_db(path: &Path) -> Result<Pool<Sqlite>, sqlx::Error> {
+    // Ensure parent directory exists
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).unwrap_or_default();
+    }
 
     // Create database file if it doesn't exist
-    if !std::path::Path::new(path).exists() {
-        if let Some(parent) = std::path::Path::new(path).parent() {
-            std::fs::create_dir_all(parent).unwrap_or_default();
-        }
-        std::fs::File::create(path).unwrap_or_else(|_| panic!("Failed to create db file"));
+    if !path.exists() {
+        std::fs::File::create(path)
+            .unwrap_or_else(|_| panic!("Failed to create db file"));
     }
+
+    // Build sqlite URL safely
+    let db_url = format!("sqlite://{}", path.display());
 
     let pool = SqlitePoolOptions::new()
         .max_connections(5)
@@ -152,14 +168,15 @@ pub async fn init_db(path: &str) -> Result<Pool<Sqlite>, sqlx::Error> {
             updated_at INTEGER NOT NULL,
             download_type TEXT,
             torrent_hash TEXT,
-            referer TEXT
+            referer TEXT,
+            category TEXT
         );
         "#,
     )
     .execute(&pool)
     .await?;
 
-    // Migration for existing tables
+    // Best-effort migrations
     let _ = sqlx::query("ALTER TABLE downloads ADD COLUMN uploaded INTEGER NOT NULL DEFAULT 0")
         .execute(&pool)
         .await;

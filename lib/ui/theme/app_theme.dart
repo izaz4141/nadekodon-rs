@@ -34,7 +34,7 @@ class AppTheme {
   // Base sizes (desktop defaults)
   static const double textXS = 8;
   static const double textSM = 12;
-  static const double textMD = 16;
+  static const double textMD = 18;
   static const double textLG = 24;
   static const double textXL = 32;
   static const double textXXL = 48;
@@ -42,12 +42,12 @@ class AppTheme {
   static const double spaceXS = 4;
   static const double spaceSM = 8;
   static const double spaceMD = 12;
-  static const double spaceLG = 16;
+  static const double spaceLG = 18;
   static const double spaceXL = 24;
   static const double spaceXXL = 32;
 
   static const double radiusSM = 8;
-  static const double radiusMD = 16;
+  static const double radiusMD = 18;
   static const double radiusLG = 24;
 
   static const double iconXS = 12;

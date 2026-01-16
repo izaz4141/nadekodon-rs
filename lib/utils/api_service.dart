@@ -6,12 +6,22 @@ import 'package:flutter/foundation.dart';
 import 'package:nadekodon/src/bindings/bindings.dart';
 import 'package:nadekodon/utils/settings.dart';
 import 'package:nadekodon/utils/logger.dart';
+import 'package:nadekodon/utils/cookie_service.dart';
 
 class APIService {
   static final ValueNotifier<bool> isOnline = ValueNotifier(false);
   static Timer? _timer;
 
   static void init() {
+    // Check for cookie on web
+    if (kIsWeb) {
+      final apiKey = getApiKeyFromCookie();
+      if (apiKey != null && apiKey.isNotEmpty) {
+        SettingsManager.serverApiKey.value = apiKey;
+        SettingsManager.isLoggedIn.value = true;
+      }
+    }
+
     _startPolling();
 
     SettingsManager.serverHost.addListener(restartPolling);
@@ -23,6 +33,26 @@ class APIService {
         _tryDecryptPassword();
       }
     });
+  }
+
+  /// Store API key in cookie
+  static void _saveApiKeyCookie(String apiKey) {
+    if (!kIsWeb) return;
+    CookieService.setCookie('nadeko_api_key', apiKey, days: 30);
+  }
+
+  /// Get API key from cookie
+  static String? getApiKeyFromCookie() {
+    if (!kIsWeb) return null;
+    return CookieService.getCookie('nadeko_api_key');
+  }
+
+  static void logout() {
+    SettingsManager.serverApiKey.value = '';
+    SettingsManager.isLoggedIn.value = false;
+    if (kIsWeb) {
+      CookieService.deleteCookie('nadeko_api_key');
+    }
   }
 
   static Future<void> _tryDecryptPassword() async {
@@ -55,6 +85,28 @@ class APIService {
 
   static void restartPolling() {
     _startPolling();
+  }
+
+  static Future<bool> login(String username, String password) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/nadeko/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'username': username, 'password': password}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['api_key'] != null) {
+          SettingsManager.serverApiKey.value = data['api_key'];
+          _saveApiKeyCookie(data['api_key']);
+          return true;
+        }
+      }
+    } catch (e) {
+      log("Login error: $e", isError: true);
+    }
+    return false;
   }
 
   static Future<void> _checkStatus() async {

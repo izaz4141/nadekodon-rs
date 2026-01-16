@@ -46,6 +46,10 @@ class SettingsManager {
 
   static final checkNightly = ValueNotifier<bool>(false);
 
+  // Login Settings
+  static final requireLogin = ValueNotifier<bool>(kIsWeb);
+  static final isLoggedIn = ValueNotifier<bool>(false);
+
   static Future<void> _loadDefaults() async {
     try {
       final String response = await rootBundle.loadString(
@@ -196,6 +200,7 @@ class SettingsManager {
         json['custom_color'] ?? _defaults['custom_color'] ?? 0xFFFF4081;
     checkNightly.value =
         json['check_nightly'] ?? _defaults['check_nightly'] ?? false;
+    requireLogin.value = json['require_login'] ?? (kIsWeb ? true : false);
   }
 
   static String _getEnv(String key) {
@@ -251,6 +256,7 @@ class SettingsManager {
     'use_dynamic_color': useDynamicColor.value,
     'custom_color': customColor.value,
     'check_nightly': checkNightly.value,
+    'require_login': requireLogin.value,
   };
 
   static Future<void> _saveAll() async {
@@ -352,6 +358,9 @@ class SettingsManager {
     );
     checkNightly.addListener(
       () => _saveChanged('check_nightly', checkNightly.value),
+    );
+    requireLogin.addListener(
+      () => _saveChanged('require_login', requireLogin.value),
     );
   }
 

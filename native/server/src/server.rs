@@ -1,5 +1,8 @@
-use nadekodon_core::downloader;
-use nadekodon_core::signals;
+extern crate nadekodon_core as core;
+use core::downloader;
+use core::signals;
+use core::utils::logger;
+use core::utils;
 
 use axum::{
     Router,
@@ -10,12 +13,21 @@ use axum::{
     response::IntoResponse,
     routing::{get, post},
 };
+use axum_extra::extract::{cookie::{Cookie, SameSite}, CookieJar};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
+use std::env;
 use std::time::Duration;
 use uuid::Uuid;
+
+static NADEKO_HOME: OnceLock<String> = OnceLock::new();
+pub fn nadeko_home() -> &'static String {
+    NADEKO_HOME.get_or_init(|| {
+        env::var("NADEKO_HOME").unwrap_or_else(|_| "/home/nadeko".to_string())
+    })
+}
 
 #[derive(Clone)]
 pub struct AppState {
@@ -27,54 +39,38 @@ pub struct AppState {
     pub restart_signal: Arc<tokio::sync::Notify>,
 }
 
-pub fn get_config_dir() -> String {
-    std::env::var("NADEKO_HOME").unwrap_or_else(|_| ".".to_string())
-}
-
 pub fn get_config_path() -> String {
-    format!("{}/config/config.json", get_config_dir())
+    format!("{}/config/config.json", nadeko_home())
 }
 
 pub fn load_config() -> Value {
+    let mut cfg = Value::Null;
+    if let Ok(content) = std::fs::read_to_string("./assets/docs/default.json") {
+        if let Ok(mut v) = serde_json::from_str::<Value>(&content) {
+            v["server_api_key"] = Value::String(Uuid::new_v4().to_string());
+            let salt = utils::security::generate_salt();
+            v["salt"] = Value::String(salt.clone());
+            v["password"] = Value::String(utils::security::encrypt_password(
+                "admin",
+                &salt
+            ).unwrap());
+            cfg = v;
+        }
+    }
     let path = get_config_path();
+    logger::debug(&format!("Loading config from {}", path));
     if let Ok(content) = std::fs::read_to_string(&path) {
         if let Ok(v) = serde_json::from_str(&content) {
-            return v;
+            cfg = v;
         }
     }
-    if let Ok(content) = std::fs::read_to_string("assets/docs/default.json") {
-        if let Ok(v) = serde_json::from_str(&content) {
-            return v;
-        }
-    }
-
-    json!({
-        "retreat_to_tray": true,
-        "server_host": "127.0.0.1",
-        "server_port": 8080,
-        "server_api_key": "",
-        "salt": "",
-        "username": "",
-        "password": "",
-        "speed_limit": 0.0,
-        "speed_mode": 0,
-        "speed_schedule": [],
-        "download_threads": 8,
-        "concurrency_limit": 3,
-        "download_timeout": 30,
-        "download_retries": 5,
-        "seeding_ratio": 1.0,
-        "seeding_time": 30,
-        "theme_mode": 0,
-        "use_dynamic_color": true,
-        "custom_color": 4294918273u32,
-        "check_nightly": false
-    })
+    save_config(&cfg);
+    cfg
 }
 
 pub fn save_config(settings: &Value) {
     let path = get_config_path();
-    let config_dir = format!("{}/config", get_config_dir());
+    let config_dir = format!("{}/config", nadeko_home());
     let _ = std::fs::create_dir_all(&config_dir);
     if let Ok(json_str) = serde_json::to_string_pretty(settings) {
         let _ = std::fs::write(path, json_str);
@@ -87,12 +83,66 @@ async fn handle_status() -> impl IntoResponse {
 
 pub async fn check_api_key(
     State(api_key): State<String>,
+    jar: CookieJar,
     req: Request<Body>,
     next: Next,
 ) -> Result<impl IntoResponse, StatusCode> {
-    match req.headers().get("X-API-Key") {
-        Some(key) if key.to_str().map(|k| k == api_key).unwrap_or(false) => Ok(next.run(req).await),
-        _ => Err(StatusCode::UNAUTHORIZED),
+    // Check header first
+    if let Some(key) = req.headers().get("X-API-Key") {
+        if key.to_str().map(|k| k == api_key).unwrap_or(false) {
+            return Ok(next.run(req).await);
+        }
+    }
+
+    // Check cookie
+    if let Some(cookie) = jar.get("nadeko_api_key") {
+        if cookie.value() == api_key {
+            return Ok(next.run(req).await);
+        }
+    }
+
+    Err(StatusCode::UNAUTHORIZED)
+}
+
+#[derive(Deserialize)]
+struct LoginRequest {
+    username: String,
+    password: String,
+}
+
+async fn handle_login(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Json(payload): Json<LoginRequest>,
+) -> impl IntoResponse {
+    if payload.username == state.username && payload.password == state.password {
+        let cookie = Cookie::build(("nadeko_api_key", state.api_key.clone()))
+            .path("/")
+            .secure(true)
+            .http_only(true)
+            .same_site(SameSite::Strict);
+        
+        let jar = jar.add(cookie);
+
+        (
+            jar,
+            Json(json!({
+                "api_key": state.api_key
+            }))
+        )
+        .into_response()
+    } else {
+        (
+            jar, // Return jar even on failure (unchanged)
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "error": "Invalid credentials"
+            })),
+        )
+        .into_response()
+        )
+            .into_response()
     }
 }
 
@@ -233,7 +283,7 @@ async fn handle_query_url(
 async fn handle_query_ytdl(
     Json(payload): Json<signals::QueryYtdl>,
 ) -> impl IntoResponse {
-    match nadekodon_core::utils::ytdlp::get_ytdl_info(&payload.url).await {
+    match utils::ytdlp::get_ytdl_info(&payload.url).await {
         Ok(info) => Json(info).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
     }
@@ -254,7 +304,7 @@ struct DecryptRequest {
 async fn handle_encrypt_password(
     Json(payload): Json<EncryptRequest>,
 ) -> impl IntoResponse {
-    match nadekodon_core::utils::security::encrypt_password(&payload.plain_text, &payload.salt) {
+    match utils::security::encrypt_password(&payload.plain_text, &payload.salt) {
         Ok(encrypted) => (StatusCode::OK, encrypted).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
@@ -263,19 +313,19 @@ async fn handle_encrypt_password(
 async fn handle_decrypt_password(
     Json(payload): Json<DecryptRequest>,
 ) -> impl IntoResponse {
-    match nadekodon_core::utils::security::decrypt_password(&payload.stored, &payload.salt) {
+    match utils::security::decrypt_password(&payload.stored, &payload.salt) {
         Some(decrypted) => (StatusCode::OK, decrypted).into_response(),
         None => (StatusCode::BAD_REQUEST, "Decryption failed".to_string()).into_response(),
     }
 }
 
 async fn handle_generate_salt() -> impl IntoResponse {
-    nadekodon_core::utils::security::generate_salt()
+    utils::security::generate_salt()
 }
 
 async fn handle_get_deps_version() -> impl IntoResponse {
-    let ytdlp = nadekodon_core::utils::ytdlp::get_yt_dlp_version().await;
-    let ffmpeg = nadekodon_core::utils::ytdlp::get_ffmpeg_version().await;
+    let ytdlp = utils::ytdlp::get_yt_dlp_version().await;
+    let ffmpeg = utils::ytdlp::get_ffmpeg_version().await;
     Json(json!({
         "ytdlp": ytdlp,
         "ffmpeg": ffmpeg,
@@ -297,7 +347,7 @@ async fn handle_update_settings(
 }
 
 pub fn create_nadeko_router(state: AppState) -> Router<AppState> {
-    Router::new()
+    let protected_routes = Router::new()
         .route("/status", get(handle_status))
         .route("/list", get(handle_get_download_list))
         .route("/details/:id", get(handle_get_download_details))
@@ -321,7 +371,14 @@ pub fn create_nadeko_router(state: AppState) -> Router<AppState> {
         .layer(middleware::from_fn_with_state(
             state.api_key.clone(),
             check_api_key,
-        ))
+        ));
+
+    let public_routes = Router::new()
+        .route("/login", post(handle_login));
+
+    Router::new()
+        .merge(protected_routes)
+        .merge(public_routes)
         .with_state(state)
 }
 
@@ -337,7 +394,7 @@ pub fn create_router(state: AppState) -> Router {
 
 pub async fn run_server(router: Router, port: u16, restart_signal: Arc<tokio::sync::Notify>) {
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
-    nadekodon_core::utils::logger::debug(&format!("HTTP server listening on {}", addr));
+    utils::logger::debug(&format!("HTTP server listening on {}", addr));
     match tokio::net::TcpListener::bind(addr).await {
         Ok(listener) => {
             if let Err(e) = axum::serve(listener, router)
@@ -346,11 +403,11 @@ pub async fn run_server(router: Router, port: u16, restart_signal: Arc<tokio::sy
                 })
                 .await
             {
-                nadekodon_core::utils::logger::error(&format!("HTTP server error: {}", e));
+                utils::logger::error(&format!("HTTP server error: {}", e));
             }
         }
         Err(e) => {
-            nadekodon_core::utils::logger::error(&format!("Failed to bind HTTP server: {}", e))
+            utils::logger::error(&format!("Failed to bind HTTP server: {}", e))
         }
     }
 }
@@ -368,7 +425,7 @@ pub async fn run_server_loop(
         let salt = config_val["salt"].as_str().unwrap_or("");
         
         let current_password = if password.contains("\"iv\":") && password.contains("\"data\":") {
-            nadekodon_core::utils::security::decrypt_password(&password, salt).unwrap_or(password.clone())
+            utils::security::decrypt_password(&password, salt).unwrap_or(password.clone())
         } else {
             password.clone()
         };
@@ -392,7 +449,7 @@ pub async fn run_server_loop(
         let router = create_router(state);
         run_server(router, port, restart_signal).await;
         
-        nadekodon_core::utils::logger::debug("Restarting HTTP server...");
+        utils::logger::debug("Restarting HTTP server...");
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
 }

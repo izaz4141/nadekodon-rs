@@ -4,7 +4,7 @@
     "server_port": 8080,
     "server_api_key": "",
     "salt": "",
-    "username": "",
+    "username": "admin",
     "password": "",
     "speed_limit": 0.0,
     "speed_mode": 0,
