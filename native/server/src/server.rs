@@ -7,7 +7,7 @@ use core::utils;
 use axum::{
     Router,
     body::Body,
-    extract::{Json, Path, Query, State},
+    extract::{Json, Path, State},
     http::{Request, StatusCode},
     middleware::{self, Next},
     response::IntoResponse,
@@ -158,21 +158,14 @@ async fn handle_login(
 
 async fn handle_get_download_list(
     State(state): State<AppState>,
-    Query(query): Query<signals::GetDownloadList>,
+    Json(payload): Json<signals::GetDownloadList>,
 ) -> impl IntoResponse {
-    let core_query = signals::GetDownloadList {
-        anchor_id: query.anchor_id,
-        before: query.before,
-        after: query.after,
-        statuses: query.statuses,
-        tag: query.tag,
-        search_query: query.search_query,
-        sort_by: query.sort_by,
-        ascending: query.ascending,
-    };
-    match downloader::get_download_list_internal(&state.dm, core_query).await {
+    match downloader::get_download_list_internal(&state.dm, payload).await {
         Ok(list) => Json(list).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            e.to_string(),
+        ).into_response(),
     }
 }
 
@@ -359,7 +352,7 @@ async fn handle_update_settings(
 pub fn create_nadeko_router(state: AppState) -> Router<AppState> {
     let protected_routes = Router::new()
         .route("/status", get(handle_status))
-        .route("/list", get(handle_get_download_list))
+        .route("/list", post(handle_get_download_list))
         .route("/details/:id", get(handle_get_download_details))
         .route("/do-download", post(handle_do_download))
         .route("/pause", post(handle_pause_download))
@@ -423,46 +416,16 @@ pub async fn run_server(router: Router, port: u16, restart_signal: Arc<tokio::sy
 }
 
 pub async fn run_server_loop(
-    dm: Arc<downloader::DownloadManager>,
-    mut port: u16,
-    api_key: String,
-    username: String,
-    password: String,
+    state: AppState,
 ) {
     loop {
-        let config_val = load_config();
-        
-        let salt = config_val["salt"].as_str().unwrap_or("");
-        
-        let current_password = if password.contains("\"iv\":") && password.contains("\"data\":") {
-            match utils::security::decrypt_password(&password, salt) {
-                Ok(decrypted) => decrypted,
-                Err(e) => {
-                    logger::error(&format!("Failed to decrypt password: {}", e));
-                    password.clone()
-                },
-            }
-        } else {
-            password.clone()
+        let port = {
+            let config = state.config.read().await.clone();
+            config["server_port"].as_u64().unwrap_or(8080) as u16
         };
+        let restart_signal = state.restart_signal.clone();
 
-        if let Some(p) = config_val["server_port"].as_u64() {
-            port = p as u16;
-        }
-
-        let restart_signal = Arc::new(tokio::sync::Notify::new());
-
-        let config = Arc::new(tokio::sync::RwLock::new(config_val));
-        let state = AppState {
-            dm: dm.clone(),
-            api_key: api_key.clone(),
-            username: username.clone(),
-            password: current_password,
-            config,
-            restart_signal: restart_signal.clone(),
-        };
-
-        let router = create_router(state);
+        let router = create_router(state.clone());
         run_server(router, port, restart_signal).await;
         
         utils::logger::debug("Restarting HTTP server...");

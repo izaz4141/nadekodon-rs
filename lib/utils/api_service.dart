@@ -17,6 +17,7 @@ class APIService {
     if (kIsWeb) {
       final apiKey = getApiKeyFromCookie();
       if (apiKey != null && apiKey.isNotEmpty) {
+        log('Found API key in cookie: $apiKey');
         SettingsManager.serverApiKey.value = apiKey;
         final success = await login(apiKey: apiKey);
         if (success) {
@@ -176,24 +177,29 @@ class APIService {
     bool? ascending,
   }) async {
     try {
-      final params = {
+      final payload = {
         if (anchorId != null) 'anchor_id': anchorId,
-        'before': before.toString(),
-        'after': after.toString(),
-        'statuses': statuses.map((s) => s.toString()).toList(),
-        if (tag != null) 'tag': tag.toString(),
+        'before': before,
+        'after': after,
+        'statuses': statuses,
+        if (tag != null) 'tag': tag,
         if (searchQuery != null) 'search_query': searchQuery,
-        if (sortBy != null) 'sort_by': sortBy.toString(),
-        if (ascending != null) 'ascending': ascending.toString(),
+        if (sortBy != null) 'sort_by': sortBy,
+        if (ascending != null) 'ascending': ascending,
       };
 
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/nadeko/list').replace(queryParameters: params),
-        headers: {'X-API-Key': SettingsManager.serverApiKey.value},
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/nadeko/list'),
+        headers: {
+          'X-API-Key': SettingsManager.serverApiKey.value,
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(payload),
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+
         return DownloadList(
           list: (data['list'] as List)
               .map(

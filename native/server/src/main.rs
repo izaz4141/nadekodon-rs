@@ -16,9 +16,6 @@ use nadekodon_server::server::nadeko_home;
 #[tokio::main]
 async fn main() {
     logger::debug("Initializing Nadeko~don Server...");
-    let cwd = env::current_dir().expect("failed to get current dir");
-    logger::debug(&format!("{}", cwd.display()));
-
 
     let mut initial_config = server::load_config();
     let mut api_key = initial_config["server_api_key"]
@@ -36,9 +33,17 @@ async fn main() {
     // Decrypt password if it looks encrypted (contains "iv" and "data") 
     // or just try to decrypt it regardless since our decrypt handles fallback
     if !password.is_empty() {
-        if let Ok(decrypted) = core::utils::security::decrypt_password(&password, &salt) {
-            password = decrypted;
-        }
+        password = if password.contains("\"iv\":") && password.contains("\"data\":") {
+            match core::utils::security::decrypt_password(&password, &salt) {
+                Ok(decrypted) => decrypted,
+                Err(e) => {
+                    logger::error(&format!("Failed to decrypt password: {}", e));
+                    password
+                },
+            }
+        } else {
+            password
+        };
     }
 
     // Environment variables override
@@ -82,7 +87,7 @@ async fn main() {
 
     initial_config["download_folder"] = Value::String(format!("{}/downloads", nadeko_home()));
     initial_config["server_api_key"] = Value::String(api_key.clone());
-    initial_config["port"] = Value::Number(port.into());
+    initial_config["server_port"] = Value::Number(port.into());
     initial_config["username"] = Value::String(username.clone());
     initial_config["password"] = Value::String(password.clone());
 
@@ -96,12 +101,5 @@ async fn main() {
     };
 
     // Use the run_server_loop function from core
-    nadekodon_server::server::run_server_loop(
-        state.dm.clone(),
-        port,
-        state.api_key.clone(),
-        state.username.clone(),
-        state.password.clone(),
-    )
-    .await;
+    nadekodon_server::server::run_server_loop(state).await;
 }
