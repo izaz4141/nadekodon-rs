@@ -1,14 +1,13 @@
 use crate::downloader::main::DownloadManager;
 use crate::utils::logger;
+use crate::utils::types::{DownloadInfo, DownloadState, DownloadType, PartInfo};
+
 use sqlx::{Pool, Row, Sqlite, sqlite::SqlitePoolOptions};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
-
-use crate::utils::types::{DownloadInfo, DownloadState, DownloadType, PartInfo};
 use std::path::{PathBuf, Path};
 use uuid::Uuid;
-
 use tokio::sync::Notify;
 
 pub async fn start_database_manager(
@@ -141,8 +140,14 @@ pub async fn init_db(path: &Path) -> Result<Pool<Sqlite>, sqlx::Error> {
 
     // Create database file if it doesn't exist
     if !path.exists() {
-        std::fs::File::create(path)
-            .unwrap_or_else(|_| panic!("Failed to create db file"));
+        if let Err(e) = std::fs::File::create(&path) {
+            logger::error(&format!(
+                "Failed to create db file at {}: {}",
+                path.display(),
+                e
+            ));
+            return Err(sqlx::Error::Io(e));
+        }
     }
 
     // Build sqlite URL safely
