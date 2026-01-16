@@ -39,8 +39,8 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     final success = await APIService.login(
-      _usernameController.text,
-      _passwordController.text,
+      username: _usernameController.text,
+      password: _passwordController.text,
     );
 
     if (!mounted) return;

@@ -29,6 +29,8 @@ Future<void> main() async {
         await initializeRust(assignRustSignal);
         initRustSignalLogger();
       }
+
+      await APIService.init();
       await SettingsManager.init();
       await SystemService().init();
 
@@ -52,7 +54,6 @@ Future<void> main() async {
           username: SettingsManager.username.value,
           password: SettingsManager.password.value,
         ).sendSignalToRust();
-        APIService.init();
         await PlatformService().initWindow(
           listener: _windowListener,
           onReady: () async {
@@ -71,8 +72,6 @@ Future<void> main() async {
             await removeTray();
           }
         });
-      } else {
-        APIService.init();
       }
 
       runApp(const NadekoDon());

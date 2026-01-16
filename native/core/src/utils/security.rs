@@ -49,41 +49,42 @@ pub fn encrypt_password(password: &str, salt: &str) -> anyhow::Result<String> {
     Ok(serde_json::to_string(&encrypted_data)?)
 }
 
-pub fn decrypt_password(encrypted_json: &str, salt: &str) -> Option<String> {
+pub fn decrypt_password(encrypted_json: &str, salt: &str) -> anyhow::Result<String> {
     if encrypted_json.is_empty() {
-        return Some(String::new());
+        return Ok(String::new());
     }
 
-    // Attempt to parse as JSON first
+    // Try JSON format first
     let encrypted_data: EncryptedData = match serde_json::from_str(encrypted_json) {
         Ok(data) => data,
         Err(_) => {
-             // Fallback: try plain base64 decode (legacy/fallback mentioned in dart)
-             return match BASE64.decode(encrypted_json) {
-                 Ok(bytes) => String::from_utf8(bytes).ok(),
-                 Err(_) => Some(encrypted_json.to_string()), // Treat as plain text if all else fails? Dart does `return stored`
-             };
+            // Legacy fallback: base64 or plain text
+            return match BASE64.decode(encrypted_json) {
+                Ok(bytes) => Ok(String::from_utf8(bytes)?),
+                Err(_) => Ok(encrypted_json.to_string()),
+            };
         }
     };
 
     let key = derive_key(salt);
-    
-    let iv = BASE64.decode(&encrypted_data.iv).ok()?;
-    if iv.len() != 16 { return None; }
-    
-    let ciphertext = BASE64.decode(&encrypted_data.data).ok()?;
+
+    let iv = BASE64.decode(&encrypted_data.iv)?;
+    if iv.len() != 16 {
+        anyhow::bail!("invalid IV length: {}", iv.len());
+    }
+
+    let ciphertext = BASE64.decode(&encrypted_data.data)?;
 
     let decryptor = Aes256CbcDec::new(&key.into(), iv.as_slice().into());
-    
-    // Clone ciphertext effectively by making it mutable if we owned it, 
-    // but here we just use the vector we decoded.
     let mut buf = ciphertext;
-    
-    match decryptor.decrypt_padded_mut::<block_padding::Pkcs7>(&mut buf) {
-        Ok(plaintext) => String::from_utf8(plaintext.to_vec()).ok(),
-        Err(_) => None,
-    }
+
+    let plaintext = decryptor
+        .decrypt_padded_mut::<block_padding::Pkcs7>(&mut buf)
+        .map_err(|e| anyhow::anyhow!(e))?;
+
+    Ok(String::from_utf8(plaintext.to_vec())?)
 }
+
 
 pub fn generate_salt() -> String {
     let mut salt = [0u8; 16];

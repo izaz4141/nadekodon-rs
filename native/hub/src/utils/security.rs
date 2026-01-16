@@ -1,6 +1,7 @@
 extern crate nadekodon_core as core;
+use core::utils::security::{encrypt_password, decrypt_password, generate_salt};
 use crate::signals::*;
-use core::utils::security;
+use crate::utils::logger;
 use rinf::{DartSignal, RustSignal};
 
 pub async fn handle_password_security() {
@@ -12,7 +13,7 @@ pub async fn handle_password_security() {
         tokio::select! {
             Some(signal_pack) = encrypt_receiver.recv() => {
                 let signal = signal_pack.message;
-                let encrypted = security::encrypt_password(&signal.plain_text, &signal.salt).ok();
+                let encrypted = encrypt_password(&signal.plain_text, &signal.salt).ok();
                 EncryptionOutput {
                     id: signal.id,
                     encrypted_text: encrypted,
@@ -21,15 +22,21 @@ pub async fn handle_password_security() {
             }
             Some(signal_pack) = decrypt_receiver.recv() => {
                 let signal = signal_pack.message;
-                let decrypted = security::decrypt_password(&signal.encrypted_text, &signal.salt);
+                let decrypted = match decrypt_password(&signal.encrypted_text, &signal.salt) {
+                    Ok(decrypted) => decrypted,
+                    Err(e) => {
+                        logger::error(&format!("Failed to decrypt password: {}", e));
+                        continue;
+                    },
+                };
                 DecryptionOutput {
                     id: signal.id,
-                    plain_text: decrypted,
+                    plain_text: Some(decrypted),
                 }
                 .send_signal_to_dart();
             }
             Some(signal_pack) = salt_receiver.recv() => {
-                let salt = security::generate_salt();
+                let salt = generate_salt();
                 SaltOutput {
                     id: signal_pack.message.id,
                     salt,

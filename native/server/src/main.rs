@@ -35,7 +35,7 @@ async fn main() {
     // Decrypt password if it looks encrypted (contains "iv" and "data") 
     // or just try to decrypt it regardless since our decrypt handles fallback
     if !password.is_empty() {
-        if let Some(decrypted) = core::utils::security::decrypt_password(&password, &salt) {
+        if let Ok(decrypted) = core::utils::security::decrypt_password(&password, &salt) {
             password = decrypted;
         }
     }

@@ -1,13 +1,16 @@
+extern crate nadekodon_core as core;
+use core::downloader::DownloadManager;
+use core::utils::security;
+use nadekodon_server::{
+    qbittorrent::get_router,
+    server::{AppState, check_api_key, create_nadeko_router, run_server},
+};
+
 use crate::signals::{NewApiKey, RequestAddDownload, RequestNewApiKey, StartServer};
 use crate::utils::logger;
 use axum::Router;
 use axum::{
     Json, extract::State, http::StatusCode, middleware, response::IntoResponse, routing::post,
-};
-use nadekodon_core::downloader::DownloadManager;
-use nadekodon_server::{
-    qbittorrent::get_router,
-    server::{AppState, check_api_key, create_nadeko_router, run_server},
 };
 use rinf::{DartSignal, RustSignal};
 use std::sync::Arc;
@@ -46,8 +49,13 @@ pub async fn start_server_listener(dm: Arc<DownloadManager>) {
         let salt = config_val["salt"].as_str().unwrap_or("");
 
         let password = if msg.password.contains("\"iv\":") && msg.password.contains("\"data\":") {
-            nadekodon_core::utils::security::decrypt_password(&msg.password, salt)
-                .unwrap_or(msg.password)
+            match security::decrypt_password(&msg.password, salt) {
+                Ok(decrypted) => decrypted,
+                Err(e) => {
+                    logger::error(&format!("Failed to decrypt password: {}", e));
+                    msg.password
+                },
+            }
         } else {
             msg.password
         };

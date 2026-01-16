@@ -105,9 +105,15 @@ pub async fn check_api_key(
 }
 
 #[derive(Deserialize)]
-struct LoginRequest {
-    username: String,
-    password: String,
+#[serde(tag = "auth_type", rename_all = "snake_case")]
+enum LoginRequest {
+    Credentials {
+        username: String,
+        password: String,
+    },
+    ApiKey {
+        api_key: String,
+    },
 }
 
 async fn handle_login(
@@ -115,35 +121,39 @@ async fn handle_login(
     jar: CookieJar,
     Json(payload): Json<LoginRequest>,
 ) -> impl IntoResponse {
-    if payload.username == state.username && payload.password == state.password {
-        let cookie = Cookie::build(("nadeko_api_key", state.api_key.clone()))
-            .path("/")
-            .secure(true)
-            .http_only(true)
-            .same_site(SameSite::Strict);
-        
-        let jar = jar.add(cookie);
+    let authorized = match payload {
+        LoginRequest::Credentials { username, password } => {
+            username == state.username && password == state.password
+        }
+        LoginRequest::ApiKey { api_key } => {
+            api_key == state.api_key
+        }
+    };
 
-        (
-            jar,
-            Json(json!({
-                "api_key": state.api_key
-            }))
-        )
-        .into_response()
-    } else {
-        (
-            jar, // Return jar even on failure (unchanged)
-        (
+    if !authorized {
+        return (
             StatusCode::UNAUTHORIZED,
-            Json(json!({
-                "error": "Invalid credentials"
-            })),
+            Json(json!({ "error": "Invalid credentials" })),
         )
-        .into_response()
-        )
-            .into_response()
+            .into_response();
     }
+
+    let cookie = Cookie::build(("nadeko_api_key", state.api_key.clone()))
+        .path("/")
+        .secure(true)
+        .http_only(true)
+        .same_site(SameSite::Strict)
+        .build();
+
+    let jar = jar.add(cookie);
+
+    (
+        jar,
+        Json(json!({
+            "api_key": state.api_key
+        })),
+    )
+        .into_response()
 }
 
 async fn handle_get_download_list(
@@ -314,8 +324,8 @@ async fn handle_decrypt_password(
     Json(payload): Json<DecryptRequest>,
 ) -> impl IntoResponse {
     match utils::security::decrypt_password(&payload.stored, &payload.salt) {
-        Some(decrypted) => (StatusCode::OK, decrypted).into_response(),
-        None => (StatusCode::BAD_REQUEST, "Decryption failed".to_string()).into_response(),
+        Ok(decrypted) => (StatusCode::OK, decrypted).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, format!("Decryption failed {:?}", e)).into_response(),
     }
 }
 
@@ -425,7 +435,13 @@ pub async fn run_server_loop(
         let salt = config_val["salt"].as_str().unwrap_or("");
         
         let current_password = if password.contains("\"iv\":") && password.contains("\"data\":") {
-            utils::security::decrypt_password(&password, salt).unwrap_or(password.clone())
+            match utils::security::decrypt_password(&password, salt) {
+                Ok(decrypted) => decrypted,
+                Err(e) => {
+                    logger::error(&format!("Failed to decrypt password: {}", e));
+                    password.clone()
+                },
+            }
         } else {
             password.clone()
         };

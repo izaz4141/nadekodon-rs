@@ -12,13 +12,16 @@ class APIService {
   static final ValueNotifier<bool> isOnline = ValueNotifier(false);
   static Timer? _timer;
 
-  static void init() {
+  static Future<void> init() async {
     // Check for cookie on web
     if (kIsWeb) {
       final apiKey = getApiKeyFromCookie();
       if (apiKey != null && apiKey.isNotEmpty) {
         SettingsManager.serverApiKey.value = apiKey;
-        SettingsManager.isLoggedIn.value = true;
+        final success = await login(apiKey: apiKey);
+        if (success) {
+          SettingsManager.isLoggedIn.value = true;
+        }
       }
     }
 
@@ -87,25 +90,51 @@ class APIService {
     _startPolling();
   }
 
-  static Future<bool> login(String username, String password) async {
+  static Future<bool> login({
+    String? username,
+    String? password,
+    String? apiKey,
+  }) async {
     try {
+      late final Map<String, dynamic> body;
+
+      if (apiKey != null && apiKey.isNotEmpty) {
+        body = {'auth_type': 'api_key', 'api_key': apiKey};
+      } else if (username != null && password != null) {
+        body = {
+          'auth_type': 'credentials',
+          'username': username,
+          'password': password,
+        };
+      } else {
+        throw ArgumentError('Provide either apiKey OR username and password');
+      }
+
       final response = await http.post(
         Uri.parse('$baseUrl/api/nadeko/login'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'username': username, 'password': password}),
+        body: jsonEncode(body),
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        if (data['api_key'] != null) {
-          SettingsManager.serverApiKey.value = data['api_key'];
-          _saveApiKeyCookie(data['api_key']);
+        final returnedApiKey = data['api_key'];
+
+        if (returnedApiKey is String && returnedApiKey.isNotEmpty) {
+          SettingsManager.serverApiKey.value = returnedApiKey;
+          _saveApiKeyCookie(returnedApiKey);
           return true;
         }
+      } else {
+        log(
+          'Login failed: ${response.statusCode} ${response.body}',
+          isError: true,
+        );
       }
     } catch (e) {
-      log("Login error: $e", isError: true);
+      log('Login error: $e', isError: true);
     }
+
     return false;
   }
 
@@ -151,7 +180,7 @@ class APIService {
         if (anchorId != null) 'anchor_id': anchorId,
         'before': before.toString(),
         'after': after.toString(),
-        'statuses': statuses.join(','),
+        'statuses': statuses.map((s) => s.toString()).toList(),
         if (tag != null) 'tag': tag.toString(),
         if (searchQuery != null) 'search_query': searchQuery,
         if (sortBy != null) 'sort_by': sortBy.toString(),
