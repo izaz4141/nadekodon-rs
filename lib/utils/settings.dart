@@ -20,9 +20,9 @@ class SettingsManager {
   // Your ValueNotifiers
   static final retreatToTray = ValueNotifier<bool>(true);
   static final downloadFolder = ValueNotifier<String>('');
-  static final serverHost = ValueNotifier<String>(_getInitialServerHost());
-  static final serverPort = ValueNotifier<int>(_getInitialServerPort());
-  static final serverApiKey = ValueNotifier<String>(_getInitialServerApiKey());
+  static final serverHost = ValueNotifier<String>('0.0.0.0');
+  static final serverPort = ValueNotifier<int>(8080);
+  static final serverApiKey = ValueNotifier<String>('');
   static final username = ValueNotifier<String>('');
   static final password = ValueNotifier<String>('');
   static final salt = ValueNotifier<String>('');
@@ -72,20 +72,11 @@ class SettingsManager {
       return;
     }
 
-    String baseDir = const String.fromEnvironment('NADEKO_HOME');
-    if (baseDir.isEmpty && !kIsWeb) {
-      baseDir = _getEnv('NADEKO_HOME');
-    }
-
     final downloadsDir = await _ioService.getDownloadsDir();
-    final defaultConfigDir = await _ioService.getConfigDir();
-
-    final configDir = baseDir.isNotEmpty ? '$baseDir/config' : defaultConfigDir;
+    final configDir = await _ioService.getConfigDir();
 
     String defaultDownloadFolder = '';
-    if (baseDir.isNotEmpty) {
-      defaultDownloadFolder = '$baseDir/downloads';
-    } else if (PlatformService.isAndroid) {
+    if (PlatformService.isAndroid) {
       defaultDownloadFolder = '/storage/emulated/0/Download';
     } else {
       defaultDownloadFolder = downloadsDir;
@@ -126,23 +117,12 @@ class SettingsManager {
     downloadFolder.value = json['download_folder'] ?? '';
 
     // Server settings: Environment variables override saved settings
-    final envHost = _getEnv('NADEKO_SERVER_HOST');
-    serverHost.value = envHost.isNotEmpty
-        ? envHost
-        : (json['server_host'] ??
-              (kIsWeb ? '' : (_defaults['server_host'] ?? '127.0.0.1')));
-
-    final envPort = _getEnv('NADEKO_SERVER_PORT');
-    int defaultPort = _defaults['server_port'] ?? 8080;
-    serverPort.value = envPort.isNotEmpty
-        ? int.tryParse(envPort) ?? (json['server_port'] ?? defaultPort)
-        : (json['server_port'] ?? defaultPort);
-
-    final envApiKey = _getEnv('NADEKO_SERVER_API_KEY');
-    serverApiKey.value = envApiKey.isNotEmpty
-        ? envApiKey
-        : (json['server_api_key'] ?? '');
-
+    serverHost.value =
+        json['server_host'] ?? (_defaults['server_host'] ?? '0.0.0.0');
+    serverPort.value =
+        json['server_port'] ?? (_defaults['server_port'] ?? 8080);
+    serverApiKey.value =
+        json['server_api_key'] ?? (_defaults['server_api_key'] ?? '');
     if (serverApiKey.value.isEmpty) {
       regenerateApiKey();
     }
@@ -201,37 +181,6 @@ class SettingsManager {
     checkNightly.value =
         json['check_nightly'] ?? _defaults['check_nightly'] ?? false;
     requireLogin.value = json['require_login'] ?? (kIsWeb ? true : false);
-  }
-
-  static String _getEnv(String key) {
-    switch (key) {
-      case 'NADEKO_HOME':
-        return const String.fromEnvironment('NADEKO_HOME');
-      case 'NADEKO_SERVER_HOST':
-        return const String.fromEnvironment('NADEKO_SERVER_HOST');
-      case 'NADEKO_SERVER_PORT':
-        return const String.fromEnvironment('NADEKO_SERVER_PORT');
-      case 'NADEKO_SERVER_API_KEY':
-        return const String.fromEnvironment('NADEKO_SERVER_API_KEY');
-      default:
-        return '';
-    }
-  }
-
-  static String _getInitialServerHost() {
-    final env = _getEnv('NADEKO_SERVER_HOST');
-    if (env.isNotEmpty) return env;
-    return kIsWeb ? '' : '127.0.0.1';
-  }
-
-  static int _getInitialServerPort() {
-    final env = _getEnv('NADEKO_SERVER_PORT');
-    if (env.isNotEmpty) return int.tryParse(env) ?? 8080;
-    return 8080;
-  }
-
-  static String _getInitialServerApiKey() {
-    return _getEnv('NADEKO_SERVER_API_KEY');
   }
 
   static Future<Map<String, dynamic>> _toJson() async => {

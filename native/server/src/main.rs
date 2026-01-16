@@ -1,6 +1,5 @@
 use std::sync::Arc;
 use std::path::PathBuf;
-use std::env;
 use tokio::sync::{Notify, RwLock};
 use uuid::Uuid;
 use serde_json::Value;
@@ -77,7 +76,7 @@ async fn main() {
         let shutdown_signal = Arc::new(Notify::new());
         let db_done_signal = Arc::new(Notify::new());
         let db_path = PathBuf::from(format!("{}/config/nadekodon.db", nadeko_home()));
-        start_database_manager(dm_clone, shutdown_signal, db_done_signal, db_path)
+        start_database_manager(dm_clone, shutdown_signal, db_done_signal, db_path).await;
     });
 
     let port: u16 = std::env::var("NADEKO_SERVER_PORT")
@@ -90,6 +89,7 @@ async fn main() {
     initial_config["server_port"] = Value::Number(port.into());
     initial_config["username"] = Value::String(username.clone());
     initial_config["password"] = Value::String(password.clone());
+    server::save_config(&initial_config);
 
     let state = server::AppState {
         config: Arc::new(RwLock::new(initial_config)),
