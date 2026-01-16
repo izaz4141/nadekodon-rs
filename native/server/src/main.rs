@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::env;
 use tokio::sync::{Notify, RwLock};
 use uuid::Uuid;
+use serde_json::Value;
 
 extern crate nadekodon_core as core;
 use core::downloader::DownloadManager;
@@ -19,7 +20,7 @@ async fn main() {
     logger::debug(&format!("{}", cwd.display()));
 
 
-    let initial_config = server::load_config();
+    let mut initial_config = server::load_config();
     let mut api_key = initial_config["server_api_key"]
         .as_str()
         .map(|s| s.to_string())
@@ -74,6 +75,17 @@ async fn main() {
         start_database_manager(dm_clone, shutdown_signal, db_done_signal, db_path)
     });
 
+    let port: u16 = std::env::var("NADEKO_SERVER_PORT")
+        .unwrap_or_else(|_| "8080".to_string())
+        .parse()
+        .unwrap_or(8080);
+
+    initial_config["download_folder"] = Value::String(format!("{}/downloads", nadeko_home()));
+    initial_config["server_api_key"] = Value::String(api_key.clone());
+    initial_config["port"] = Value::Number(port.into());
+    initial_config["username"] = Value::String(username.clone());
+    initial_config["password"] = Value::String(password.clone());
+
     let state = server::AppState {
         config: Arc::new(RwLock::new(initial_config)),
         api_key: api_key.clone(),
@@ -82,11 +94,6 @@ async fn main() {
         dm,
         restart_signal: Arc::new(tokio::sync::Notify::new()),
     };
-
-    let port: u16 = std::env::var("NADEKO_SERVER_PORT")
-        .unwrap_or_else(|_| "8080".to_string())
-        .parse()
-        .unwrap_or(8080);
 
     // Use the run_server_loop function from core
     nadekodon_server::server::run_server_loop(

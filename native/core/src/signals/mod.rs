@@ -73,7 +73,10 @@ pub struct GetDownloadList {
     pub anchor_id: Option<String>,
     pub before: u32,
     pub after: u32,
+
+    #[serde(default)]
     pub statuses: Vec<String>,
+    
     pub tag: Option<i32>,
     pub search_query: Option<String>,
     pub sort_by: Option<i32>, // 0: Date, 1: Name, 2: Size, 3: Speed
