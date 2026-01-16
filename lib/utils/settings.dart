@@ -66,7 +66,7 @@ class SettingsManager {
     await _loadDefaults();
 
     if (kIsWeb) {
-      await _loadFromBackend();
+      await loadFromBackend();
       _attachAutoSave();
       SpeedScheduler.init();
       return;
@@ -510,8 +510,9 @@ class SettingsManager {
     }
   }
 
-  static Future<void> _loadFromBackend() async {
+  static Future<void> loadFromBackend() async {
     final data = await APIService.getSettings();
+    log("Got settings from backend: $data");
     if (data != null) {
       await _applyFromJson(data);
     } else {

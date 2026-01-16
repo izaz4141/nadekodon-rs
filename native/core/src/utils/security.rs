@@ -1,9 +1,9 @@
 use aes::cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit, block_padding};
-use cbc::{Decryptor, Encryptor};
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
-use rand::{RngCore}; // Import Rng trait to access fill_bytes
+use cbc::{Decryptor, Encryptor};
+use rand::RngCore;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256}; // Import Rng trait to access fill_bytes
 
 type Aes256CbcEnc = Encryptor<aes::Aes256>;
 type Aes256CbcDec = Decryptor<aes::Aes256>;
@@ -16,10 +16,13 @@ struct EncryptedData {
     data: String,
 }
 
-fn derive_key(salt: &str) -> [u8; 32] {
+fn derive_key(salt_b64: &str) -> anyhow::Result<[u8; 32]> {
+    let salt = BASE64.decode(salt_b64)?;
+
     let mut hasher = Sha256::new();
-    hasher.update(format!("{}{}", PEPPER_PREFIX, salt).as_bytes());
-    hasher.finalize().into()
+    hasher.update(PEPPER_PREFIX.as_bytes());
+    hasher.update(&salt);
+    Ok(hasher.finalize().into())
 }
 
 pub fn encrypt_password(password: &str, salt: &str) -> anyhow::Result<String> {
@@ -27,7 +30,7 @@ pub fn encrypt_password(password: &str, salt: &str) -> anyhow::Result<String> {
         return Ok(String::new());
     }
 
-    let key = derive_key(salt);
+    let key = derive_key(salt)?;
     let mut iv = [0u8; 16];
     rand::rng().fill_bytes(&mut iv);
 
@@ -38,9 +41,10 @@ pub fn encrypt_password(password: &str, salt: &str) -> anyhow::Result<String> {
     let mut buf = vec![0u8; final_len];
     buf[..len].copy_from_slice(password.as_bytes());
 
-    let ciphertext_slice = encryptor.encrypt_padded_mut::<aes::cipher::block_padding::Pkcs7>(&mut buf, len)
+    let ciphertext_slice = encryptor
+        .encrypt_padded_mut::<aes::cipher::block_padding::Pkcs7>(&mut buf, len)
         .map_err(|e| anyhow::anyhow!("Encryption failed: {:?}", e))?;
-    
+
     let encrypted_data = EncryptedData {
         iv: BASE64.encode(iv),
         data: BASE64.encode(ciphertext_slice),
@@ -66,7 +70,7 @@ pub fn decrypt_password(encrypted_json: &str, salt: &str) -> anyhow::Result<Stri
         }
     };
 
-    let key = derive_key(salt);
+    let key = derive_key(salt)?;
 
     let iv = BASE64.decode(&encrypted_data.iv)?;
     if iv.len() != 16 {
@@ -84,7 +88,6 @@ pub fn decrypt_password(encrypted_json: &str, salt: &str) -> anyhow::Result<Stri
 
     Ok(String::from_utf8(plaintext.to_vec())?)
 }
-
 
 pub fn generate_salt() -> String {
     let mut salt = [0u8; 16];

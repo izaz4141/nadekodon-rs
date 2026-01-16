@@ -83,6 +83,7 @@ class APIService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final returnedApiKey = data['api_key'];
+        SettingsManager.loadFromBackend();
 
         if (returnedApiKey is String && returnedApiKey.isNotEmpty) {
           SettingsManager.serverApiKey.value = returnedApiKey;
