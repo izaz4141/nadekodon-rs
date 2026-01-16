@@ -1,5 +1,5 @@
 # Stage 1: Build Flutter web
-FROM ghcr.io/cirruslabs/flutter:3.27.0 AS flutter-build
+FROM ghcr.io/cirruslabs/flutter:latest AS flutter-build
 
 WORKDIR /app
 
@@ -26,7 +26,7 @@ RUN rinf gen
 RUN flutter build web --wasm
 
 # Stage 2: Build Rust server
-FROM rust:1.82-slim-bookworm AS rust-build
+FROM rust:slim-bookworm AS rust-build
 
 WORKDIR /app
 
