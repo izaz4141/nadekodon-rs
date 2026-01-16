@@ -31,7 +31,7 @@ FROM rust:slim-bookworm AS rust-build
 WORKDIR /app
 
 # Install build dependencies
-RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y pkg-config libssl-dev perl make && rm -rf /var/lib/apt/lists/*
 
 # Copy workspace Cargo files
 COPY Cargo.toml Cargo.lock ./
