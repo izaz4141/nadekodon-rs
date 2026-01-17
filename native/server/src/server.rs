@@ -370,9 +370,9 @@ async fn handle_update_settings(
     State(state): State<SharedState>,
     Json(new_config): Json<Value>,
 ) -> impl IntoResponse {
-    *state.api_key.write().await = new_config["server_api_key"].clone().to_string();
-    *state.username.write().await = new_config["username"].clone().to_string();
-    *state.password.write().await = new_config["password"].clone().to_string();
+    let api_key = new_config["server_api_key"].clone().to_string();
+    let username = new_config["username"].clone().to_string();
+    let password = new_config["password"].clone().to_string();
     let dm_settings = DMSettings {
         speed_limit: new_config["speed_limit"].as_u64().unwrap_or(0),
         concurrency_limit: new_config["concurrency_limit"].as_u64().unwrap_or(3) as u8,
@@ -386,8 +386,14 @@ async fn handle_update_settings(
     if let Err(e) = state.dm.update_settings(dm_settings).await {
         logger::error(&format!("Error in updating DMSettings: {:?}", e));
     }
-    logger::debug(&format!("Changed settings to {:?}", &state));
+    logger::debug(&format!(
+        "Changed settings to \n user: {}\n pass:{}\n api:{}",
+        &username, &password, &api_key
+    ));
     save_config(&new_config);
+    *state.api_key.write().await = api_key;
+    *state.username.write().await = username;
+    *state.password.write().await = password;
     *state.config.write().await = new_config;
     StatusCode::OK
 }

@@ -225,7 +225,6 @@ class SettingsManager {
       _sendSettings(key, value);
     } else {
       await _saveToBackend();
-      return;
     }
 
     Map<String, dynamic> data = {};
