@@ -1,37 +1,27 @@
 extern crate nadekodon_core as core;
-use core::utils::security::{encrypt_password, decrypt_password, generate_salt};
 use crate::signals::*;
 use crate::utils::logger;
+use core::utils::security::{generate_salt, hash_password};
 use rinf::{DartSignal, RustSignal};
 
 pub async fn handle_password_security() {
-    let encrypt_receiver = EncryptPassword::get_dart_signal_receiver();
-    let decrypt_receiver = DecryptPassword::get_dart_signal_receiver();
+    let encrypt_receiver = HashPassword::get_dart_signal_receiver();
     let salt_receiver = GenerateSalt::get_dart_signal_receiver();
 
     loop {
         tokio::select! {
             Some(signal_pack) = encrypt_receiver.recv() => {
                 let signal = signal_pack.message;
-                let encrypted = encrypt_password(&signal.plain_text, &signal.salt).ok();
-                EncryptionOutput {
-                    id: signal.id,
-                    encrypted_text: encrypted,
-                }
-                .send_signal_to_dart();
-            }
-            Some(signal_pack) = decrypt_receiver.recv() => {
-                let signal = signal_pack.message;
-                let decrypted = match decrypt_password(&signal.encrypted_text, &signal.salt) {
-                    Ok(decrypted) => decrypted,
+                let hashed = match hash_password(&signal.plain_text, &signal.salt) {
+                    Ok(v) => v,
                     Err(e) => {
-                        logger::error(&format!("Failed to decrypt password: {}", e));
-                        continue;
-                    },
+                        logger::error(&format!("Error when hashing password: {:?}", e));
+                        signal.plain_text
+                    }
                 };
-                DecryptionOutput {
+                HashingOutput {
                     id: signal.id,
-                    plain_text: Some(decrypted),
+                    hashed_text: Some(hashed),
                 }
                 .send_signal_to_dart();
             }

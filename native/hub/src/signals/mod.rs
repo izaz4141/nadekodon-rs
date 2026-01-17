@@ -215,29 +215,16 @@ pub struct FfmpegResult {
 }
 
 #[derive(Deserialize, DartSignal)]
-pub struct EncryptPassword {
+pub struct HashPassword {
     pub id: String,
     pub plain_text: String,
     pub salt: String,
 }
 
 #[derive(Serialize, RustSignal)]
-pub struct EncryptionOutput {
+pub struct HashingOutput {
     pub id: String,
-    pub encrypted_text: Option<String>,
-}
-
-#[derive(Deserialize, DartSignal)]
-pub struct DecryptPassword {
-    pub id: String,
-    pub encrypted_text: String,
-    pub salt: String,
-}
-
-#[derive(Serialize, RustSignal)]
-pub struct DecryptionOutput {
-    pub id: String,
-    pub plain_text: Option<String>,
+    pub hashed_text: Option<String>,
 }
 
 #[derive(Deserialize, DartSignal)]

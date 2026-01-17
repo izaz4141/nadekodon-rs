@@ -1,4 +1,3 @@
-use nadekodon_core::utils::security;
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -8,6 +7,7 @@ use uuid::Uuid;
 extern crate nadekodon_core as core;
 use core::downloader::DownloadManager;
 use core::utils::database::start_database_manager;
+use core::utils::security;
 use core::utils::{logger, types::DMSettings};
 
 use nadekodon_server::server;
@@ -30,22 +30,6 @@ async fn main() {
     let mut password = get_str("password");
     let salt = get_str("salt");
 
-    // Decrypt password if it looks encrypted (contains "iv" and "data")
-    // or just try to decrypt it regardless since our decrypt handles fallback
-    if !password.is_empty() {
-        password = if password.contains("\"iv\":") && password.contains("\"data\":") {
-            match core::utils::security::decrypt_password(&password, &salt) {
-                Ok(decrypted) => decrypted,
-                Err(e) => {
-                    logger::error(&format!("Failed to decrypt password: {}", e));
-                    password
-                }
-            }
-        } else {
-            password
-        };
-    }
-
     // Environment variables override
     if let Ok(env_user) = std::env::var("NADEKO_USERNAME") {
         username = env_user;
@@ -58,6 +42,17 @@ async fn main() {
     }
     username = normalize_secret(&username).to_string();
     password = normalize_secret(&password).to_string();
+    password = if security::is_valid_hash(&password) {
+        password
+    } else {
+        match security::hash_password(&password, &salt) {
+            Ok(v) => v,
+            Err(e) => {
+                logger::error(&format!("Error when hashing password: {:?}", e));
+                password
+            }
+        }
+    };
     api_key = normalize_secret(&api_key).to_string();
 
     let client = core::utils::url::build_browser_client().await;
@@ -97,12 +92,17 @@ async fn main() {
     initial_config["server_port"] = Value::Number(port.into());
     initial_config["username"] = Value::String(username.clone());
     initial_config["password"] = {
-        let encrypted = if let Ok(v) = security::encrypt_password(&password, &salt) {
-            v
+        if security::is_valid_hash(&password) {
+            Value::String(password.clone())
         } else {
-            password.clone()
-        };
-        Value::String(encrypted)
+            match security::hash_password(&password, &salt) {
+                Ok(v) => Value::String(v),
+                Err(e) => {
+                    logger::error(&format!("Error when hashing password: {:?}", e));
+                    Value::String(password.clone())
+                }
+            }
+        }
     };
     server::save_config(&initial_config);
 

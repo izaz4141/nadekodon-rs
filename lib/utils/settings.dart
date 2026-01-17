@@ -57,7 +57,7 @@ class SettingsManager {
       );
       _defaults = json.decode(response);
     } catch (e) {
-      log('Error loading default settings asset: $e');
+      log('Error loading default settings asset: $e', isError: true);
     }
   }
 
@@ -101,7 +101,7 @@ class SettingsManager {
       isFirstRun = true;
       downloadFolder.value = defaultDownloadFolder;
       await applyDefaultSettings();
-      regenerateApiKey();
+      await regenerateApiKey();
       await _saveAll();
     }
 
@@ -136,10 +136,10 @@ class SettingsManager {
 
     final encodedPassword = json['password'] as String?;
     if (encodedPassword != null && encodedPassword.isNotEmpty) {
-      password.value = await _decryptPassword(encodedPassword);
+      password.value = encodedPassword;
     } else {
-      password.value = _defaults['password'] ?? 'admin';
-      if (password.value.isEmpty) password.value = 'admin';
+      password.value = _defaults['password'] ?? await _hashPassword('admin');
+      if (password.value.isEmpty) password.value = await _hashPassword('admin');
     }
 
     // Speed Scheduler
@@ -189,7 +189,7 @@ class SettingsManager {
     'server_api_key': serverApiKey.value,
     'salt': salt.value,
     'username': username.value,
-    'password': await _encryptPassword(password.value),
+    'password': await _hashPassword(password.value),
     'speed_limit': speedLimit.value,
     'speed_mode': speedMode.value.index,
     'speed_schedule': speedSchedule.value.map((e) => e.toJson()).toList(),
@@ -232,13 +232,13 @@ class SettingsManager {
       try {
         data = jsonDecode(await _ioService.readFile(configPath));
       } catch (e) {
-        log("Error reading config file: $e");
+        log("Error reading config file: $e", isError: true);
         data = await _toJson();
       }
     }
 
     if (key == 'password') {
-      data[key] = await _encryptPassword(value);
+      data[key] = await _hashPassword(value);
     } else {
       data[key] = value;
     }
@@ -446,91 +446,49 @@ class SettingsManager {
     }
   }
 
-  static Future<String> _encryptPassword(String plainText) async {
+  static Future<String> _hashPassword(String plainText) async {
     if (plainText.isEmpty) return '';
     try {
       if (kIsWeb) {
-        final encrypted = await APIService.encryptPassword(
-          plainText,
-          salt.value,
-        );
-        if (encrypted != null) return encrypted;
+        final hashed = await APIService.hashPassword(plainText, salt.value);
+        if (hashed != null) return hashed;
       } else {
         final id = DateTime.now().microsecondsSinceEpoch.toString();
-        final stream = EncryptionOutput.rustSignalStream.where(
+        final stream = HashingOutput.rustSignalStream.where(
           (signal) => signal.message.id == id,
         );
-        EncryptPassword(
+        HashPassword(
           id: id,
           plainText: plainText,
           salt: salt.value,
         ).sendSignalToRust();
         final signal = await stream.first;
-        if (signal.message.encryptedText != null) {
-          return signal.message.encryptedText!;
+        if (signal.message.hashedText != null) {
+          return signal.message.hashedText!;
         }
       }
-
-      // Fallback: If server is not available, we can't encrypt.
-      // Returning plain text would be wrong if it's expected to be JSON.
-      // But for now, let's return base64 of plain text as a last resort.
-      return base64.encode(utf8.encode(plainText));
+      return plainText;
     } catch (e) {
-      log("Encryption error: $e");
-      return base64.encode(utf8.encode(plainText));
-    }
-  }
-
-  static Future<String> _decryptPassword(String stored) async {
-    if (stored.isEmpty) return '';
-    try {
-      if (kIsWeb) {
-        final decrypted = await APIService.decryptPassword(stored, salt.value);
-        if (decrypted != null) return decrypted;
-      } else {
-        final id = DateTime.now().microsecondsSinceEpoch.toString();
-        final stream = DecryptionOutput.rustSignalStream.where(
-          (signal) => signal.message.id == id,
-        );
-        DecryptPassword(
-          id: id,
-          encryptedText: stored,
-          salt: salt.value,
-        ).sendSignalToRust();
-        final signal = await stream.first;
-        if (signal.message.plainText != null) {
-          return signal.message.plainText!;
-        }
-      }
-    } catch (e) {
-      log("Decryption error: $e");
-    }
-
-    // Fallback for migration or plain Base64
-    try {
-      return utf8.decode(base64.decode(stored));
-    } catch (_) {
-      return stored;
+      log("Hashing error: $e", isError: true);
+      return plainText;
     }
   }
 
   static Future<void> loadFromBackend() async {
     if (!kIsWeb) return;
     final data = await APIService.getSettings();
-    log("Backend cfg: $data");
     if (data != null) {
       await _applyFromJson(data);
     } else {
-      log('Failed to load settings from backend');
+      log('Failed to load settings from backend', isError: true);
     }
   }
 
   static Future<void> _saveToBackend() async {
     final jsonMap = await _toJson();
-    log("Saving setting to backend: $jsonMap");
     final success = await APIService.saveSettings(jsonMap);
     if (!success) {
-      log('Failed to save settings to backend');
+      log('Failed to save settings to backend', isError: true);
     }
   }
 }

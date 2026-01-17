@@ -1,96 +1,47 @@
-use aes::cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit, block_padding};
-use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
-use cbc::{Decryptor, Encryptor};
-use rand::RngCore;
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256}; // Import Rng trait to access fill_bytes
+use anyhow::Result;
+use argon2::{
+    Argon2,
+    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
+};
 
-type Aes256CbcEnc = Encryptor<aes::Aes256>;
-type Aes256CbcDec = Decryptor<aes::Aes256>;
-
-const PEPPER_PREFIX: &str = "nadekodon_secret_pepper_";
-
-#[derive(Serialize, Deserialize)]
-struct EncryptedData {
-    iv: String,
-    data: String,
+pub fn generate_salt() -> String {
+    SaltString::generate(&mut OsRng).as_str().to_string()
 }
 
-fn derive_key(salt_b64: &str) -> anyhow::Result<[u8; 32]> {
-    let salt = BASE64.decode(salt_b64)?;
-
-    let mut hasher = Sha256::new();
-    hasher.update(PEPPER_PREFIX.as_bytes());
-    hasher.update(&salt);
-    Ok(hasher.finalize().into())
-}
-
-pub fn encrypt_password(password: &str, salt: &str) -> anyhow::Result<String> {
-    if password.is_empty() {
-        return Ok(String::new());
-    }
-
-    let key = derive_key(salt)?;
-    let mut iv = [0u8; 16];
-    rand::rng().fill_bytes(&mut iv);
-
-    let encryptor = Aes256CbcEnc::new(&key.into(), &iv.into());
-    let len = password.len();
-    let block_len = 16;
-    let final_len = len + (block_len - (len % block_len));
-    let mut buf = vec![0u8; final_len];
-    buf[..len].copy_from_slice(password.as_bytes());
-
-    let ciphertext_slice = encryptor
-        .encrypt_padded_mut::<aes::cipher::block_padding::Pkcs7>(&mut buf, len)
-        .map_err(|e| anyhow::anyhow!("Encryption failed: {:?}", e))?;
-
-    let encrypted_data = EncryptedData {
-        iv: BASE64.encode(iv),
-        data: BASE64.encode(ciphertext_slice),
+pub fn hash_password(password: &str, salt: &str) -> Result<String> {
+    if PasswordHash::new(password).is_ok() {
+        return Ok(password.to_string());
     };
+    let salt_string =
+        SaltString::from_b64(salt).map_err(|e| anyhow::anyhow!("Invalid salt format: {}", e))?;
 
-    Ok(serde_json::to_string(&encrypted_data)?)
+    let argon2 = Argon2::default();
+
+    let password_hash = argon2
+        .hash_password(password.as_bytes(), &salt_string)
+        .map_err(|e| anyhow::anyhow!("Argon2 hashing failed: {}", e))?;
+
+    Ok(password_hash.to_string())
 }
 
-pub fn decrypt_password(encrypted_json: &str, salt: &str) -> anyhow::Result<String> {
-    if encrypted_json.is_empty() {
-        return Ok(String::new());
-    }
-
-    // Try JSON format first
-    let encrypted_data: EncryptedData = match serde_json::from_str(encrypted_json) {
-        Ok(data) => data,
+pub fn validate_password(stored_hash: &str, input_password: &str) -> Result<bool> {
+    let parsed_hash = match PasswordHash::new(stored_hash) {
+        Ok(h) => h,
         Err(_) => {
-            // Legacy fallback: base64 or plain text
-            return match BASE64.decode(encrypted_json) {
-                Ok(bytes) => Ok(String::from_utf8(bytes)?),
-                Err(_) => Ok(encrypted_json.to_string()),
-            };
+            if input_password == stored_hash {
+                return Ok(true);
+            }
+            return Err(anyhow::anyhow!("Invalid password hash format"));
         }
     };
 
-    let key = derive_key(salt)?;
+    let argon2 = Argon2::default();
 
-    let iv = BASE64.decode(&encrypted_data.iv)?;
-    if iv.len() != 16 {
-        anyhow::bail!("invalid IV length: {}", iv.len());
-    }
-
-    let ciphertext = BASE64.decode(&encrypted_data.data)?;
-
-    let decryptor = Aes256CbcDec::new(&key.into(), iv.as_slice().into());
-    let mut buf = ciphertext;
-
-    let plaintext = decryptor
-        .decrypt_padded_mut::<block_padding::Pkcs7>(&mut buf)
-        .map_err(|e| anyhow::anyhow!(e))?;
-
-    Ok(String::from_utf8(plaintext.to_vec())?)
+    Ok(argon2
+        .verify_password(input_password.as_bytes(), &parsed_hash)
+        .is_ok())
 }
 
-pub fn generate_salt() -> String {
-    let mut salt = [0u8; 16];
-    rand::rng().fill_bytes(&mut salt);
-    BASE64.encode(salt)
+pub fn is_valid_hash(input: &str) -> bool {
+    PasswordHash::new(input).is_ok()
 }

@@ -69,8 +69,7 @@ pub fn load_config() -> Value {
             v["server_api_key"] = Value::String(Uuid::new_v4().to_string());
             let salt = utils::security::generate_salt();
             v["salt"] = Value::String(salt.clone());
-            v["password"] =
-                Value::String(utils::security::encrypt_password("admin", &salt).unwrap());
+            v["password"] = Value::String(utils::security::hash_password("admin", &salt).unwrap());
             cfg = v;
         }
     }
@@ -107,11 +106,6 @@ pub async fn check_api_key(
     let api_key = state.api_key.read().await.clone();
     // Check header first
     if let Some(key) = req.headers().get("X-API-Key") {
-        logger::debug(&format!(
-            "Comparing header api key: {} | {}",
-            &api_key,
-            &key.to_str().unwrap_or("error")
-        ));
         if key.to_str().map(|k| k == api_key).unwrap_or(false) {
             return Ok(next.run(req).await);
         }
@@ -119,11 +113,6 @@ pub async fn check_api_key(
 
     // Check cookie
     if let Some(cookie) = jar.get("nadeko_api_key") {
-        logger::debug(&format!(
-            "Comparing cookie api key: {} | {}",
-            &api_key,
-            &cookie.value()
-        ));
         if cookie.value() == api_key {
             return Ok(next.run(req).await);
         }
@@ -152,8 +141,11 @@ async fn handle_login(
     if !authorized {
         authorized = match payload {
             LoginRequest { username, password } => {
-                username == state.username.read().await.clone()
-                    && password == state.password.read().await.clone()
+                let current_username = state.username.read().await;
+                let current_hash = state.password.read().await;
+
+                username == *current_username
+                    && utils::security::validate_password(&current_hash, &password).unwrap_or(false)
             }
         };
     }
@@ -314,32 +306,15 @@ async fn handle_query_ytdl(Json(payload): Json<signals::QueryYtdl>) -> impl Into
 }
 
 #[derive(Deserialize)]
-struct EncryptRequest {
+struct HashRequest {
     plain_text: String,
     salt: String,
 }
 
-#[derive(Deserialize)]
-struct DecryptRequest {
-    stored: String,
-    salt: String,
-}
-
-async fn handle_encrypt_password(Json(payload): Json<EncryptRequest>) -> impl IntoResponse {
-    match utils::security::encrypt_password(&payload.plain_text, &payload.salt) {
+async fn handle_hashing_password(Json(payload): Json<HashRequest>) -> impl IntoResponse {
+    match utils::security::hash_password(&payload.plain_text, &payload.salt) {
         Ok(encrypted) => (StatusCode::OK, encrypted).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
-    }
-}
-
-async fn handle_decrypt_password(Json(payload): Json<DecryptRequest>) -> impl IntoResponse {
-    match utils::security::decrypt_password(&payload.stored, &payload.salt) {
-        Ok(decrypted) => (StatusCode::OK, decrypted).into_response(),
-        Err(e) => (
-            StatusCode::BAD_REQUEST,
-            format!("Decryption failed {:?}", e),
-        )
-            .into_response(),
     }
 }
 
@@ -408,10 +383,6 @@ async fn handle_update_settings(
     if let Err(e) = state.dm.update_settings(dm_settings).await {
         logger::error(&format!("Error in updating DMSettings: {:?}", e));
     }
-    logger::debug(&format!(
-        "Changed settings to user: {}, pass: {}, api: {}, config:{}",
-        &username, &password, &api_key, &new_config
-    ));
     save_config(&new_config);
     *state.api_key.write().await = normalize_secret(&api_key).to_string();
     *state.username.write().await = normalize_secret(&username).to_string();
@@ -438,8 +409,7 @@ pub fn create_nadeko_router(state: SharedState) -> Router<SharedState> {
             "/settings",
             get(handle_get_settings).post(handle_update_settings),
         )
-        .route("/encrypt", post(handle_encrypt_password))
-        .route("/decrypt", post(handle_decrypt_password))
+        .route("/hash", post(handle_hashing_password))
         .route("/generate-salt", get(handle_generate_salt))
         .route("/generate-api", get(handle_generate_api))
         .route("/deps-version", get(handle_get_deps_version))

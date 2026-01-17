@@ -47,18 +47,21 @@ pub async fn start_server_listener(dm: Arc<DownloadManager>) {
         }
 
         let config_val = nadekodon_server::server::load_config();
-        let salt = config_val["salt"].as_str().unwrap_or("");
+        let salt = config_val["salt"]
+            .as_str()
+            .map(|s| s.to_string())
+            .unwrap_or_else(security::generate_salt);
 
-        let password = if msg.password.contains("\"iv\":") && msg.password.contains("\"data\":") {
-            match security::decrypt_password(&msg.password, salt) {
-                Ok(decrypted) => decrypted,
+        let password = if security::is_valid_hash(&msg.password) {
+            msg.password
+        } else {
+            match security::hash_password(&msg.password, &salt) {
+                Ok(v) => v,
                 Err(e) => {
-                    logger::error(&format!("Failed to decrypt password: {}", e));
+                    logger::error(&format!("Error when hashing password: {:?}", e));
                     msg.password
                 }
             }
-        } else {
-            msg.password
         };
 
         let config = Arc::new(RwLock::new(config_val));

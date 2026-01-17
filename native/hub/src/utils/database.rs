@@ -5,8 +5,8 @@ extern crate nadekodon_core as core;
 use core::downloader::DownloadManager;
 use core::utils::database::{init_db, load_downloads, start_db_loop};
 use rinf::DartSignal;
-use std::sync::Arc;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::sync::Notify;
 
 pub async fn start_database_manager(
@@ -18,6 +18,11 @@ pub async fn start_database_manager(
     while let Some(signal_pack) = receiver.recv().await {
         let path = signal_pack.message.path;
         let db_path = PathBuf::from(path);
+        if let Some(parent) = db_path.parent() {
+            unsafe {
+                std::env::set_var("NADEKO_HOME", parent);
+            }
+        }
         let dm = dm.clone();
         let shutdown_signal = shutdown_signal.clone();
         let db_done_signal = db_done_signal.clone();

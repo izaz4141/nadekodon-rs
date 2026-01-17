@@ -25,25 +25,6 @@ class APIService {
     SettingsManager.serverHost.addListener(restartPolling);
     SettingsManager.serverPort.addListener(restartPolling);
     SettingsManager.serverApiKey.addListener(restartPolling);
-
-    isOnline.addListener(() {
-      if (isOnline.value) {
-        _tryDecryptPassword();
-      }
-    });
-  }
-
-  static Future<void> _tryDecryptPassword() async {
-    final current = SettingsManager.password.value;
-    if (current.contains('"iv":') && current.contains('"data":')) {
-      final decrypted = await decryptPassword(
-        current,
-        SettingsManager.salt.value,
-      );
-      if (decrypted != null) {
-        SettingsManager.password.value = decrypted;
-      }
-    }
   }
 
   static String get baseUrl {
@@ -161,17 +142,14 @@ class APIService {
         isOnline.value = true;
       } else {
         isOnline.value = false;
-        log(
-          "Server status check failed: ${response.statusCode}",
-          isError: true,
-        );
+        log("Server status check failed: ${response.statusCode}");
       }
     } catch (e) {
       // Don't log typical connection refused errors as they spam when server is off
       if (!isOnline.value) {
         // suppress
       } else {
-        log("Server is offline: $e", isError: true);
+        log("Server status check failed: $e", isError: true);
       }
       isOnline.value = false;
     }
@@ -515,10 +493,10 @@ class APIService {
     }
   }
 
-  static Future<String?> encryptPassword(String plainText, String salt) async {
+  static Future<String?> hashPassword(String plainText, String salt) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/api/nadeko/encrypt'),
+        Uri.parse('$baseUrl/api/nadeko/hash'),
         headers: {
           'Content-Type': 'application/json',
           'X-API-Key': SettingsManager.serverApiKey.value,
@@ -529,26 +507,7 @@ class APIService {
         return response.body;
       }
     } catch (e) {
-      log("Error encrypting password: $e", isError: true);
-    }
-    return null;
-  }
-
-  static Future<String?> decryptPassword(String stored, String salt) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/nadeko/decrypt'),
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': SettingsManager.serverApiKey.value,
-        },
-        body: jsonEncode({'stored': stored, 'salt': salt}),
-      );
-      if (response.statusCode == 200) {
-        return response.body;
-      }
-    } catch (e) {
-      log("Error decrypting password: $e", isError: true);
+      log("Error hashing password: $e", isError: true);
     }
     return null;
   }
