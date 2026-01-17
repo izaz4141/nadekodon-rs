@@ -1,3 +1,4 @@
+use nadekodon_core::utils::security;
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -55,6 +56,9 @@ async fn main() {
     if let Ok(env_key) = std::env::var("NADEKO_SERVER_API_KEY") {
         api_key = env_key;
     }
+    username = normalize_secret(&username);
+    password = normalize_secret(&password);
+    api_key = normalize_secret(&api_key);
 
     let client = core::utils::url::build_browser_client().await;
 
@@ -92,7 +96,14 @@ async fn main() {
     initial_config["server_api_key"] = Value::String(api_key.clone());
     initial_config["server_port"] = Value::Number(port.into());
     initial_config["username"] = Value::String(username.clone());
-    initial_config["password"] = Value::String(password.clone());
+    initial_config["password"] = {
+        let encrypted = if let Ok(v) = security::encrypt_password(&password, &salt) {
+            v
+        } else {
+            password.clone()
+        };
+        Value::String(encrypted)
+    };
     server::save_config(&initial_config);
 
     let state = Arc::new(server::AppState {
@@ -106,4 +117,19 @@ async fn main() {
 
     // Use the run_server_loop function from core
     nadekodon_server::server::run_server_loop(state).await;
+}
+
+fn normalize_secret(s: &str) -> String {
+    let s = s.trim();
+
+    if s.len() >= 2 {
+        let bytes = s.as_bytes();
+        if (bytes[0] == b'"' && bytes[s.len() - 1] == b'"')
+            || (bytes[0] == b'\'' && bytes[s.len() - 1] == b'\'')
+        {
+            return s[1..s.len() - 1].to_string();
+        }
+    }
+
+    s.to_string()
 }

@@ -515,6 +515,7 @@ class SettingsManager {
   }
 
   static Future<void> loadFromBackend() async {
+    if (!kIsWeb) return;
     final data = await APIService.getSettings();
     if (data != null) {
       await _applyFromJson(data);
