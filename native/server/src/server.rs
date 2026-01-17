@@ -1,8 +1,8 @@
 extern crate nadekodon_core as core;
 use core::downloader;
 use core::signals;
-use core::utils::logger;
 use core::utils;
+use core::utils::logger;
 
 use axum::{
     Router,
@@ -13,20 +13,23 @@ use axum::{
     response::IntoResponse,
     routing::{get, post},
 };
-use axum_extra::extract::{cookie::{Cookie, SameSite}, CookieJar};
+use axum_extra::extract::{
+    CookieJar,
+    cookie::{Cookie, SameSite},
+};
+use nadekodon_core::utils::types::DMSettings;
 use serde::Deserialize;
 use serde_json::{Value, json};
+use std::env;
 use std::net::SocketAddr;
 use std::sync::{Arc, OnceLock};
-use std::env;
 use std::time::Duration;
 use uuid::Uuid;
 
 static NADEKO_HOME: OnceLock<String> = OnceLock::new();
 pub fn nadeko_home() -> &'static String {
-    NADEKO_HOME.get_or_init(|| {
-        env::var("NADEKO_HOME").unwrap_or_else(|_| "/home/nadeko".to_string())
-    })
+    NADEKO_HOME
+        .get_or_init(|| env::var("NADEKO_HOME").unwrap_or_else(|_| "/home/nadeko".to_string()))
 }
 
 #[derive(Clone)]
@@ -50,10 +53,8 @@ pub fn load_config() -> Value {
             v["server_api_key"] = Value::String(Uuid::new_v4().to_string());
             let salt = utils::security::generate_salt();
             v["salt"] = Value::String(salt.clone());
-            v["password"] = Value::String(utils::security::encrypt_password(
-                "admin",
-                &salt
-            ).unwrap());
+            v["password"] =
+                Value::String(utils::security::encrypt_password("admin", &salt).unwrap());
             cfg = v;
         }
     }
@@ -162,10 +163,7 @@ async fn handle_get_download_list(
 ) -> impl IntoResponse {
     match downloader::get_download_list_internal(&state.dm, payload).await {
         Ok(list) => Json(list).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            e.to_string(),
-        ).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
 }
 
@@ -266,9 +264,7 @@ async fn handle_delete_download(
     }
 }
 
-async fn handle_restart(
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+async fn handle_restart(State(state): State<AppState>) -> impl IntoResponse {
     state.restart_signal.notify_one();
     StatusCode::OK
 }
@@ -283,9 +279,7 @@ async fn handle_query_url(
     }
 }
 
-async fn handle_query_ytdl(
-    Json(payload): Json<signals::QueryYtdl>,
-) -> impl IntoResponse {
+async fn handle_query_ytdl(Json(payload): Json<signals::QueryYtdl>) -> impl IntoResponse {
     match utils::ytdlp::get_ytdl_info(&payload.url).await {
         Ok(info) => Json(info).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
@@ -304,21 +298,21 @@ struct DecryptRequest {
     salt: String,
 }
 
-async fn handle_encrypt_password(
-    Json(payload): Json<EncryptRequest>,
-) -> impl IntoResponse {
+async fn handle_encrypt_password(Json(payload): Json<EncryptRequest>) -> impl IntoResponse {
     match utils::security::encrypt_password(&payload.plain_text, &payload.salt) {
         Ok(encrypted) => (StatusCode::OK, encrypted).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
 }
 
-async fn handle_decrypt_password(
-    Json(payload): Json<DecryptRequest>,
-) -> impl IntoResponse {
+async fn handle_decrypt_password(Json(payload): Json<DecryptRequest>) -> impl IntoResponse {
     match utils::security::decrypt_password(&payload.stored, &payload.salt) {
         Ok(decrypted) => (StatusCode::OK, decrypted).into_response(),
-        Err(e) => (StatusCode::BAD_REQUEST, format!("Decryption failed {:?}", e)).into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            format!("Decryption failed {:?}", e),
+        )
+            .into_response(),
     }
 }
 
@@ -335,17 +329,60 @@ async fn handle_get_deps_version() -> impl IntoResponse {
     }))
 }
 
+async fn handle_generate_api(
+    State(mut state): State<AppState>,
+    jar: CookieJar,
+) -> impl IntoResponse {
+    let key = Uuid::new_v4().to_string();
+    let cookie = Cookie::build(("nadeko_api_key", key.clone()))
+        .path("/")
+        .secure(true)
+        .http_only(true)
+        .same_site(SameSite::Lax)
+        .build();
+
+    let jar = jar.add(cookie);
+    {
+        let mut cfg = state.config.write().await;
+        cfg["server_api_key"] = Value::String(key.clone());
+    }
+    state.api_key = key;
+    (
+        jar,
+        Json(json!({
+            "api_key": state.api_key
+        })),
+    )
+        .into_response()
+}
+
 async fn handle_get_settings(State(state): State<AppState>) -> impl IntoResponse {
     let config = state.config.read().await.clone();
     Json(config)
 }
 
 async fn handle_update_settings(
-    State(state): State<AppState>,
+    State(mut state): State<AppState>,
     Json(new_config): Json<Value>,
 ) -> impl IntoResponse {
-    *state.config.write().await = new_config.clone();
+    state.api_key = new_config["server_api_key"].clone().to_string();
+    state.username = new_config["username"].clone().to_string();
+    state.password = new_config["password"].clone().to_string();
+    let dm_settings = DMSettings {
+        speed_limit: new_config["speed_limit"].as_u64().unwrap_or(0),
+        concurrency_limit: new_config["concurrency_limit"].as_u64().unwrap_or(3) as u8,
+        download_threads: new_config["download_threads"].as_u64().unwrap_or(4) as u8,
+        download_timeout: new_config["download_timeout"].as_u64().unwrap_or(300),
+        download_retries: new_config["download_retries"].as_u64().unwrap_or(3) as u8,
+        seeding_ratio: new_config["seeding_ratio"].as_f64().unwrap_or(0.0) as f32,
+        seeding_time: new_config["seeding_time"].as_u64().unwrap_or(0),
+        download_dir: format!("{}/downloads", nadeko_home()),
+    };
+    if let Err(e) = state.dm.update_settings(dm_settings).await {
+        logger::error(&format!("Error in updating DMSettings: {:?}", e));
+    }
     save_config(&new_config);
+    *state.config.write().await = new_config;
     StatusCode::OK
 }
 
@@ -370,14 +407,14 @@ pub fn create_nadeko_router(state: AppState) -> Router<AppState> {
         .route("/encrypt", post(handle_encrypt_password))
         .route("/decrypt", post(handle_decrypt_password))
         .route("/generate-salt", get(handle_generate_salt))
+        .route("/generate-api", get(handle_generate_api))
         .route("/deps-version", get(handle_get_deps_version))
         .layer(middleware::from_fn_with_state(
             state.api_key.clone(),
             check_api_key,
         ));
 
-    let public_routes = Router::new()
-        .route("/login", post(handle_login));
+    let public_routes = Router::new().route("/login", post(handle_login));
 
     Router::new()
         .merge(protected_routes)
@@ -409,15 +446,11 @@ pub async fn run_server(router: Router, port: u16, restart_signal: Arc<tokio::sy
                 utils::logger::error(&format!("HTTP server error: {}", e));
             }
         }
-        Err(e) => {
-            utils::logger::error(&format!("Failed to bind HTTP server: {}", e))
-        }
+        Err(e) => utils::logger::error(&format!("Failed to bind HTTP server: {}", e)),
     }
 }
 
-pub async fn run_server_loop(
-    state: AppState,
-) {
+pub async fn run_server_loop(state: AppState) {
     loop {
         let port = {
             let config = state.config.read().await.clone();
@@ -427,7 +460,7 @@ pub async fn run_server_loop(
 
         let router = create_router(state.clone());
         run_server(router, port, restart_signal).await;
-        
+
         utils::logger::debug("Restarting HTTP server...");
         tokio::time::sleep(Duration::from_secs(1)).await;
     }

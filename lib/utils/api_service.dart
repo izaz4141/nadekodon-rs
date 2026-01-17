@@ -102,6 +102,53 @@ class APIService {
     return false;
   }
 
+  static Future<bool> regenerateApiKey() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/nadeko/generate-api'),
+        headers: {'X-API-Key': SettingsManager.serverApiKey.value},
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final returnedApiKey = data['api_key'];
+        SettingsManager.loadFromBackend();
+
+        if (returnedApiKey is String && returnedApiKey.isNotEmpty) {
+          SettingsManager.serverApiKey.value = returnedApiKey;
+          return true;
+        }
+      }
+      log(
+        'Regen API-Key failed: ${response.statusCode} ${response.body}',
+        isError: true,
+      );
+      return false;
+    } catch (e) {
+      log("Regen API-Key failed: $e", isError: true);
+      return false;
+    }
+  }
+
+  static Future<bool> restartServer() async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/nadeko/restart'),
+        headers: {'X-API-Key': SettingsManager.serverApiKey.value},
+      );
+      if (response.statusCode == 200) {
+        return true;
+      }
+      log(
+        'Server restart failed: ${response.statusCode} ${response.body}',
+        isError: true,
+      );
+      return false;
+    } catch (e) {
+      log("Server restart failed: $e", isError: true);
+      return false;
+    }
+  }
+
   static Future<void> _checkStatus() async {
     try {
       final response = await http.get(

@@ -411,14 +411,20 @@ class SettingsManager {
   }
 
   static Future<void> regenerateApiKey() async {
-    if (kIsWeb) return;
+    if (kIsWeb) {
+      await APIService.regenerateApiKey();
+      return;
+    }
     RequestNewApiKey().sendSignalToRust();
     final signal = await NewApiKey.rustSignalStream.first;
     serverApiKey.value = signal.message.key;
   }
 
-  static void restartServer() {
-    if (kIsWeb) return;
+  static Future<void> restartServer() async {
+    if (kIsWeb) {
+      await APIService.restartServer();
+      return;
+    }
     StartServer(
       port: serverPort.value,
       apiKey: serverApiKey.value,
@@ -431,6 +437,7 @@ class SettingsManager {
     if (kIsWeb) {
       final newSalt = await APIService.generateSalt();
       if (newSalt != null) salt.value = newSalt;
+      return;
     } else {
       final id = DateTime.now().microsecondsSinceEpoch.toString();
       final stream = SaltOutput.rustSignalStream.where(
