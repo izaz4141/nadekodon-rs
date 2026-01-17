@@ -116,10 +116,13 @@ async fn get_latest_release(owner: &str, repo: &str) -> Result<String, String> {
         .build()
         .map_err(|e| e.to_string())?;
 
-    let url = format!("https://api.github.com/repos/{}/{}/releases/latest", owner, repo);
+    let url = format!(
+        "https://api.github.com/repos/{}/{}/releases/latest",
+        owner, repo
+    );
     let res = client.get(url).send().await.map_err(|e| e.to_string())?;
     let json: Value = res.json().await.map_err(|e| e.to_string())?;
-    
+
     let tag = json["tag_name"].as_str().ok_or("No tag_name")?;
     Ok(tag.to_string())
 }
@@ -133,8 +136,11 @@ async fn get_latest_tag(owner: &str, repo: &str) -> Result<String, String> {
     let url = format!("https://api.github.com/repos/{}/{}/tags", owner, repo);
     let res = client.get(url).send().await.map_err(|e| e.to_string())?;
     let json: Value = res.json().await.map_err(|e| e.to_string())?;
-    
+
     let tags = json.as_array().ok_or("Not an array")?;
-    let tag = tags.first().and_then(|t| t["name"].as_str()).ok_or("No tags")?;
+    let tag = tags
+        .first()
+        .and_then(|t| t["name"].as_str())
+        .ok_or("No tags")?;
     Ok(tag.to_string())
 }

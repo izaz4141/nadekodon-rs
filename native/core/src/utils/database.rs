@@ -3,12 +3,12 @@ use crate::utils::logger;
 use crate::utils::types::{DownloadInfo, DownloadState, DownloadType, PartInfo};
 
 use sqlx::{Pool, Row, Sqlite, sqlite::SqlitePoolOptions};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::time::sleep;
-use std::path::{PathBuf, Path};
-use uuid::Uuid;
 use tokio::sync::Notify;
+use tokio::time::sleep;
+use uuid::Uuid;
 
 pub async fn start_database_manager(
     dm: Arc<DownloadManager>,
@@ -18,34 +18,22 @@ pub async fn start_database_manager(
 ) {
     match init_db(&db_path).await {
         Ok(pool) => {
-            logger::debug(&format!(
-                "Database initialized at {}",
-                db_path.display()
-            ));
+            logger::debug(&format!("Database initialized at {}", db_path.display()));
 
             match load_downloads(&pool).await {
                 Ok(downloads) => {
-                    logger::debug(&format!(
-                        "Loaded {} downloads from DB",
-                        downloads.len()
-                    ));
+                    logger::debug(&format!("Loaded {} downloads from DB", downloads.len()));
                     dm.load_snapshot(downloads).await;
                 }
                 Err(e) => {
-                    logger::error(&format!(
-                        "Failed to load downloads from DB: {:?}",
-                        e
-                    ));
+                    logger::error(&format!("Failed to load downloads from DB: {:?}", e));
                 }
             }
 
             start_db_loop(pool, dm, shutdown_signal, db_done_signal).await;
         }
         Err(e) => {
-            logger::error(&format!(
-                "Failed to initialize database: {:?}",
-                e
-            ));
+            logger::error(&format!("Failed to initialize database: {:?}", e));
         }
     }
 }

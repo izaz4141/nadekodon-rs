@@ -7,10 +7,10 @@ use axum::{
     routing::{get, post},
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar};
-use nadekodon_core::utils::helper::calc_speed;
-use nadekodon_core::utils::logger;
 use nadekodon_core::utils::types::DownloadState;
+use nadekodon_core::utils::{helper, logger, security};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 #[derive(Deserialize)]
@@ -19,32 +19,15 @@ struct AuthQuery {
     password: String,
 }
 
-#[derive(Deserialize, Debug)]
-struct TorrentsQuery {
-    filter: Option<String>,
-    category: Option<String>,
-    tag: Option<String>,
-    sort: Option<String>,
-    reverse: Option<bool>,
-    limit: Option<usize>,
-    offset: Option<isize>,
-    hashes: Option<String>,
-}
-
-#[derive(Deserialize, Debug)]
-struct DeleteTorrentsQuery {
-    hashes: String,
-    #[serde(rename = "deleteFiles")]
-    delete_files: Option<bool>,
-}
-
 pub fn get_router(state: SharedState) -> Router<SharedState> {
     let auth_router = Router::new()
         .route("/app/version", get(app_version))
         .route("/app/webapiVersion", get(webapi_version))
-        .route("/torrents/add", post(add_torrent))
+        .route("/torrents/add", post(torrents_add))
         .route("/torrents/info", get(torrents_info))
-        .route("/torrents/delete", post(delete_torrents))
+        .route("/torrents/properties", get(torrents_properties))
+        .route("/torrents/files", get(torrents_files))
+        .route("/torrents/delete", post(torrents_delete))
         .layer(axum::middleware::from_fn_with_state(state, auth_middleware));
 
     Router::new()
@@ -57,8 +40,11 @@ async fn login(
     jar: CookieJar,
     Form(auth): Form<AuthQuery>,
 ) -> impl IntoResponse {
-    if auth.username == state.username.read().await.clone()
-        && auth.password == state.password.read().await.clone()
+    let current_username = state.username.read().await;
+    let current_hash = state.password.read().await;
+
+    if auth.username == *current_username
+        && security::validate_password(&current_hash, &auth.password).unwrap_or(false)
     {
         let cookie = Cookie::build(("SID", state.api_key.read().await.clone()))
             .path("/")
@@ -92,35 +78,7 @@ async fn webapi_version() -> &'static str {
     "2.8.3"
 }
 
-// qBittorrent TorrentInfo subset
-#[derive(Serialize, Clone)]
-struct TorrentInfo {
-    added_on: u64,
-    amount_left: u64,
-    category: String,
-    completed: u64,
-    completion_on: i64,
-    content_path: String,
-    dl_limit: i64,
-    dlspeed: u64,
-    downloaded: u64,
-    eta: i64,
-    hash: String,
-    last_activity: u64,
-    name: String,
-    progress: f64,
-    ratio: f64,
-    save_path: String,
-    size: u64,
-    state: String,
-    tags: String,
-    total_size: u64,
-    up_limit: i64,
-    uploaded: u64,
-    upspeed: u64,
-}
-
-async fn add_torrent(
+async fn torrents_add(
     State(state): State<SharedState>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
@@ -244,9 +202,46 @@ async fn add_torrent(
     (StatusCode::OK, "Ok.")
 }
 
+#[derive(Deserialize, Debug)]
+struct TorrentsInfoQuery {
+    filter: Option<String>,
+    category: Option<String>,
+    tag: Option<String>,
+    sort: Option<String>,
+    reverse: Option<bool>,
+    limit: Option<usize>,
+    offset: Option<isize>,
+    hashes: Option<String>,
+}
+#[derive(Serialize, Clone)]
+struct TorrentsInfoResponse {
+    added_on: u64,
+    amount_left: u64,
+    category: String,
+    completed: u64,
+    completion_on: i64,
+    content_path: String,
+    dl_limit: i64,
+    dlspeed: u64,
+    downloaded: u64,
+    eta: i64,
+    hash: String,
+    last_activity: u64,
+    name: String,
+    progress: f64,
+    ratio: f64,
+    save_path: String,
+    size: u64,
+    state: String,
+    tags: String,
+    total_size: u64,
+    up_limit: i64,
+    uploaded: u64,
+    upspeed: u64,
+}
 async fn torrents_info(
     State(state): State<SharedState>,
-    Query(query): Query<TorrentsQuery>,
+    Query(query): Query<TorrentsInfoQuery>,
 ) -> impl IntoResponse {
     let downloads = state.dm.list_all().await.unwrap_or_default();
 
@@ -333,7 +328,7 @@ async fn torrents_info(
             };
 
             let amount_left = total_size.saturating_sub(downloaded);
-            let dlspeed = calc_speed(d.history.clone()) as u64;
+            let dlspeed = helper::calc_speed(d.history.clone()) as u64;
             let upspeed = d.uspeed.unwrap_or(0.0) as u64;
 
             let eta = if dlspeed > 0 && amount_left > 0 {
@@ -383,7 +378,7 @@ async fn torrents_info(
                 }
             }
 
-            TorrentInfo {
+            TorrentsInfoResponse {
                 added_on: d.added_at / 1000,
                 amount_left,
                 category: d.category.unwrap_or_default(),
@@ -422,7 +417,7 @@ async fn torrents_info(
             }
         });
     }
-    let mut info_list: Vec<TorrentInfo> = futures::future::join_all(info_futures).await;
+    let mut info_list: Vec<TorrentsInfoResponse> = futures::future::join_all(info_futures).await;
 
     // 3. Sorting
     if let Some(sort_key) = &query.sort {
@@ -476,9 +471,209 @@ async fn torrents_info(
     Json(paged_list)
 }
 
-async fn delete_torrents(
+#[derive(Deserialize, Debug)]
+struct TorrentsPropertiesQuery {
+    hash: String,
+}
+
+#[derive(Serialize, Clone)]
+pub struct TorrentsPropertiesResponse {
+    pub save_path: String,
+    pub creation_date: i64,
+    pub piece_size: i64,
+    pub comment: String,
+    pub total_wasted: i64,
+    pub total_uploaded: i64,
+    pub total_uploaded_session: i64,
+    pub total_downloaded: i64,
+    pub total_downloaded_session: i64,
+    pub up_limit: i64,
+    pub dl_limit: i64,
+    pub time_elapsed: i64,
+    pub seeding_time: i64,
+    pub nb_connections: i32,
+    pub nb_connections_limit: i32,
+    pub share_ratio: f64,
+    pub addition_date: i64,
+    pub completion_date: i64,
+    pub created_by: String,
+    pub dl_speed_avg: i64,
+    pub dl_speed: i64,
+    pub eta: i64,
+    pub last_seen: i64,
+    pub peers: i32,
+    pub peers_total: i32,
+    pub pieces_have: i32,
+    pub pieces_num: i32,
+    pub reannounce: i64,
+    pub seeds: i32,
+    pub seeds_total: i32,
+    pub total_size: i64,
+    pub up_speed_avg: i64,
+    pub up_speed: i64,
+    #[serde(rename = "isPrivate")] // qBittorrent uses camelCase for this specific field
+    pub is_private: bool,
+}
+async fn torrents_properties(
     State(state): State<SharedState>,
-    Query(query): Query<DeleteTorrentsQuery>,
+    Query(query): Query<TorrentsPropertiesQuery>,
+) -> impl IntoResponse {
+    let downloads = state.dm.list_all().await.unwrap_or_default();
+
+    // Find the specific torrent by hash
+    let target_torrent = downloads
+        .into_iter()
+        .find(|d| d.torrent_hash.as_deref() == Some(&query.hash));
+
+    match target_torrent {
+        Some(d) => {
+            let amount_left = d.total_size.unwrap_or(0).saturating_sub(d.downloaded) as i64;
+            let dlspeed = helper::calc_speed(d.history.clone()) as i64;
+            let upspeed = d.uspeed.unwrap_or(0.0) as i64;
+
+            let eta = if dlspeed > 0 && amount_left > 0 {
+                (amount_left / dlspeed) as i64
+            } else if amount_left == 0 {
+                0
+            } else {
+                -1
+            };
+            let resp = TorrentsPropertiesResponse {
+                save_path: d.dest.to_string_lossy().into_owned(),
+                addition_date: (d.added_at / 1000) as i64,
+                total_size: d.total_size.unwrap_or(0) as i64,
+                creation_date: (d.added_at / 1000) as i64,
+                piece_size: -1,
+                comment: "".to_string(),
+                total_wasted: 0,
+                total_uploaded: d.uploaded as i64,
+                total_uploaded_session: 0,
+                total_downloaded: d.downloaded as i64,
+                total_downloaded_session: 0,
+                up_limit: -1,
+                dl_limit: -1,
+                time_elapsed: 0,
+                seeding_time: 0,
+                nb_connections: 0,
+                nb_connections_limit: -1,
+                share_ratio: 0.0,
+                completion_date: -1,
+                created_by: "".to_string(),
+                dl_speed_avg: dlspeed.clone(),
+                dl_speed: dlspeed,
+                eta: eta,
+                last_seen: (d.updated_at / 1000) as i64,
+                peers: 0,
+                peers_total: 0,
+                pieces_have: 0,
+                pieces_num: 0,
+                reannounce: 0,
+                seeds: 0,
+                seeds_total: 0,
+                up_speed_avg: upspeed.clone(),
+                up_speed: upspeed,
+                is_private: false,
+            };
+            Json(resp).into_response()
+        }
+        None => (StatusCode::NOT_FOUND, "Torrent hash was not found").into_response(),
+    }
+}
+
+#[derive(Deserialize, Debug)]
+struct TorrentsFilesQuery {
+    hash: String,
+    indexes: Option<String>,
+}
+#[derive(Serialize)]
+pub struct TorrentFileResponse {
+    pub index: usize,
+    pub name: String,
+    pub size: u64,
+    pub progress: f32,
+    pub priority: i32,
+    pub is_seed: bool,
+    pub piece_range: [usize; 2],
+    pub availability: f32,
+}
+async fn torrents_files(
+    State(state): State<SharedState>,
+    Query(query): Query<TorrentsFilesQuery>,
+) -> impl IntoResponse {
+    let session_guard = state.dm.torrent_session.read().await;
+    let session = match session_guard.as_ref() {
+        Some(s) => s,
+        None => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Session not initialized").into_response();
+        }
+    };
+    let tid = match query.hash.parse() {
+        Ok(i) => i,
+        _ => return (StatusCode::BAD_REQUEST, "Problem with hash").into_response(),
+    };
+
+    let handle = match session.get(librqbit::api::TorrentIdOrHash::Hash(tid)) {
+        Some(h) => h,
+        None => return (StatusCode::NOT_FOUND, "Torrent not found").into_response(),
+    };
+
+    let metadata_guard = handle.metadata.load();
+    let info = match metadata_guard.as_ref() {
+        Some(i) => i,
+        None => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Metadata not available").into_response();
+        }
+    };
+
+    let stats = handle.stats();
+
+    let target_indexes: Option<HashSet<usize>> = query
+        .indexes
+        .as_ref()
+        .map(|idx_str| idx_str.split('|').filter_map(|s| s.parse().ok()).collect());
+
+    let files: Vec<TorrentFileResponse> = info
+        .file_infos
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| match &target_indexes {
+            Some(indexes) => indexes.contains(i),
+            None => true,
+        })
+        .map(|(idx, file)| {
+            let file_progress = stats.file_progress.get(idx).copied().unwrap_or(0);
+            let progress = if file.len > 0 {
+                file_progress as f64 / file.len as f64
+            } else {
+                0.0
+            };
+            let piece_range = file.piece_range_usize();
+
+            TorrentFileResponse {
+                index: idx,
+                name: file.relative_filename.to_string_lossy().to_string(),
+                size: file.len,
+                progress: progress as f32,
+                priority: 0,
+                is_seed: stats.finished,
+                piece_range: [piece_range.start, piece_range.end.saturating_sub(1)],
+                availability: if stats.finished { 1.0 } else { progress as f32 },
+            }
+        })
+        .collect();
+
+    Json(files).into_response()
+}
+
+#[derive(Deserialize, Debug)]
+struct TorrentsDeleteQuery {
+    hashes: String,
+    #[serde(rename = "deleteFiles")]
+    delete_files: Option<bool>,
+}
+async fn torrents_delete(
+    State(state): State<SharedState>,
+    Query(query): Query<TorrentsDeleteQuery>,
 ) -> impl IntoResponse {
     let hashes: Vec<&str> = query.hashes.split('|').collect();
     let delete_files = query.delete_files.unwrap_or(false);
@@ -505,8 +700,9 @@ async fn delete_torrents(
             }
         } else {
             logger::error(&format!("Torrent not found for deletion: {}", hash));
+            return (StatusCode::NOT_FOUND, "Torrent not found").into_response();
         }
     }
 
-    (StatusCode::OK, "Ok.")
+    (StatusCode::OK, "Ok.").into_response()
 }

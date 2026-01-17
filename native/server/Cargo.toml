@@ -17,4 +17,5 @@ uuid = { version = "1.18.0", features = ["v4"] }
 anyhow = "1.0.99"
 futures = "0.3.31"
 reqwest = { version = "0.12.23", features = ["json"] }
+librqbit = "8.1.1"
 nadekodon-core = { path = "../core" }
