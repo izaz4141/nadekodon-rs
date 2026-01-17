@@ -83,11 +83,11 @@ class APIService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final returnedApiKey = data['api_key'];
-        SettingsManager.loadFromBackend();
-        SettingsManager.attachAutoSave();
+        await SettingsManager.loadFromBackend();
 
         if (returnedApiKey is String && returnedApiKey.isNotEmpty) {
           SettingsManager.serverApiKey.value = returnedApiKey;
+          SettingsManager.attachAutoSave();
           return true;
         }
       } else {
@@ -112,7 +112,7 @@ class APIService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final returnedApiKey = data['api_key'];
-        SettingsManager.loadFromBackend();
+        await SettingsManager.loadFromBackend();
 
         if (returnedApiKey is String && returnedApiKey.isNotEmpty) {
           SettingsManager.serverApiKey.value = returnedApiKey;

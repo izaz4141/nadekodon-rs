@@ -108,9 +108,9 @@ async fn main() {
 
     let state = Arc::new(server::AppState {
         config: Arc::new(RwLock::new(initial_config)),
-        api_key: Arc::new(RwLock::new(api_key.clone())),
-        username: Arc::new(RwLock::new(username.clone())),
-        password: Arc::new(RwLock::new(password.clone())),
+        api_key: Arc::new(RwLock::new(api_key)),
+        username: Arc::new(RwLock::new(username)),
+        password: Arc::new(RwLock::new(password)),
         dm,
         restart_signal: Arc::new(tokio::sync::Notify::new()),
     });
