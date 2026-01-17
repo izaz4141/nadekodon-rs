@@ -517,6 +517,7 @@ class SettingsManager {
   static Future<void> loadFromBackend() async {
     if (!kIsWeb) return;
     final data = await APIService.getSettings();
+    log("Backend cfg: $data");
     if (data != null) {
       await _applyFromJson(data);
     } else {
@@ -526,6 +527,7 @@ class SettingsManager {
 
   static Future<void> _saveToBackend() async {
     final jsonMap = await _toJson();
+    log("Saving setting to backend: $jsonMap");
     final success = await APIService.saveSettings(jsonMap);
     if (!success) {
       log('Failed to save settings to backend');

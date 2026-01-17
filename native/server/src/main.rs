@@ -11,7 +11,7 @@ use core::utils::database::start_database_manager;
 use core::utils::{logger, types::DMSettings};
 
 use nadekodon_server::server;
-use nadekodon_server::server::nadeko_home;
+use nadekodon_server::server::{nadeko_home, normalize_secret};
 
 #[tokio::main]
 async fn main() {
@@ -56,9 +56,9 @@ async fn main() {
     if let Ok(env_key) = std::env::var("NADEKO_SERVER_API_KEY") {
         api_key = env_key;
     }
-    username = normalize_secret(&username);
-    password = normalize_secret(&password);
-    api_key = normalize_secret(&api_key);
+    username = normalize_secret(&username).to_string();
+    password = normalize_secret(&password).to_string();
+    api_key = normalize_secret(&api_key).to_string();
 
     let client = core::utils::url::build_browser_client().await;
 
@@ -117,19 +117,4 @@ async fn main() {
 
     // Use the run_server_loop function from core
     nadekodon_server::server::run_server_loop(state).await;
-}
-
-fn normalize_secret(s: &str) -> String {
-    let s = s.trim();
-
-    if s.len() >= 2 {
-        let bytes = s.as_bytes();
-        if (bytes[0] == b'"' && bytes[s.len() - 1] == b'"')
-            || (bytes[0] == b'\'' && bytes[s.len() - 1] == b'\'')
-        {
-            return s[1..s.len() - 1].to_string();
-        }
-    }
-
-    s.to_string()
 }

@@ -45,6 +45,19 @@ pub struct AppState {
 }
 pub type SharedState = Arc<AppState>;
 
+pub fn normalize_secret<'a>(s: &'a str) -> &'a str {
+    let s = s.trim();
+
+    if s.len() >= 2 {
+        let b = s.as_bytes();
+        if (b[0] == b'"' && b[s.len() - 1] == b'"') || (b[0] == b'\'' && b[s.len() - 1] == b'\'') {
+            return &s[1..s.len() - 1];
+        }
+    }
+
+    s
+}
+
 pub fn get_config_path() -> String {
     format!("{}/config/config.json", nadeko_home())
 }
@@ -120,7 +133,6 @@ pub async fn check_api_key(
 }
 
 #[derive(Deserialize)]
-#[serde(tag = "auth_type", rename_all = "snake_case")]
 struct LoginRequest {
     username: String,
     password: String,
@@ -361,7 +373,7 @@ async fn handle_generate_api(
         let mut cfg = state.config.write().await;
         cfg["server_api_key"] = Value::String(key.clone());
     }
-    *state.api_key.write().await = key;
+    *state.api_key.write().await = normalize_secret(&key).to_string();
     (
         jar,
         Json(json!({
@@ -397,13 +409,13 @@ async fn handle_update_settings(
         logger::error(&format!("Error in updating DMSettings: {:?}", e));
     }
     logger::debug(&format!(
-        "Changed settings to \n user: {}\n pass: {}\n api: {}\n config:{}",
+        "Changed settings to user: {}, pass: {}, api: {}, config:{}",
         &username, &password, &api_key, &new_config
     ));
     save_config(&new_config);
-    *state.api_key.write().await = api_key;
-    *state.username.write().await = username;
-    *state.password.write().await = password;
+    *state.api_key.write().await = normalize_secret(&api_key).to_string();
+    *state.username.write().await = normalize_secret(&username).to_string();
+    *state.password.write().await = normalize_secret(&password).to_string();
     *state.config.write().await = new_config;
     StatusCode::OK
 }
