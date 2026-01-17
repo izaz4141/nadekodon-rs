@@ -32,7 +32,7 @@ pub fn nadeko_home() -> &'static String {
         .get_or_init(|| env::var("NADEKO_HOME").unwrap_or_else(|_| "/home/nadeko".to_string()))
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct AppState {
     pub dm: Arc<downloader::DownloadManager>,
     pub api_key: String,
@@ -381,6 +381,7 @@ async fn handle_update_settings(
     if let Err(e) = state.dm.update_settings(dm_settings).await {
         logger::error(&format!("Error in updating DMSettings: {:?}", e));
     }
+    logger::debug(&format!("Changed settings to {:?}", &state));
     save_config(&new_config);
     *state.config.write().await = new_config;
     StatusCode::OK

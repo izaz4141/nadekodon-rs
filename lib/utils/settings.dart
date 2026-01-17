@@ -519,12 +519,10 @@ class SettingsManager {
 
   static Future<void> loadFromBackend() async {
     final data = await APIService.getSettings();
-    log("Got settings from backend: $data");
     if (data != null) {
       await _applyFromJson(data);
     } else {
-      log('Failed to load settings from backend, using default settings');
-      await applyDefaultSettings();
+      log('Failed to load settings from backend');
     }
   }
 
