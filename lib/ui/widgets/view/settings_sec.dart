@@ -82,6 +82,9 @@ class SettingsSec extends StatelessWidget {
           subtitle: "qBittorrent API password",
           valueListenable: SettingsManager.password,
           isObscured: true,
+          onConfirm: (newValue) {
+            SettingsManager.password.value = newValue;
+          },
         ),
         _buildApiKeyDisplay(context, textTheme, colors),
       ],
@@ -143,69 +146,77 @@ class SettingsSec extends StatelessWidget {
     required String subtitle,
     required ValueListenable<String> valueListenable,
     bool isObscured = false,
+    Function(String)? onConfirm,
   }) {
     final obscureNotifier = ValueNotifier<bool>(isObscured);
 
-    return ValueListenableBuilder<String>(
-      valueListenable: valueListenable,
-      builder: (context, value, _) {
-        final controller = TextEditingController.fromValue(
-          TextEditingValue(
-            text: value,
-            selection: TextSelection.collapsed(offset: value.length),
-          ),
-        );
-        return ListTile(
-          title: Text(title, style: textTheme.bodyMedium),
-          subtitle: Text(subtitle, style: textTheme.bodySmall),
-          trailing: SizedBox(
-            width: 200 * AppTheme.spaceScale(context),
-            child: ValueListenableBuilder<bool>(
-              valueListenable: obscureNotifier,
-              builder: (context, obscureText, _) {
-                return TextField(
-                  controller: controller,
-                  obscureText: obscureText,
-                  style: textTheme.bodyMedium,
-                  decoration: InputDecoration(
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal:
-                          AppTheme.spaceSM * AppTheme.spaceScale(context),
-                      vertical: AppTheme.spaceSM * AppTheme.spaceScale(context),
-                    ),
-                    border: const OutlineInputBorder(
-                      borderRadius: BorderRadius.all(
-                        Radius.circular(AppTheme.radiusSM),
-                      ),
-                    ),
-                    suffixIcon: isObscured
-                        ? IconButton(
-                            icon: Icon(
-                              obscureText
-                                  ? Icons.visibility_off
-                                  : Icons.visibility,
-                            ),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                            iconSize:
-                                AppTheme.iconSM * AppTheme.iconScale(context),
-                            onPressed: () {
-                              obscureNotifier.value = !obscureNotifier.value;
-                            },
-                          )
-                        : null,
+    final controller = TextEditingController(
+      text: isObscured ? '' : valueListenable.value,
+    );
+
+    return ListTile(
+      title: Text(title, style: textTheme.bodyMedium),
+      subtitle: Text(subtitle, style: textTheme.bodySmall),
+      trailing: SizedBox(
+        width: 250 * AppTheme.spaceScale(context),
+        child: ValueListenableBuilder<bool>(
+          valueListenable: obscureNotifier,
+          builder: (context, obscureText, _) {
+            return TextField(
+              controller: controller,
+              obscureText: obscureText,
+              style: textTheme.bodyMedium,
+              decoration: InputDecoration(
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: AppTheme.spaceSM * AppTheme.spaceScale(context),
+                  vertical: AppTheme.spaceSM * AppTheme.spaceScale(context),
+                ),
+                border: const OutlineInputBorder(
+                  borderRadius: BorderRadius.all(
+                    Radius.circular(AppTheme.radiusSM),
                   ),
-                  onChanged: (newValue) {
-                    if (valueListenable is ValueNotifier<String>) {
-                      valueListenable.value = newValue;
-                    }
-                  },
-                );
+                ),
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isObscured)
+                      IconButton(
+                        icon: Icon(
+                          obscureText ? Icons.visibility_off : Icons.visibility,
+                        ),
+                        iconSize: AppTheme.iconSM * AppTheme.iconScale(context),
+                        onPressed: () =>
+                            obscureNotifier.value = !obscureNotifier.value,
+                      ),
+
+                    if (onConfirm != null)
+                      IconButton(
+                        icon: const Icon(Icons.check, color: Colors.green),
+                        iconSize: AppTheme.iconSM * AppTheme.iconScale(context),
+                        onPressed: () {
+                          onConfirm(controller.text);
+                          FocusScope.of(context).unfocus();
+                        },
+                      ),
+                  ],
+                ),
+              ),
+              textInputAction: (onConfirm == null)
+                  ? TextInputAction.next
+                  : TextInputAction.done,
+              onSubmitted: (_) => {
+                if (onConfirm != null) {onConfirm(controller.text)},
               },
-            ),
-          ),
-        );
-      },
+              onChanged: (newValue) {
+                if (onConfirm == null &&
+                    valueListenable is ValueNotifier<String>) {
+                  valueListenable.value = newValue;
+                }
+              },
+            );
+          },
+        ),
+      ),
     );
   }
 }
