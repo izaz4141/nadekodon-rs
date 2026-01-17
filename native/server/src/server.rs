@@ -94,6 +94,11 @@ pub async fn check_api_key(
     let api_key = state.api_key.read().await.clone();
     // Check header first
     if let Some(key) = req.headers().get("X-API-Key") {
+        logger::debug(&format!(
+            "Comparing header api key: {} | {}",
+            &api_key,
+            &key.to_str().unwrap_or("error")
+        ));
         if key.to_str().map(|k| k == api_key).unwrap_or(false) {
             return Ok(next.run(req).await);
         }
@@ -101,6 +106,11 @@ pub async fn check_api_key(
 
     // Check cookie
     if let Some(cookie) = jar.get("nadeko_api_key") {
+        logger::debug(&format!(
+            "Comparing cookie api key: {} | {}",
+            &api_key,
+            &cookie.value()
+        ));
         if cookie.value() == api_key {
             return Ok(next.run(req).await);
         }
@@ -387,8 +397,8 @@ async fn handle_update_settings(
         logger::error(&format!("Error in updating DMSettings: {:?}", e));
     }
     logger::debug(&format!(
-        "Changed settings to \n user: {}\n pass:{}\n api:{}",
-        &username, &password, &api_key
+        "Changed settings to \n user: {}\n pass: {}\n api: {}\n config:{}",
+        &username, &password, &api_key, &new_config
     ));
     save_config(&new_config);
     *state.api_key.write().await = api_key;

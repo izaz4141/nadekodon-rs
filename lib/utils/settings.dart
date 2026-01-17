@@ -66,8 +66,6 @@ class SettingsManager {
     await _loadDefaults();
 
     if (kIsWeb) {
-      await loadFromBackend();
-      _attachAutoSave();
       SpeedScheduler.init();
       return;
     }
@@ -107,7 +105,7 @@ class SettingsManager {
       await _saveAll();
     }
 
-    _attachAutoSave();
+    attachAutoSave();
     SpeedScheduler.init();
   }
 
@@ -250,7 +248,7 @@ class SettingsManager {
     );
   }
 
-  static void _attachAutoSave() {
+  static void attachAutoSave() {
     retreatToTray.addListener(
       () => _saveChanged('retreat_to_tray', retreatToTray.value),
     );
