@@ -3,8 +3,9 @@ use core::downloader::DownloadManager;
 use core::utils::security;
 use nadekodon_server::{
     qbittorrent::get_router,
-    server::{AppState, check_api_key, create_nadeko_router, run_server},
+    server::{AppState, SharedState, check_api_key, create_nadeko_router, run_server},
 };
+use tokio::sync::{Notify, RwLock};
 
 use crate::signals::{NewApiKey, RequestAddDownload, RequestNewApiKey, StartServer};
 use crate::utils::logger;
@@ -25,7 +26,7 @@ pub async fn handle_api_key_generation() {
 }
 
 async fn handle_add_download(
-    State(_state): State<AppState>,
+    State(_state): State<SharedState>,
     Json(payload): Json<RequestAddDownload>,
 ) -> impl IntoResponse {
     payload.send_signal_to_dart();
@@ -54,31 +55,27 @@ pub async fn start_server_listener(dm: Arc<DownloadManager>) {
                 Err(e) => {
                     logger::error(&format!("Failed to decrypt password: {}", e));
                     msg.password
-                },
+                }
             }
         } else {
             msg.password
         };
 
-        let config = Arc::new(tokio::sync::RwLock::new(config_val));
-        let restart_signal = Arc::new(tokio::sync::Notify::new());
-        let state = AppState {
+        let config = Arc::new(RwLock::new(config_val));
+        let restart_signal = Arc::new(Notify::new());
+        let state = Arc::new(AppState {
             dm: dm.clone(),
-            api_key: msg.api_key,
-            username: msg.username,
-            password,
+            api_key: Arc::new(RwLock::new(msg.api_key)),
+            username: Arc::new(RwLock::new(msg.username)),
+            password: Arc::new(RwLock::new(password)),
             config,
             restart_signal: restart_signal.clone(),
-        };
-
+        });
         let qbt_router = get_router(state.clone());
         let nadeko_router = create_nadeko_router(state.clone());
         let ext_router = Router::new()
             .route("/add-download", post(handle_add_download))
-            .layer(middleware::from_fn_with_state(
-                state.api_key.clone(),
-                check_api_key,
-            ))
+            .layer(middleware::from_fn_with_state(state.clone(), check_api_key))
             .with_state(state.clone());
         let router = Router::new()
             .nest("/api/v2", qbt_router)

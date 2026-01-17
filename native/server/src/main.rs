@@ -1,13 +1,13 @@
-use std::sync::Arc;
+use serde_json::Value;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::sync::{Notify, RwLock};
 use uuid::Uuid;
-use serde_json::Value;
 
 extern crate nadekodon_core as core;
 use core::downloader::DownloadManager;
-use core::utils::{types::DMSettings, logger};
-use core::utils::database::{start_database_manager};
+use core::utils::database::start_database_manager;
+use core::utils::{logger, types::DMSettings};
 
 use nadekodon_server::server;
 use nadekodon_server::server::nadeko_home;
@@ -21,15 +21,15 @@ async fn main() {
         .as_str()
         .map(|s| s.to_string())
         .unwrap_or_else(|| Uuid::new_v4().to_string());
-    
+
     // Helper to get string from config
     let get_str = |key: &str| initial_config[key].as_str().unwrap_or("").to_string();
-    
+
     let mut username = get_str("username");
     let mut password = get_str("password");
     let salt = get_str("salt");
 
-    // Decrypt password if it looks encrypted (contains "iv" and "data") 
+    // Decrypt password if it looks encrypted (contains "iv" and "data")
     // or just try to decrypt it regardless since our decrypt handles fallback
     if !password.is_empty() {
         password = if password.contains("\"iv\":") && password.contains("\"data\":") {
@@ -38,7 +38,7 @@ async fn main() {
                 Err(e) => {
                     logger::error(&format!("Failed to decrypt password: {}", e));
                     password
-                },
+                }
             }
         } else {
             password
@@ -70,7 +70,11 @@ async fn main() {
     };
 
     let dm = DownloadManager::new(client, settings).await;
-    dm.init_torrent_session(PathBuf::from(format!("{}/config/torrent_data", nadeko_home()))).await;
+    dm.init_torrent_session(PathBuf::from(format!(
+        "{}/config/torrent_data",
+        nadeko_home()
+    )))
+    .await;
     let dm_clone = dm.clone();
     tokio::spawn(async move {
         let shutdown_signal = Arc::new(Notify::new());
@@ -91,14 +95,14 @@ async fn main() {
     initial_config["password"] = Value::String(password.clone());
     server::save_config(&initial_config);
 
-    let state = server::AppState {
+    let state = Arc::new(server::AppState {
         config: Arc::new(RwLock::new(initial_config)),
-        api_key: api_key.clone(),
-        username: username.clone(),
-        password: password.clone(),
+        api_key: Arc::new(RwLock::new(api_key.clone())),
+        username: Arc::new(RwLock::new(username.clone())),
+        password: Arc::new(RwLock::new(password.clone())),
         dm,
         restart_signal: Arc::new(tokio::sync::Notify::new()),
-    };
+    });
 
     // Use the run_server_loop function from core
     nadekodon_server::server::run_server_loop(state).await;

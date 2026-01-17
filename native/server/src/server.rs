@@ -24,6 +24,8 @@ use std::env;
 use std::net::SocketAddr;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
+use tokio::sync::Notify;
+use tokio::sync::RwLock;
 use uuid::Uuid;
 
 static NADEKO_HOME: OnceLock<String> = OnceLock::new();
@@ -35,12 +37,13 @@ pub fn nadeko_home() -> &'static String {
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub dm: Arc<downloader::DownloadManager>,
-    pub api_key: String,
-    pub username: String,
-    pub password: String,
-    pub config: Arc<tokio::sync::RwLock<Value>>,
-    pub restart_signal: Arc<tokio::sync::Notify>,
+    pub api_key: Arc<RwLock<String>>,
+    pub username: Arc<RwLock<String>>,
+    pub password: Arc<RwLock<String>>,
+    pub config: Arc<RwLock<Value>>,
+    pub restart_signal: Arc<Notify>,
 }
+pub type SharedState = Arc<AppState>;
 
 pub fn get_config_path() -> String {
     format!("{}/config/config.json", nadeko_home())
@@ -83,11 +86,12 @@ async fn handle_status() -> impl IntoResponse {
 }
 
 pub async fn check_api_key(
-    State(api_key): State<String>,
+    State(state): State<SharedState>,
     jar: CookieJar,
     req: Request<Body>,
     next: Next,
 ) -> Result<impl IntoResponse, StatusCode> {
+    let api_key = state.api_key.read().await.clone();
     // Check header first
     if let Some(key) = req.headers().get("X-API-Key") {
         if key.to_str().map(|k| k == api_key).unwrap_or(false) {
@@ -113,20 +117,21 @@ struct LoginRequest {
 }
 
 async fn handle_login(
-    State(state): State<AppState>,
+    State(state): State<SharedState>,
     jar: CookieJar,
     Json(payload): Json<LoginRequest>,
 ) -> impl IntoResponse {
     let mut authorized = false;
     if let Some(cookie) = jar.get("nadeko_api_key") {
-        if cookie.value() == state.api_key {
+        if cookie.value() == state.api_key.read().await.clone() {
             authorized = true;
         }
     }
     if !authorized {
         authorized = match payload {
             LoginRequest { username, password } => {
-                username == state.username && password == state.password
+                username == state.username.read().await.clone()
+                    && password == state.password.read().await.clone()
             }
         };
     }
@@ -139,7 +144,7 @@ async fn handle_login(
             .into_response();
     }
 
-    let cookie = Cookie::build(("nadeko_api_key", state.api_key.clone()))
+    let cookie = Cookie::build(("nadeko_api_key", state.api_key.read().await.clone()))
         .path("/")
         .secure(true)
         .http_only(true)
@@ -151,14 +156,14 @@ async fn handle_login(
     (
         jar,
         Json(json!({
-            "api_key": state.api_key
+            "api_key": state.api_key.read().await.clone()
         })),
     )
         .into_response()
 }
 
 async fn handle_get_download_list(
-    State(state): State<AppState>,
+    State(state): State<SharedState>,
     Json(payload): Json<signals::GetDownloadList>,
 ) -> impl IntoResponse {
     match downloader::get_download_list_internal(&state.dm, payload).await {
@@ -168,7 +173,7 @@ async fn handle_get_download_list(
 }
 
 async fn handle_get_download_details(
-    State(state): State<AppState>,
+    State(state): State<SharedState>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
     match downloader::get_download_details_internal(&state.dm, &id).await {
@@ -178,7 +183,7 @@ async fn handle_get_download_details(
 }
 
 async fn handle_do_download(
-    State(state): State<AppState>,
+    State(state): State<SharedState>,
     Json(payload): Json<signals::DoDownload>,
 ) -> impl IntoResponse {
     match downloader::spawn_download_worker_internal(&state.dm, payload).await {
@@ -193,7 +198,7 @@ struct IdRequest {
 }
 
 async fn handle_pause_download(
-    State(state): State<AppState>,
+    State(state): State<SharedState>,
     Json(payload): Json<IdRequest>,
 ) -> impl IntoResponse {
     if let Ok(id) = Uuid::parse_str(&payload.id) {
@@ -205,7 +210,7 @@ async fn handle_pause_download(
 }
 
 async fn handle_resume_download(
-    State(state): State<AppState>,
+    State(state): State<SharedState>,
     Json(payload): Json<IdRequest>,
 ) -> impl IntoResponse {
     if let Ok(id) = Uuid::parse_str(&payload.id) {
@@ -223,7 +228,7 @@ struct UpdateUrlRequest {
 }
 
 async fn handle_update_url(
-    State(state): State<AppState>,
+    State(state): State<SharedState>,
     Json(payload): Json<UpdateUrlRequest>,
 ) -> impl IntoResponse {
     if let Ok(id) = Uuid::parse_str(&payload.id) {
@@ -235,7 +240,7 @@ async fn handle_update_url(
 }
 
 async fn handle_cancel_download(
-    State(state): State<AppState>,
+    State(state): State<SharedState>,
     Json(payload): Json<IdRequest>,
 ) -> impl IntoResponse {
     if let Ok(id) = Uuid::parse_str(&payload.id) {
@@ -253,7 +258,7 @@ struct DeleteDownloadRequest {
 }
 
 async fn handle_delete_download(
-    State(state): State<AppState>,
+    State(state): State<SharedState>,
     Json(payload): Json<DeleteDownloadRequest>,
 ) -> impl IntoResponse {
     if let Ok(id) = Uuid::parse_str(&payload.id) {
@@ -264,13 +269,13 @@ async fn handle_delete_download(
     }
 }
 
-async fn handle_restart(State(state): State<AppState>) -> impl IntoResponse {
+async fn handle_restart(State(state): State<SharedState>) -> impl IntoResponse {
     state.restart_signal.notify_one();
     StatusCode::OK
 }
 
 async fn handle_query_url(
-    State(state): State<AppState>,
+    State(state): State<SharedState>,
     Json(payload): Json<signals::QueryUrl>,
 ) -> impl IntoResponse {
     match downloader::query_url_info_internal(state.dm.client.clone(), payload).await {
@@ -330,7 +335,7 @@ async fn handle_get_deps_version() -> impl IntoResponse {
 }
 
 async fn handle_generate_api(
-    State(mut state): State<AppState>,
+    State(state): State<SharedState>,
     jar: CookieJar,
 ) -> impl IntoResponse {
     let key = Uuid::new_v4().to_string();
@@ -346,28 +351,28 @@ async fn handle_generate_api(
         let mut cfg = state.config.write().await;
         cfg["server_api_key"] = Value::String(key.clone());
     }
-    state.api_key = key;
+    *state.api_key.write().await = key;
     (
         jar,
         Json(json!({
-            "api_key": state.api_key
+            "api_key": state.api_key.read().await.clone()
         })),
     )
         .into_response()
 }
 
-async fn handle_get_settings(State(state): State<AppState>) -> impl IntoResponse {
+async fn handle_get_settings(State(state): State<SharedState>) -> impl IntoResponse {
     let config = state.config.read().await.clone();
     Json(config)
 }
 
 async fn handle_update_settings(
-    State(mut state): State<AppState>,
+    State(state): State<SharedState>,
     Json(new_config): Json<Value>,
 ) -> impl IntoResponse {
-    state.api_key = new_config["server_api_key"].clone().to_string();
-    state.username = new_config["username"].clone().to_string();
-    state.password = new_config["password"].clone().to_string();
+    *state.api_key.write().await = new_config["server_api_key"].clone().to_string();
+    *state.username.write().await = new_config["username"].clone().to_string();
+    *state.password.write().await = new_config["password"].clone().to_string();
     let dm_settings = DMSettings {
         speed_limit: new_config["speed_limit"].as_u64().unwrap_or(0),
         concurrency_limit: new_config["concurrency_limit"].as_u64().unwrap_or(3) as u8,
@@ -387,7 +392,7 @@ async fn handle_update_settings(
     StatusCode::OK
 }
 
-pub fn create_nadeko_router(state: AppState) -> Router<AppState> {
+pub fn create_nadeko_router(state: SharedState) -> Router<SharedState> {
     let protected_routes = Router::new()
         .route("/status", get(handle_status))
         .route("/list", post(handle_get_download_list))
@@ -410,10 +415,7 @@ pub fn create_nadeko_router(state: AppState) -> Router<AppState> {
         .route("/generate-salt", get(handle_generate_salt))
         .route("/generate-api", get(handle_generate_api))
         .route("/deps-version", get(handle_get_deps_version))
-        .layer(middleware::from_fn_with_state(
-            state.api_key.clone(),
-            check_api_key,
-        ));
+        .layer(middleware::from_fn_with_state(state.clone(), check_api_key));
 
     let public_routes = Router::new().route("/login", post(handle_login));
 
@@ -423,7 +425,7 @@ pub fn create_nadeko_router(state: AppState) -> Router<AppState> {
         .with_state(state)
 }
 
-pub fn create_router(state: AppState) -> Router {
+pub fn create_router(state: SharedState) -> Router {
     let qbt_router = crate::qbittorrent::get_router(state.clone());
     let nadeko_router = create_nadeko_router(state.clone());
 
@@ -451,7 +453,7 @@ pub async fn run_server(router: Router, port: u16, restart_signal: Arc<tokio::sy
     }
 }
 
-pub async fn run_server_loop(state: AppState) {
+pub async fn run_server_loop(state: SharedState) {
     loop {
         let port = {
             let config = state.config.read().await.clone();

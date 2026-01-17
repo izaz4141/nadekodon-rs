@@ -1,6 +1,6 @@
-use crate::server::AppState;
+use crate::server::SharedState;
 use axum::{
-    Json, Router,
+    Form, Json, Router,
     extract::{Multipart, Query, State},
     http::StatusCode,
     response::IntoResponse,
@@ -15,8 +15,8 @@ use std::path::PathBuf;
 
 #[derive(Deserialize)]
 struct AuthQuery {
-    username: Option<String>,
-    password: Option<String>,
+    username: String,
+    password: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -38,7 +38,7 @@ struct DeleteTorrentsQuery {
     delete_files: Option<bool>,
 }
 
-pub fn get_router(state: AppState) -> Router<AppState> {
+pub fn get_router(state: SharedState) -> Router<SharedState> {
     let auth_router = Router::new()
         .route("/app/version", get(app_version))
         .route("/app/webapiVersion", get(webapi_version))
@@ -53,14 +53,14 @@ pub fn get_router(state: AppState) -> Router<AppState> {
 }
 
 async fn login(
-    State(state): State<AppState>,
+    State(state): State<SharedState>,
     jar: CookieJar,
-    Query(auth): Query<AuthQuery>,
+    Form(auth): Form<AuthQuery>,
 ) -> impl IntoResponse {
-    if auth.username.as_deref() == Some(&state.username)
-        && auth.password.as_deref() == Some(&state.password)
+    if auth.username == state.username.read().await.clone()
+        && auth.password == state.password.read().await.clone()
     {
-        let cookie = Cookie::build(("SID", state.api_key.clone()))
+        let cookie = Cookie::build(("SID", state.api_key.read().await.clone()))
             .path("/")
             .http_only(true)
             .build();
@@ -71,13 +71,13 @@ async fn login(
 }
 
 async fn auth_middleware(
-    State(state): State<AppState>,
+    State(state): State<SharedState>,
     jar: CookieJar,
     req: axum::http::Request<axum::body::Body>,
     next: axum::middleware::Next,
 ) -> impl IntoResponse {
     if let Some(cookie) = jar.get("SID") {
-        if cookie.value() == state.api_key {
+        if cookie.value() == state.api_key.read().await.clone() {
             return next.run(req).await;
         }
     }
@@ -120,7 +120,10 @@ struct TorrentInfo {
     upspeed: u64,
 }
 
-async fn add_torrent(State(state): State<AppState>, mut multipart: Multipart) -> impl IntoResponse {
+async fn add_torrent(
+    State(state): State<SharedState>,
+    mut multipart: Multipart,
+) -> impl IntoResponse {
     let mut urls = Vec::new();
     let mut torrent_files = Vec::new();
     let mut savepath = None;
@@ -242,7 +245,7 @@ async fn add_torrent(State(state): State<AppState>, mut multipart: Multipart) ->
 }
 
 async fn torrents_info(
-    State(state): State<AppState>,
+    State(state): State<SharedState>,
     Query(query): Query<TorrentsQuery>,
 ) -> impl IntoResponse {
     let downloads = state.dm.list_all().await.unwrap_or_default();
@@ -474,7 +477,7 @@ async fn torrents_info(
 }
 
 async fn delete_torrents(
-    State(state): State<AppState>,
+    State(state): State<SharedState>,
     Query(query): Query<DeleteTorrentsQuery>,
 ) -> impl IntoResponse {
     let hashes: Vec<&str> = query.hashes.split('|').collect();
