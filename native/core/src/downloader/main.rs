@@ -4,7 +4,7 @@ use futures::future::join_all;
 use indexmap::IndexMap;
 use reqwest::header::{ACCEPT_RANGES, CONTENT_LENGTH, RANGE};
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     path::PathBuf,
     sync::{
         Arc,
@@ -21,11 +21,13 @@ use tokio::{
 };
 use uuid::Uuid;
 
+use crate::app_context::AppContext;
 use crate::utils::logger;
 use crate::utils::{
     helper::calc_speed,
     types::{
-        DMSettings, DownloadInfo, DownloadState, DownloadType, HeadData, PartInfo, WorkerEvent,
+        CategoryInfo, DMSettings, DownloadInfo, DownloadState, DownloadType, HeadData, PartInfo,
+        WorkerEvent,
     },
     url::{is_hls_url, is_magnet_url, is_torrent_file},
 };
@@ -57,6 +59,7 @@ pub struct DownloadWorker {
     pub event_tx: mpsc::Sender<WorkerEvent>,
     cookie: Option<String>,
     user_agent: Option<String>,
+    dm: std::sync::Weak<DownloadManager>,
 }
 
 impl DownloadWorker {
@@ -72,9 +75,16 @@ impl DownloadWorker {
         user_agent: Option<String>,
         referer: Option<String>,
         category: Option<String>,
-    ) -> Arc<Self> {
+        dm: std::sync::Weak<DownloadManager>,
+    ) -> Result<Arc<Self>, &'static str> {
         let speed_limit = settings.read().await.speed_limit;
-        Arc::new(Self {
+
+        if let Some(ref cat) = category {
+            let dm_ref = dm.upgrade().ok_or("DownloadManager dropped")?;
+            dm_ref.create_category(cat.clone(), None).await?;
+        }
+
+        let worker = Arc::new(Self {
             info: Mutex::new(DownloadInfo {
                 id,
                 url: url.clone(),
@@ -98,6 +108,8 @@ impl DownloadWorker {
                 torrent_hash: None,
                 referer,
                 category,
+                seeding_ratio_override: None,
+                seeding_time_override: None,
             }),
             client: client,
             threads: settings.clone().read().await.download_threads as u64,
@@ -117,7 +129,10 @@ impl DownloadWorker {
             torrent_session,
             cookie,
             user_agent,
-        })
+            dm,
+        });
+
+        Ok(worker)
     }
 
     pub async fn from_info(
@@ -126,8 +141,15 @@ impl DownloadWorker {
         settings: Arc<RwLock<DMSettings>>,
         event_tx: mpsc::Sender<WorkerEvent>,
         torrent_session: Arc<tokio::sync::RwLock<Option<Arc<Session>>>>,
-    ) -> Arc<Self> {
+        dm: std::sync::Weak<DownloadManager>,
+    ) -> Result<Arc<Self>, &'static str> {
         let speed_limit = settings.read().await.speed_limit;
+
+        if let Some(ref cat) = info.category {
+            let dm_ref = dm.upgrade().ok_or("DownloadManager dropped")?;
+            dm_ref.create_category(cat.clone(), None).await?;
+        }
+
         let downloaded = info.downloaded;
         let uploaded = info.uploaded;
         let mut parts_progress = Vec::new();
@@ -146,7 +168,7 @@ impl DownloadWorker {
 
         let is_paused = matches!(safe_info.state, DownloadState::Paused);
 
-        Arc::new(Self {
+        let worker = Arc::new(Self {
             info: Mutex::new(safe_info.clone()),
             client: client,
             threads: settings.clone().read().await.download_threads as u64,
@@ -166,7 +188,10 @@ impl DownloadWorker {
             torrent_session,
             cookie: None,
             user_agent: None,
-        })
+            dm,
+        });
+
+        Ok(worker)
     }
 
     pub async fn start(self: &Arc<Self>) -> Result<()> {
@@ -1146,8 +1171,12 @@ impl DownloadWorker {
 
             // Check limits
             let settings = self.settings.read().await;
-            let ratio_limit = settings.seeding_ratio;
-            let time_limit = settings.seeding_time;
+            let info = self.info.lock().await;
+            let ratio_limit = info
+                .seeding_ratio_override
+                .unwrap_or(settings.seeding_ratio);
+            let time_limit = info.seeding_time_override.unwrap_or(settings.seeding_time);
+            drop(info);
 
             let ratio = if downloaded > 0 {
                 uploaded as f32 / downloaded as f32
@@ -1388,6 +1417,32 @@ impl DownloadWorker {
         info.url = new_url;
         Ok(())
     }
+
+    pub async fn set_category(&self, category: String) -> Result<()> {
+        let dm_ref = self
+            .dm
+            .upgrade()
+            .ok_or_else(|| anyhow::anyhow!("DownloadManager dropped"))?;
+        dm_ref
+            .create_category(category.clone(), None)
+            .await
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+        let mut info = self.info.lock().await;
+        info.category = Some(category);
+        Ok(())
+    }
+
+    pub async fn clear_category(&self) {
+        let mut info = self.info.lock().await;
+        info.category = None;
+    }
+
+    pub async fn set_seeding_limits(&self, ratio: Option<f32>, time: Option<u64>) {
+        let mut info = self.info.lock().await;
+        info.seeding_ratio_override = ratio;
+        info.seeding_time_override = time;
+    }
 }
 
 impl std::fmt::Debug for DownloadWorker {
@@ -1415,13 +1470,18 @@ pub struct DownloadManager {
     pub broadcast_tx: broadcast::Sender<WorkerEvent>,
     pending_deletions: Arc<Mutex<Vec<Uuid>>>,
     pub torrent_session: Arc<tokio::sync::RwLock<Option<Arc<Session>>>>,
+    pub categories: Arc<RwLock<HashMap<String, CategoryInfo>>>,
+    context: std::sync::Weak<AppContext>,
 }
 
 impl DownloadManager {
-    pub async fn new(client: reqwest::Client, settings: DMSettings) -> Arc<Self> {
+    pub async fn new(
+        client: reqwest::Client,
+        settings: DMSettings,
+        context: std::sync::Weak<AppContext>,
+    ) -> Arc<Self> {
         let (tx, rx) = mpsc::channel::<WorkerEvent>(64);
 
-        // Initialize torrent session as None
         let torrent_session = Arc::new(tokio::sync::RwLock::new(None));
 
         let (broadcast_tx, _) = broadcast::channel(64);
@@ -1435,6 +1495,8 @@ impl DownloadManager {
             broadcast_tx,
             pending_deletions: Arc::new(Mutex::new(Vec::new())),
             torrent_session,
+            categories: Arc::new(RwLock::new(HashMap::new())),
+            context,
         });
 
         let dm_clone = dm.clone();
@@ -1580,7 +1642,7 @@ impl DownloadManager {
     }
 
     pub async fn add_download(
-        &self,
+        self: &Arc<Self>,
         url: String,
         dest: PathBuf,
         cookie: Option<String>,
@@ -1601,8 +1663,10 @@ impl DownloadManager {
             user_agent,
             referer,
             category,
+            std::sync::Arc::downgrade(self),
         )
-        .await;
+        .await
+        .map_err(|e| anyhow::anyhow!("{}", e))?;
         self.workers.lock().await.insert(id, worker);
         self.process_queue().await;
         Ok(id)
@@ -1627,21 +1691,29 @@ impl DownloadManager {
         Ok(())
     }
 
-    pub async fn load_snapshot(&self, downloads: Vec<DownloadInfo>) {
+    pub async fn load_snapshot(self: &Arc<Self>, downloads: Vec<DownloadInfo>) {
         let mut workers = self.workers.lock().await;
 
         for info in downloads {
             let id = info.id;
-            let worker = DownloadWorker::from_info(
+            let result = DownloadWorker::from_info(
                 info,
                 self.client.clone(),
                 self.settings.clone(),
                 self.sender.clone(),
                 self.torrent_session.clone(),
+                std::sync::Arc::downgrade(self),
             )
             .await;
 
-            workers.insert(id, worker);
+            match result {
+                Ok(worker) => {
+                    workers.insert(id, worker);
+                }
+                Err(e) => {
+                    logger::error(&format!("Failed to create worker for {}: {}", id, e));
+                }
+            }
         }
     }
 
@@ -1740,6 +1812,40 @@ impl DownloadManager {
                 self.process_queue().await;
             }
         }
+        Ok(())
+    }
+
+    pub async fn get_worker(&self, id: Uuid) -> Option<Arc<DownloadWorker>> {
+        let workers = self.workers.lock().await;
+        workers.get(&id).cloned()
+    }
+
+    pub async fn create_category(
+        &self,
+        name: String,
+        save_path: Option<PathBuf>,
+    ) -> Result<(), &'static str> {
+        if name.is_empty() {
+            return Err("Category name is empty");
+        }
+        if name.contains('|') || name.contains('/') {
+            return Err("Invalid category name");
+        }
+
+        let mut categories = self.categories.write().await;
+        if categories.contains_key(&name) {
+            return Err("Category already exists");
+        }
+
+        categories.insert(name.clone(), CategoryInfo { name, save_path });
+
+        if let Some(ctx) = self.context.upgrade() {
+            let db = ctx.db().await;
+            tokio::spawn(async move {
+                db.save_categories().await;
+            });
+        }
+
         Ok(())
     }
 
@@ -1856,6 +1962,25 @@ impl DownloadManager {
         Ok(out)
     }
 
+    pub async fn list_torrents(&self, hashes: Option<Vec<&str>>) -> Vec<DownloadInfo> {
+        let map = self.workers.lock().await;
+        let mut out = Vec::new();
+        for w in map.values() {
+            let info = w.info().await;
+            if info.torrent_hash.is_some() {
+                if let Some(filter_hashes) = &hashes {
+                    if let Some(ref h) = info.torrent_hash {
+                        if !filter_hashes.contains(&h.as_str()) {
+                            continue;
+                        }
+                    }
+                }
+                out.push(info);
+            }
+        }
+        out
+    }
+
     pub async fn sync_active_workers(&self) {
         let active_ids = {
             let active = self.active.lock().await;
@@ -1956,6 +2081,13 @@ impl DownloadManager {
         }
 
         Ok(())
+    }
+
+    pub async fn shutdown(&self) {
+        let session_guard = self.torrent_session.write().await;
+        if let Some(session) = session_guard.as_ref() {
+            let _ = session.stop().await;
+        }
     }
 }
 

@@ -1,4 +1,5 @@
 extern crate nadekodon_core as core;
+use core::app_context::AppContext;
 use core::downloader;
 use core::signals;
 use core::utils;
@@ -22,6 +23,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use std::env;
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use tokio::sync::Notify;
@@ -36,12 +38,14 @@ pub fn nadeko_home() -> &'static String {
 
 #[derive(Debug, Clone)]
 pub struct AppState {
-    pub dm: Arc<downloader::DownloadManager>,
+    pub context: Arc<AppContext>,
     pub api_key: Arc<RwLock<String>>,
     pub username: Arc<RwLock<String>>,
     pub password: Arc<RwLock<String>>,
     pub config: Arc<RwLock<Value>>,
     pub restart_signal: Arc<Notify>,
+    pub shutdown_signal: Arc<Notify>,
+    pub shutdown_requested: Arc<AtomicBool>,
 }
 pub type SharedState = Arc<AppState>;
 
@@ -180,7 +184,7 @@ async fn handle_get_download_list(
     State(state): State<SharedState>,
     Json(payload): Json<signals::GetDownloadList>,
 ) -> impl IntoResponse {
-    match downloader::get_download_list_internal(&state.dm, payload).await {
+    match downloader::get_download_list_internal(&state.context.dm().await, payload).await {
         Ok(list) => Json(list).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
@@ -190,7 +194,7 @@ async fn handle_get_download_details(
     State(state): State<SharedState>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    match downloader::get_download_details_internal(&state.dm, &id).await {
+    match downloader::get_download_details_internal(&state.context.dm().await, &id).await {
         Ok(Some(details)) => Json(details).into_response(),
         _ => StatusCode::NOT_FOUND.into_response(),
     }
@@ -200,7 +204,7 @@ async fn handle_do_download(
     State(state): State<SharedState>,
     Json(payload): Json<signals::DoDownload>,
 ) -> impl IntoResponse {
-    match downloader::spawn_download_worker_internal(&state.dm, payload).await {
+    match downloader::spawn_download_worker_internal(&state.context.dm().await, payload).await {
         Ok(_) => (StatusCode::OK, "Download added".to_string()),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }
@@ -216,7 +220,7 @@ async fn handle_pause_download(
     Json(payload): Json<IdRequest>,
 ) -> impl IntoResponse {
     if let Ok(id) = Uuid::parse_str(&payload.id) {
-        let _ = state.dm.pause(id).await;
+        let _ = state.context.dm().await.pause(id).await;
         StatusCode::OK
     } else {
         StatusCode::BAD_REQUEST
@@ -228,7 +232,7 @@ async fn handle_resume_download(
     Json(payload): Json<IdRequest>,
 ) -> impl IntoResponse {
     if let Ok(id) = Uuid::parse_str(&payload.id) {
-        let _ = state.dm.resume(id).await;
+        let _ = state.context.dm().await.resume(id).await;
         StatusCode::OK
     } else {
         StatusCode::BAD_REQUEST
@@ -246,7 +250,12 @@ async fn handle_update_url(
     Json(payload): Json<UpdateUrlRequest>,
 ) -> impl IntoResponse {
     if let Ok(id) = Uuid::parse_str(&payload.id) {
-        let _ = state.dm.update_download_url(id, payload.new_url).await;
+        let _ = state
+            .context
+            .dm()
+            .await
+            .update_download_url(id, payload.new_url)
+            .await;
         StatusCode::OK
     } else {
         StatusCode::BAD_REQUEST
@@ -258,7 +267,7 @@ async fn handle_cancel_download(
     Json(payload): Json<IdRequest>,
 ) -> impl IntoResponse {
     if let Ok(id) = Uuid::parse_str(&payload.id) {
-        let _ = state.dm.cancel(id).await;
+        let _ = state.context.dm().await.cancel(id).await;
         StatusCode::OK
     } else {
         StatusCode::BAD_REQUEST
@@ -276,7 +285,12 @@ async fn handle_delete_download(
     Json(payload): Json<DeleteDownloadRequest>,
 ) -> impl IntoResponse {
     if let Ok(id) = Uuid::parse_str(&payload.id) {
-        let _ = state.dm.delete_worker(id, payload.delete_file).await;
+        let _ = state
+            .context
+            .dm()
+            .await
+            .delete_worker(id, payload.delete_file)
+            .await;
         StatusCode::OK
     } else {
         StatusCode::BAD_REQUEST
@@ -292,7 +306,9 @@ async fn handle_query_url(
     State(state): State<SharedState>,
     Json(payload): Json<signals::QueryUrl>,
 ) -> impl IntoResponse {
-    match downloader::query_url_info_internal(state.dm.client.clone(), payload).await {
+    match downloader::query_url_info_internal(state.context.dm().await.client.clone(), payload)
+        .await
+    {
         Ok(info) => Json(info).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
@@ -380,7 +396,7 @@ async fn handle_update_settings(
         seeding_time: new_config["seeding_time"].as_u64().unwrap_or(0),
         download_dir: format!("{}/downloads", nadeko_home()),
     };
-    if let Err(e) = state.dm.update_settings(dm_settings).await {
+    if let Err(e) = state.context.dm().await.update_settings(dm_settings).await {
         logger::error(&format!("Error in updating DMSettings: {:?}", e));
     }
     save_config(&new_config);
@@ -433,18 +449,24 @@ pub fn create_router(state: SharedState) -> Router {
         .with_state(state)
 }
 
-pub async fn run_server(router: Router, port: u16, restart_signal: Arc<tokio::sync::Notify>) {
+pub async fn run_server(
+    router: Router,
+    port: u16,
+    restart_signal: Arc<Notify>,
+    shutdown_signal: Arc<Notify>,
+) {
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     utils::logger::debug(&format!("HTTP server listening on {}", addr));
     match tokio::net::TcpListener::bind(addr).await {
         Ok(listener) => {
-            if let Err(e) = axum::serve(listener, router)
-                .with_graceful_shutdown(async move {
-                    restart_signal.notified().await;
-                })
-                .await
-            {
-                utils::logger::error(&format!("HTTP server error: {}", e));
+            tokio::select! {
+                _ = axum::serve(listener, router)
+                    .with_graceful_shutdown(async move {
+                        restart_signal.notified().await;
+                    }) => {}
+                _ = shutdown_signal.notified() => {
+                    utils::logger::debug("Shutdown signal received, stopping HTTP server...");
+                }
             }
         }
         Err(e) => utils::logger::error(&format!("Failed to bind HTTP server: {}", e)),
@@ -458,9 +480,16 @@ pub async fn run_server_loop(state: SharedState) {
             config["server_port"].as_u64().unwrap_or(8080) as u16
         };
         let restart_signal = state.restart_signal.clone();
+        let shutdown_signal = state.shutdown_signal.clone();
 
         let router = create_router(state.clone());
-        run_server(router, port, restart_signal).await;
+        run_server(router, port, restart_signal, shutdown_signal).await;
+
+        if state.shutdown_requested.load(Ordering::SeqCst) {
+            utils::logger::debug("Shutting down application...");
+            state.context.shutdown().await;
+            break;
+        }
 
         utils::logger::debug("Restarting HTTP server...");
         tokio::time::sleep(Duration::from_secs(1)).await;

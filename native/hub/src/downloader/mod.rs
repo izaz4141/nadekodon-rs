@@ -110,6 +110,8 @@ async fn handle_merge_success(
         torrent_hash: None,
         referer,
         category: None,
+        seeding_ratio_override: None,
+        seeding_time_override: None,
     };
 
     manager.load_snapshot(vec![final_info]).await;

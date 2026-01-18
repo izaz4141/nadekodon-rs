@@ -1,12 +1,12 @@
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::{Notify, RwLock};
+use std::sync::atomic::{AtomicBool, Ordering};
+use tokio::sync::RwLock;
 use uuid::Uuid;
 
 extern crate nadekodon_core as core;
-use core::downloader::DownloadManager;
-use core::utils::database::start_database_manager;
+use core::app_context::AppContext;
 use core::utils::security;
 use core::utils::{logger, types::DMSettings};
 
@@ -23,14 +23,12 @@ async fn main() {
         .map(|s| s.to_string())
         .unwrap_or_else(|| Uuid::new_v4().to_string());
 
-    // Helper to get string from config
     let get_str = |key: &str| initial_config[key].as_str().unwrap_or("").to_string();
 
     let mut username = get_str("username");
     let mut password = get_str("password");
     let salt = get_str("salt");
 
-    // Environment variables override
     if let Ok(env_user) = std::env::var("NADEKO_USERNAME") {
         username = env_user;
     }
@@ -68,18 +66,27 @@ async fn main() {
         download_dir: format!("{}/downloads", nadeko_home()),
     };
 
-    let dm = DownloadManager::new(client, settings).await;
+    let shutdown_signal = Arc::new(tokio::sync::Notify::new());
+    let db_done_signal = Arc::new(tokio::sync::Notify::new());
+
+    let context = AppContext::new(client, settings, shutdown_signal).await;
+    let dm = context.dm().await;
     dm.init_torrent_session(PathBuf::from(format!(
         "{}/config/torrent_data",
         nadeko_home()
     )))
     .await;
-    let dm_clone = dm.clone();
+
+    let db_path = PathBuf::from(format!("{}/config/nadekodon.db", nadeko_home()));
+
+    let context_clone = context.clone();
     tokio::spawn(async move {
-        let shutdown_signal = Arc::new(Notify::new());
-        let db_done_signal = Arc::new(Notify::new());
-        let db_path = PathBuf::from(format!("{}/config/nadekodon.db", nadeko_home()));
-        start_database_manager(dm_clone, shutdown_signal, db_done_signal, db_path).await;
+        if let Err(e) = context_clone
+            .start_database_manager(db_path, db_done_signal)
+            .await
+        {
+            logger::error(&format!("Failed to start database manager: {:?}", e));
+        }
     });
 
     let port: u16 = std::env::var("NADEKO_SERVER_PORT")
@@ -111,10 +118,19 @@ async fn main() {
         api_key: Arc::new(RwLock::new(api_key)),
         username: Arc::new(RwLock::new(username)),
         password: Arc::new(RwLock::new(password)),
-        dm,
+        context,
         restart_signal: Arc::new(tokio::sync::Notify::new()),
+        shutdown_signal: Arc::new(tokio::sync::Notify::new()),
+        shutdown_requested: Arc::new(AtomicBool::new(false)),
     });
 
-    // Use the run_server_loop function from core
+    let state_clone = state.clone();
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c().await.ok();
+        logger::debug("Shutdown signal received...");
+        state_clone.shutdown_signal.notify_waiters();
+        state_clone.shutdown_requested.store(true, Ordering::SeqCst);
+    });
+
     nadekodon_server::server::run_server_loop(state).await;
 }

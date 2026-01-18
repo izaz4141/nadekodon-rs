@@ -10,7 +10,7 @@ use axum_extra::extract::cookie::{Cookie, CookieJar};
 use nadekodon_core::utils::types::DownloadState;
 use nadekodon_core::utils::{helper, logger, security};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 #[derive(Deserialize)]
@@ -23,11 +23,16 @@ pub fn get_router(state: SharedState) -> Router<SharedState> {
     let auth_router = Router::new()
         .route("/app/version", get(app_version))
         .route("/app/webapiVersion", get(webapi_version))
+        .route("/app/preferences", get(preferences))
         .route("/torrents/add", post(torrents_add))
         .route("/torrents/info", get(torrents_info))
         .route("/torrents/properties", get(torrents_properties))
         .route("/torrents/files", get(torrents_files))
         .route("/torrents/delete", post(torrents_delete))
+        .route("/torrents/setCategory", post(torrents_set_category))
+        .route("/torrents/createCategory", post(torrents_create_category))
+        .route("/torrents/categories", get(torrents_categories))
+        .route("/torrents/setShareLimits", post(torrents_set_share_limits))
         .layer(axum::middleware::from_fn_with_state(state, auth_middleware));
 
     Router::new()
@@ -78,6 +83,309 @@ async fn webapi_version() -> &'static str {
     "2.8.3"
 }
 
+#[derive(Serialize, Clone)]
+pub struct PreferencesResponse {
+    pub locale: String,
+    pub create_subfolder_enabled: bool,
+    pub start_paused_enabled: bool,
+    pub auto_delete_mode: i32,
+    pub preallocate_all: bool,
+    pub incomplete_files_ext: bool,
+    pub auto_tmm_enabled: bool,
+    pub torrent_changed_tmm_enabled: bool,
+    pub save_path_changed_tmm_enabled: bool,
+    pub category_changed_tmm_enabled: bool,
+    pub save_path: String,
+    pub temp_path_enabled: bool,
+    pub temp_path: String,
+    pub scan_dirs: HashMap<String, String>,
+    pub export_dir: String,
+    pub export_dir_fin: String,
+    pub mail_notification_enabled: bool,
+    pub mail_notification_sender: String,
+    pub mail_notification_email: String,
+    pub mail_notification_smtp: String,
+    pub mail_notification_ssl_enabled: bool,
+    pub mail_notification_auth_enabled: bool,
+    pub mail_notification_username: String,
+    pub mail_notification_password: String,
+    pub autorun_enabled: bool,
+    pub autorun_program: String,
+    pub queueing_enabled: bool,
+    pub max_active_downloads: i32,
+    pub max_active_torrents: i32,
+    pub max_active_uploads: i32,
+    pub dont_count_slow_torrents: bool,
+    pub slow_torrent_dl_rate_threshold: i32,
+    pub slow_torrent_ul_rate_threshold: i32,
+    pub slow_torrent_inactive_timer: i32,
+    pub max_ratio_enabled: bool,
+    pub max_ratio: f64,
+    pub max_ratio_act: i32,
+    pub listen_port: i32,
+    pub upnp: bool,
+    pub random_port: bool,
+    pub dl_limit: i32,
+    pub up_limit: i32,
+    pub max_connec: i32,
+    pub max_connec_per_torrent: i32,
+    pub max_uploads: i32,
+    pub max_uploads_per_torrent: i32,
+    pub stop_tracker_timeout: i32,
+    pub enable_piece_extent_affinity: bool,
+    pub bittorrent_protocol: i32,
+    pub limit_utp_rate: bool,
+    pub limit_tcp_overhead: bool,
+    pub limit_lan_peers: bool,
+    pub alt_dl_limit: i32,
+    pub alt_up_limit: i32,
+    pub scheduler_enabled: bool,
+    pub schedule_from_hour: i32,
+    pub schedule_from_min: i32,
+    pub schedule_to_hour: i32,
+    pub schedule_to_min: i32,
+    pub scheduler_days: i32,
+    pub dht: bool,
+    pub pex: bool,
+    pub lsd: bool,
+    pub encryption: i32,
+    pub anonymous_mode: bool,
+    pub proxy_type: i32,
+    pub proxy_ip: String,
+    pub proxy_port: i32,
+    pub proxy_peer_connections: bool,
+    pub proxy_auth_enabled: bool,
+    pub proxy_username: String,
+    pub proxy_password: String,
+    pub proxy_torrents_only: bool,
+    pub ip_filter_enabled: bool,
+    pub ip_filter_path: String,
+    pub ip_filter_trackers: bool,
+    pub web_ui_domain_list: String,
+    pub web_ui_address: String,
+    pub web_ui_port: i32,
+    pub web_ui_upnp: bool,
+    pub web_ui_username: String,
+    pub web_ui_csrf_protection_enabled: bool,
+    pub web_ui_clickjacking_protection_enabled: bool,
+    pub web_ui_secure_cookie_enabled: bool,
+    pub web_ui_max_auth_fail_count: i32,
+    pub web_ui_ban_duration: i32,
+    pub web_ui_session_timeout: i32,
+    pub web_ui_host_header_validation_enabled: bool,
+    pub bypass_local_auth: bool,
+    pub bypass_auth_subnet_whitelist_enabled: bool,
+    pub bypass_auth_subnet_whitelist: String,
+    pub alternative_webui_enabled: bool,
+    pub alternative_webui_path: String,
+    pub use_https: bool,
+    pub ssl_key: String,
+    pub ssl_cert: String,
+    pub web_ui_https_key_path: String,
+    pub web_ui_https_cert_path: String,
+    pub dyndns_enabled: bool,
+    pub dyndns_service: i32,
+    pub dyndns_username: String,
+    pub dyndns_password: String,
+    pub dyndns_domain: String,
+    pub rss_refresh_interval: i32,
+    pub rss_max_articles_per_feed: i32,
+    pub rss_processing_enabled: bool,
+    pub rss_auto_downloading_enabled: bool,
+    pub rss_download_repack_proper_episodes: bool,
+    pub rss_smart_episode_filters: String,
+    pub add_trackers_enabled: bool,
+    pub add_trackers: String,
+    pub web_ui_use_custom_http_headers_enabled: bool,
+    pub web_ui_custom_http_headers: String,
+    pub max_seeding_time_enabled: bool,
+    pub max_seeding_time: i32,
+    pub announce_ip: String,
+    pub announce_to_all_tiers: bool,
+    pub announce_to_all_trackers: bool,
+    pub async_io_threads: i32,
+    #[serde(rename = "banned_IPs")]
+    pub banned_ips: String,
+    pub checking_memory_use: i32,
+    pub current_interface_address: String,
+    pub current_network_interface: String,
+    pub disk_cache: i32,
+    pub disk_cache_ttl: i32,
+    pub embedded_tracker_port: i32,
+    pub enable_coalesce_read_write: bool,
+    pub enable_embedded_tracker: bool,
+    pub enable_multi_connections_from_same_ip: bool,
+    pub enable_os_cache: bool,
+    pub enable_upload_suggestions: bool,
+    pub file_pool_size: i32,
+    pub outgoing_ports_max: i32,
+    pub outgoing_ports_min: i32,
+    pub recheck_completed_torrents: bool,
+    pub resolve_peer_countries: bool,
+    pub save_resume_data_interval: i32,
+    pub send_buffer_low_watermark: i32,
+    pub send_buffer_watermark: i32,
+    pub send_buffer_watermark_factor: i32,
+    pub socket_backlog_size: i32,
+    pub upload_choking_algorithm: i32,
+    pub upload_slots_behavior: i32,
+    pub upnp_lease_duration: i32,
+    pub utp_tcp_mixed_mode: i32,
+}
+
+async fn preferences(State(state): State<SharedState>) -> Json<PreferencesResponse> {
+    let dm = state.context.dm().await;
+    let settings = dm.settings.read().await;
+
+    Json(PreferencesResponse {
+        locale: "en_GB".to_string(),
+        create_subfolder_enabled: true,
+        start_paused_enabled: false,
+        auto_delete_mode: 0,
+        preallocate_all: false,
+        incomplete_files_ext: false,
+        auto_tmm_enabled: false,
+        torrent_changed_tmm_enabled: false,
+        save_path_changed_tmm_enabled: false,
+        category_changed_tmm_enabled: false,
+        save_path: settings.download_dir.clone(),
+        temp_path_enabled: false,
+        temp_path: String::new(),
+        scan_dirs: HashMap::new(),
+        export_dir: String::new(),
+        export_dir_fin: String::new(),
+        mail_notification_enabled: false,
+        mail_notification_sender: String::new(),
+        mail_notification_email: String::new(),
+        mail_notification_smtp: String::new(),
+        mail_notification_ssl_enabled: false,
+        mail_notification_auth_enabled: false,
+        mail_notification_username: String::new(),
+        mail_notification_password: String::new(),
+        autorun_enabled: false,
+        autorun_program: String::new(),
+        queueing_enabled: true,
+        max_active_downloads: settings.concurrency_limit as i32,
+        max_active_torrents: settings.concurrency_limit as i32,
+        max_active_uploads: settings.concurrency_limit as i32,
+        dont_count_slow_torrents: false,
+        slow_torrent_dl_rate_threshold: 0,
+        slow_torrent_ul_rate_threshold: 0,
+        slow_torrent_inactive_timer: 0,
+        max_ratio_enabled: false,
+        max_ratio: settings.seeding_ratio as f64,
+        max_ratio_act: 0,
+        listen_port: 0,
+        upnp: false,
+        random_port: true,
+        dl_limit: settings.speed_limit as i32,
+        up_limit: 0,
+        max_connec: 0,
+        max_connec_per_torrent: 0,
+        max_uploads: 0,
+        max_uploads_per_torrent: 0,
+        stop_tracker_timeout: 60,
+        enable_piece_extent_affinity: false,
+        bittorrent_protocol: 0,
+        limit_utp_rate: true,
+        limit_tcp_overhead: false,
+        limit_lan_peers: false,
+        alt_dl_limit: 0,
+        alt_up_limit: 0,
+        scheduler_enabled: false,
+        schedule_from_hour: 0,
+        schedule_from_min: 0,
+        schedule_to_hour: 0,
+        schedule_to_min: 0,
+        scheduler_days: 0,
+        dht: true,
+        pex: true,
+        lsd: true,
+        encryption: 0,
+        anonymous_mode: false,
+        proxy_type: -1,
+        proxy_ip: String::new(),
+        proxy_port: 0,
+        proxy_peer_connections: false,
+        proxy_auth_enabled: false,
+        proxy_username: String::new(),
+        proxy_password: String::new(),
+        proxy_torrents_only: false,
+        ip_filter_enabled: false,
+        ip_filter_path: String::new(),
+        ip_filter_trackers: false,
+        web_ui_domain_list: "*".to_string(),
+        web_ui_address: "0.0.0.0".to_string(),
+        web_ui_port: 8080,
+        web_ui_upnp: false,
+        web_ui_username: "admin".to_string(),
+        web_ui_csrf_protection_enabled: false,
+        web_ui_clickjacking_protection_enabled: true,
+        web_ui_secure_cookie_enabled: true,
+        web_ui_max_auth_fail_count: 5,
+        web_ui_ban_duration: 3600,
+        web_ui_session_timeout: 3600,
+        web_ui_host_header_validation_enabled: false,
+        bypass_local_auth: false,
+        bypass_auth_subnet_whitelist_enabled: false,
+        bypass_auth_subnet_whitelist: String::new(),
+        alternative_webui_enabled: false,
+        alternative_webui_path: String::new(),
+        use_https: false,
+        ssl_key: String::new(),
+        ssl_cert: String::new(),
+        web_ui_https_key_path: String::new(),
+        web_ui_https_cert_path: String::new(),
+        dyndns_enabled: false,
+        dyndns_service: 0,
+        dyndns_username: String::new(),
+        dyndns_password: String::new(),
+        dyndns_domain: String::new(),
+        rss_refresh_interval: 0,
+        rss_max_articles_per_feed: 500,
+        rss_processing_enabled: false,
+        rss_auto_downloading_enabled: false,
+        rss_download_repack_proper_episodes: false,
+        rss_smart_episode_filters: String::new(),
+        add_trackers_enabled: false,
+        add_trackers: String::new(),
+        web_ui_use_custom_http_headers_enabled: false,
+        web_ui_custom_http_headers: String::new(),
+        max_seeding_time_enabled: false,
+        max_seeding_time: settings.seeding_time as i32,
+        announce_ip: String::new(),
+        announce_to_all_tiers: false,
+        announce_to_all_trackers: false,
+        async_io_threads: 0,
+        banned_ips: String::new(),
+        checking_memory_use: 0,
+        current_interface_address: String::new(),
+        current_network_interface: String::new(),
+        disk_cache: 0,
+        disk_cache_ttl: 0,
+        embedded_tracker_port: 0,
+        enable_coalesce_read_write: false,
+        enable_embedded_tracker: false,
+        enable_multi_connections_from_same_ip: false,
+        enable_os_cache: true,
+        enable_upload_suggestions: false,
+        file_pool_size: 0,
+        outgoing_ports_max: 0,
+        outgoing_ports_min: 0,
+        recheck_completed_torrents: false,
+        resolve_peer_countries: false,
+        save_resume_data_interval: 0,
+        send_buffer_low_watermark: 0,
+        send_buffer_watermark: 0,
+        send_buffer_watermark_factor: 0,
+        socket_backlog_size: 0,
+        upload_choking_algorithm: 0,
+        upload_slots_behavior: 0,
+        upnp_lease_duration: 0,
+        utp_tcp_mixed_mode: 0,
+    })
+}
+
 async fn torrents_add(
     State(state): State<SharedState>,
     mut multipart: Multipart,
@@ -120,7 +428,8 @@ async fn torrents_add(
     }
 
     let default_save_dir = {
-        let settings = state.dm.settings.read().await;
+        let dm = state.context.dm().await;
+        let settings = dm.settings.read().await;
         settings.download_dir.clone()
     };
 
@@ -133,7 +442,7 @@ async fn torrents_add(
     // Process URLs
     for url in urls {
         let url_info = nadekodon_core::utils::url::get_url_info(
-            state.dm.client.clone(),
+            state.context.dm().await.client.clone(),
             &url,
             cookie.clone(),
             None,
@@ -147,7 +456,9 @@ async fn torrents_add(
         };
 
         match state
-            .dm
+            .context
+            .dm()
+            .await
             .add_download(
                 actual_url.clone(),
                 dest_dir.clone(),
@@ -180,7 +491,9 @@ async fn torrents_add(
         let torrent_url = temp_path.to_string_lossy().to_string();
 
         match state
-            .dm
+            .context
+            .dm()
+            .await
             .add_download(
                 torrent_url.clone(),
                 dest_dir.clone(),
@@ -243,7 +556,13 @@ async fn torrents_info(
     State(state): State<SharedState>,
     Query(query): Query<TorrentsInfoQuery>,
 ) -> impl IntoResponse {
-    let downloads = state.dm.list_all().await.unwrap_or_default();
+    let downloads = state
+        .context
+        .dm()
+        .await
+        .list_all()
+        .await
+        .unwrap_or_default();
 
     // 1. Filtering
     let filtered: Vec<_> = downloads
@@ -518,7 +837,13 @@ async fn torrents_properties(
     State(state): State<SharedState>,
     Query(query): Query<TorrentsPropertiesQuery>,
 ) -> impl IntoResponse {
-    let downloads = state.dm.list_all().await.unwrap_or_default();
+    let downloads = state
+        .context
+        .dm()
+        .await
+        .list_all()
+        .await
+        .unwrap_or_default();
 
     // Find the specific torrent by hash
     let target_torrent = downloads
@@ -600,7 +925,8 @@ async fn torrents_files(
     State(state): State<SharedState>,
     Query(query): Query<TorrentsFilesQuery>,
 ) -> impl IntoResponse {
-    let session_guard = state.dm.torrent_session.read().await;
+    let dm = state.context.dm().await;
+    let session_guard = dm.torrent_session.read().await;
     let session = match session_guard.as_ref() {
         Some(s) => s,
         None => {
@@ -678,7 +1004,13 @@ async fn torrents_delete(
     let hashes: Vec<&str> = query.hashes.split('|').collect();
     let delete_files = query.delete_files.unwrap_or(false);
 
-    let downloads = state.dm.list_all().await.unwrap_or_default();
+    let downloads = state
+        .context
+        .dm()
+        .await
+        .list_all()
+        .await
+        .unwrap_or_default();
 
     for hash in hashes {
         if hash.is_empty() {
@@ -690,7 +1022,13 @@ async fn torrents_delete(
             .find(|d| d.torrent_hash.as_deref() == Some(hash));
 
         if let Some(d) = target {
-            if let Err(e) = state.dm.delete_worker(d.id, delete_files).await {
+            if let Err(e) = state
+                .context
+                .dm()
+                .await
+                .delete_worker(d.id, delete_files)
+                .await
+            {
                 logger::error(&format!("Failed to delete torrent {}: {}", hash, e));
             } else {
                 logger::debug(&format!(
@@ -701,6 +1039,194 @@ async fn torrents_delete(
         } else {
             logger::error(&format!("Torrent not found for deletion: {}", hash));
             return (StatusCode::NOT_FOUND, "Torrent not found").into_response();
+        }
+    }
+
+    (StatusCode::OK, "Ok.").into_response()
+}
+
+#[derive(Deserialize, Debug)]
+struct TorrentsSetCategoryForm {
+    hashes: String,
+    category: String,
+}
+async fn torrents_set_category(
+    State(state): State<SharedState>,
+    Form(query): Form<TorrentsSetCategoryForm>,
+) -> impl IntoResponse {
+    let downloads = state
+        .context
+        .dm()
+        .await
+        .list_all()
+        .await
+        .unwrap_or_default();
+
+    if query.hashes == "all" {
+        for d in downloads {
+            if d.torrent_hash.is_none() {
+                continue;
+            }
+            if let Some(worker) = state.context.dm().await.get_worker(d.id).await {
+                if query.category.is_empty() {
+                    worker.clear_category().await;
+                } else {
+                    if let Err(e) = worker.set_category(query.category.clone()).await {
+                        logger::error(&format!("Failed to set category: {:?}", e));
+                        return (
+                            StatusCode::BAD_REQUEST,
+                            format!("Failed to set category: {:?}", e),
+                        )
+                            .into_response();
+                    }
+                }
+            }
+        }
+    } else {
+        let hashes: Vec<&str> = query.hashes.split('|').collect();
+        for hash in hashes {
+            if hash.is_empty() {
+                continue;
+            }
+
+            let target = downloads
+                .iter()
+                .find(|d| d.torrent_hash.as_deref() == Some(hash));
+
+            match target {
+                Some(d) => {
+                    if let Some(worker) = state.context.dm().await.get_worker(d.id).await {
+                        if query.category.is_empty() {
+                            worker.clear_category().await;
+                        } else {
+                            if let Err(e) = worker.set_category(query.category.clone()).await {
+                                logger::error(&format!("Failed to set category: {:?}", e));
+                                return (
+                                    StatusCode::BAD_REQUEST,
+                                    format!("Failed to set category: {:?}", e),
+                                )
+                                    .into_response();
+                            }
+                        }
+                    }
+                }
+                None => {
+                    return (StatusCode::NOT_FOUND, "Torrent not found").into_response();
+                }
+            }
+        }
+    }
+
+    (StatusCode::OK, "Ok.").into_response()
+}
+
+#[derive(Deserialize, Debug)]
+struct TorrentsCreateCategoryForm {
+    category: String,
+    #[serde(rename = "savePath")]
+    save_path: Option<String>,
+}
+
+async fn torrents_create_category(
+    State(state): State<SharedState>,
+    Form(query): Form<TorrentsCreateCategoryForm>,
+) -> impl IntoResponse {
+    if query.category.is_empty() {
+        return (StatusCode::BAD_REQUEST, "Category name is empty").into_response();
+    }
+
+    let save_path = query.save_path.map(PathBuf::from);
+
+    match state
+        .context
+        .dm()
+        .await
+        .create_category(query.category, save_path)
+        .await
+    {
+        Ok(()) => (StatusCode::OK, "Ok.").into_response(),
+        Err("Category already exists") => {
+            (StatusCode::CONFLICT, "Category already exists").into_response()
+        }
+        Err(_) => (StatusCode::BAD_REQUEST, "Invalid category name").into_response(),
+    }
+}
+
+#[derive(Serialize)]
+struct CategoryResponse {
+    name: String,
+    #[serde(rename = "savePath")]
+    save_path: Option<String>,
+}
+
+async fn torrents_categories(State(state): State<SharedState>) -> impl IntoResponse {
+    let categories = state.context.dm().await.categories.read().await.clone();
+
+    let response: HashMap<String, CategoryResponse> = categories
+        .into_iter()
+        .map(|(name, info)| {
+            (
+                name.clone(),
+                CategoryResponse {
+                    name,
+                    save_path: info.save_path.map(|p| p.to_string_lossy().to_string()),
+                },
+            )
+        })
+        .collect();
+
+    Json(response).into_response()
+}
+
+#[derive(Deserialize)]
+struct TorrentsSetShareLimitsForm {
+    hashes: String,
+    #[serde(rename = "ratioLimit")]
+    ratio_limit: Option<f32>,
+    #[serde(rename = "seedingTimeLimit")]
+    seeding_time_limit: Option<i64>,
+    #[serde(rename = "inactiveSeedingTimeLimit")]
+    _inactive_seeding_time_limit: Option<i64>,
+}
+
+async fn torrents_set_share_limits(
+    State(state): State<SharedState>,
+    Form(query): Form<TorrentsSetShareLimitsForm>,
+) -> impl IntoResponse {
+    let hashes: Vec<&str> = if query.hashes == "all" {
+        Vec::new()
+    } else {
+        query.hashes.split('|').collect()
+    };
+
+    let ratio = match query.ratio_limit {
+        Some(-2.0) => None,
+        Some(-1.0) => Some(f32::MAX),
+        Some(v) => Some(v),
+        None => None,
+    };
+
+    let time = match query.seeding_time_limit {
+        Some(-2) => None,
+        Some(-1) => Some(u64::MAX),
+        Some(v) => Some(v as u64),
+        None => None,
+    };
+
+    let torrents = state
+        .context
+        .dm()
+        .await
+        .list_torrents(if hashes.is_empty() {
+            None
+        } else {
+            Some(hashes)
+        })
+        .await;
+
+    for info in torrents {
+        if let Some(worker) = state.context.dm().await.get_worker(info.id).await {
+            worker.set_seeding_limits(ratio, time).await;
         }
     }
 

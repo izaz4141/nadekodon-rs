@@ -1,5 +1,5 @@
 extern crate nadekodon_core as core;
-use core::downloader::DownloadManager;
+use core::app_context::AppContext;
 use core::utils::security;
 use nadekodon_server::{
     qbittorrent::get_router,
@@ -15,6 +15,7 @@ use axum::{
 };
 use rinf::{DartSignal, RustSignal};
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use uuid::Uuid;
 
 pub async fn handle_api_key_generation() {
@@ -33,7 +34,7 @@ async fn handle_add_download(
     (StatusCode::OK, "Download request sent".to_string())
 }
 
-pub async fn start_server_listener(dm: Arc<DownloadManager>) {
+pub async fn start_server_listener(context: Arc<AppContext>) {
     let mut current_server: Option<(tokio::task::JoinHandle<()>, Arc<tokio::sync::Notify>)> = None;
     let receiver = StartServer::get_dart_signal_receiver();
 
@@ -43,7 +44,7 @@ pub async fn start_server_listener(dm: Arc<DownloadManager>) {
 
         if let Some((old_handle, old_notify)) = current_server.take() {
             old_notify.notify_one();
-            let _ = old_handle.await; // Wait for the port to be released
+            let _ = old_handle.await;
         }
 
         let config_val = nadekodon_server::server::load_config();
@@ -66,13 +67,18 @@ pub async fn start_server_listener(dm: Arc<DownloadManager>) {
 
         let config = Arc::new(RwLock::new(config_val));
         let restart_signal = Arc::new(Notify::new());
+        let shutdown_signal = Arc::new(Notify::new());
+        let shutdown_requested = Arc::new(AtomicBool::new(false));
+
         let state = Arc::new(AppState {
-            dm: dm.clone(),
+            context: context.clone(),
             api_key: Arc::new(RwLock::new(msg.api_key)),
             username: Arc::new(RwLock::new(msg.username)),
             password: Arc::new(RwLock::new(password)),
             config,
             restart_signal: restart_signal.clone(),
+            shutdown_signal: shutdown_signal.clone(),
+            shutdown_requested: shutdown_requested.clone(),
         });
         let qbt_router = get_router(state.clone());
         let nadeko_router = create_nadeko_router(state.clone());
@@ -87,8 +93,9 @@ pub async fn start_server_listener(dm: Arc<DownloadManager>) {
             .with_state(state);
 
         let rs_clone = restart_signal.clone();
+        let ss_clone = shutdown_signal.clone();
         let new_handle = tokio::spawn(async move {
-            run_server(router, msg.port, rs_clone).await;
+            run_server(router, msg.port, rs_clone, ss_clone).await;
         });
         current_server = Some((new_handle, restart_signal));
     }

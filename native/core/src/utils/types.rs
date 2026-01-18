@@ -94,6 +94,8 @@ pub struct DownloadInfo {
     pub torrent_hash: Option<String>,
     pub referer: Option<String>,
     pub category: Option<String>,
+    pub seeding_ratio_override: Option<f32>,
+    pub seeding_time_override: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -101,4 +103,10 @@ pub enum WorkerEvent {
     Completed(Uuid),
     Error(Uuid, String),
     Cancelled(Uuid),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CategoryInfo {
+    pub name: String,
+    pub save_path: Option<PathBuf>,
 }

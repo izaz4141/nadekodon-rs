@@ -6,8 +6,9 @@ mod utils;
 
 extern crate nadekodon_core as core;
 
-use core::downloader::start_download_manager;
+use core::app_context::AppContext;
 use core::utils as cutils;
+use core::utils::types::DMSettings;
 use rinf::{dart_shutdown, write_interface};
 use tokio::spawn;
 
@@ -28,17 +29,29 @@ async fn main() {
     let db_done_signal = std::sync::Arc::new(tokio::sync::Notify::new());
 
     let rclient = cutils::url::build_browser_client().await;
-    let dm = start_download_manager(rclient.clone()).await;
+
+    let settings = DMSettings {
+        speed_limit: 0,
+        concurrency_limit: 3,
+        download_threads: 8,
+        download_timeout: 30,
+        download_retries: 5,
+        seeding_ratio: 1.0,
+        seeding_time: 30,
+        download_dir: "Downloads".to_string(),
+    };
+
+    let context = AppContext::new(rclient.clone(), settings, shutdown_signal.clone()).await;
+    let dm = context.dm().await;
 
     spawn(utils::settings::update_settings(dm.clone()));
     spawn(downloader::handle_init_torrent_persistence(dm.clone()));
     spawn(utils::database::start_database_manager(
-        dm.clone(),
-        shutdown_signal.clone(),
+        context.clone(),
         db_done_signal.clone(),
     ));
     spawn(utils::server::handle_api_key_generation());
-    spawn(utils::server::start_server_listener(dm.clone()));
+    spawn(utils::server::start_server_listener(context.clone()));
     spawn(downloader::query_url_info(rclient.clone()));
     spawn(downloader::spawn_download_worker(dm.clone()));
     spawn(downloader::get_download_list(dm.clone()));

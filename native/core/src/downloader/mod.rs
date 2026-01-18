@@ -62,6 +62,8 @@ async fn handle_merge_success(
         torrent_hash: None,
         referer,
         category: None,
+        seeding_ratio_override: None,
+        seeding_time_override: None,
     };
 
     manager.load_snapshot(vec![final_info]).await;
@@ -90,7 +92,10 @@ async fn wait_for_download(manager: Arc<DownloadManager>, id: Uuid) -> Result<()
 }
 
 /// Function to spawn the single global DownloadManager at startup
-pub async fn start_download_manager(client: Client) -> Arc<DownloadManager> {
+pub async fn start_download_manager(
+    client: Client,
+    context: std::sync::Weak<crate::app_context::AppContext>,
+) -> Arc<DownloadManager> {
     let settings = DMSettings {
         speed_limit: 0,
         concurrency_limit: 3,
@@ -101,7 +106,7 @@ pub async fn start_download_manager(client: Client) -> Arc<DownloadManager> {
         seeding_time: 30,
         download_dir: "Downloads".to_string(),
     };
-    let manager = DownloadManager::new(client, settings).await;
+    let manager = DownloadManager::new(client, settings, context).await;
     manager
 }
 
