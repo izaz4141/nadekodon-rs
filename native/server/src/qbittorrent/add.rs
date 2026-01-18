@@ -27,6 +27,7 @@ pub struct TorrentsAddMultipart {
 }
 
 fn extract_boundary(content_type: &str) -> Option<String> {
+    logger::debug(&format!("AddTorrent content type: {}", &content_type));
     if let Ok(ct) = content_type.parse::<mime::Mime>() {
         if let Some(boundary) = ct.get_param("boundary") {
             return Some(boundary.as_str().to_string());
