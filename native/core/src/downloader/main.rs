@@ -1834,7 +1834,7 @@ impl DownloadManager {
 
         let mut categories = self.categories.write().await;
         if categories.contains_key(&name) {
-            return Err("Category already exists");
+            return Ok(());
         }
 
         categories.insert(name.clone(), CategoryInfo { name, save_path });
