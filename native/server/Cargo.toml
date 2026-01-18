@@ -19,4 +19,8 @@ futures = "0.3.31"
 reqwest = { version = "0.12.23", features = ["json"] }
 librqbit = "8.1.1"
 percent-encoding = "2.3.2"
+multer = "3.1.0"
 nadekodon-core = { path = "../core" }
+mime = "0.3.17"
+futures-util = "0.3.31"
+http-body-util = "0.1.3"
