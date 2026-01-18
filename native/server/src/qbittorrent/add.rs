@@ -27,7 +27,6 @@ pub struct TorrentsAddMultipart {
 }
 
 fn extract_boundary(content_type: &str) -> Option<String> {
-    logger::debug(&format!("AddTorrent content type: {}", &content_type));
     if let Ok(ct) = content_type.parse::<mime::Mime>() {
         if let Some(boundary) = ct.get_param("boundary") {
             return Some(boundary.as_str().to_string());
@@ -67,7 +66,6 @@ impl TorrentsAddMultipart {
             .get("content-type")
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
-
         let boundary = extract_boundary(content_type)
             .ok_or_else(|| "Invalid or missing boundary".to_string())?;
 
@@ -77,6 +75,10 @@ impl TorrentsAddMultipart {
             .await
             .map_err(|e| format!("Failed to read body: {}", e))?
             .to_bytes();
+
+        let body_str = String::from_utf8_lossy(&body);
+        logger::debug(&format!("Received TorrentsAddRequest: {}", &body_str));
+        logger::debug(&format!("With headers: {:#?}", &req.headers()));
 
         let stream = stream::once(async move { Ok::<_, std::convert::Infallible>(body) });
         let mut multipart = Multipart::new(stream, &boundary);
