@@ -40,7 +40,7 @@ class APIService {
     if (externalUrl.isEmpty) return externalUrl;
     if (!kIsWeb) return externalUrl;
     final encoded = Uri.encodeComponent(externalUrl);
-    return '$baseUrl/img/?url=$encoded';
+    return '$baseUrl/api/nadeko/img?url=$encoded';
   }
 
   static void _startPolling() {

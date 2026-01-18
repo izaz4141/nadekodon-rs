@@ -8,7 +8,7 @@ use core::utils::logger;
 use axum::{
     Router,
     body::Body,
-    extract::{Json, Path, State},
+    extract::{Json, Path, Query, State},
     http::{Request, StatusCode},
     middleware::{self, Next},
     response::IntoResponse,
@@ -19,8 +19,11 @@ use axum_extra::extract::{
     cookie::{Cookie, SameSite},
 };
 use nadekodon_core::utils::types::DMSettings;
+use percent_encoding::percent_decode_str;
+use reqwest::Url;
 use serde::Deserialize;
 use serde_json::{Value, json};
+use std::collections::HashMap;
 use std::env;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -407,6 +410,78 @@ async fn handle_update_settings(
     StatusCode::OK
 }
 
+async fn handle_proxy_image(
+    State(state): State<SharedState>,
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let encoded_url = match params.get("url") {
+        Some(url) => url.clone(),
+        None => return (StatusCode::BAD_REQUEST, "Missing url parameter").into_response(),
+    };
+
+    let decoded_url = match percent_decode_str(&encoded_url).decode_utf8() {
+        Ok(url) => url.into_owned(),
+        Err(_) => return (StatusCode::BAD_REQUEST, "Invalid URL encoding").into_response(),
+    };
+
+    let parsed_url = match Url::parse(&decoded_url) {
+        Ok(url) => url,
+        Err(_) => return (StatusCode::BAD_REQUEST, "Invalid URL").into_response(),
+    };
+
+    if parsed_url.scheme() != "http" && parsed_url.scheme() != "https" {
+        return (StatusCode::BAD_REQUEST, "Only HTTP/HTTPS URLs allowed").into_response();
+    }
+    let client = &state.context.dm().await.client.clone();
+    let info = match utils::url::get_url_info(client.clone(), parsed_url.as_str(), None, None, None)
+        .await
+    {
+        Ok(i) => i,
+        Err(_) => return (StatusCode::BAD_REQUEST, "Cant reach image url").into_response(),
+    };
+    let content_type = match info.content_type {
+        Some(ct) => ct,
+        None => return (StatusCode::BAD_REQUEST, "Cant determine content type").into_response(),
+    };
+    let response = match client.get(parsed_url).send().await {
+        Ok(resp) => resp,
+        Err(_) => return (StatusCode::BAD_GATEWAY, "Failed to fetch image").into_response(),
+    };
+
+    if !response.status().is_success() {
+        return (
+            StatusCode::from_u16(response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY),
+            "Failed to fetch image",
+        )
+            .into_response();
+    }
+
+    if !content_type.starts_with("image/") {
+        return (StatusCode::BAD_REQUEST, "URL must point to an image").into_response();
+    }
+
+    let bytes = match response.bytes().await {
+        Ok(b) => b,
+        Err(_) => return (StatusCode::BAD_GATEWAY, "Failed to read image").into_response(),
+    };
+
+    (
+        [
+            (reqwest::header::CONTENT_TYPE, content_type),
+            (
+                reqwest::header::CACHE_CONTROL,
+                "public, max-age=3600".to_string(),
+            ),
+            (
+                reqwest::header::ACCESS_CONTROL_ALLOW_ORIGIN,
+                "*".to_string(),
+            ),
+        ],
+        bytes,
+    )
+        .into_response()
+}
+
 pub fn create_nadeko_router(state: SharedState) -> Router<SharedState> {
     let protected_routes = Router::new()
         .route("/status", get(handle_status))
@@ -429,6 +504,7 @@ pub fn create_nadeko_router(state: SharedState) -> Router<SharedState> {
         .route("/generate-salt", get(handle_generate_salt))
         .route("/generate-api", get(handle_generate_api))
         .route("/deps-version", get(handle_get_deps_version))
+        .route("/img", get(handle_proxy_image))
         .layer(middleware::from_fn_with_state(state.clone(), check_api_key));
 
     let public_routes = Router::new().route("/login", post(handle_login));

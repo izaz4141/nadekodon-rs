@@ -1939,6 +1939,7 @@ dependencies = [
  "futures",
  "librqbit",
  "nadekodon-core",
+ "percent-encoding",
  "reqwest",
  "serde",
  "serde_json",
