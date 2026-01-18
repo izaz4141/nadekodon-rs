@@ -48,6 +48,8 @@ pub fn get_router(state: SharedState) -> Router<SharedState> {
         .route("/torrents/createCategory", post(torrents_create_category))
         .route("/torrents/categories", get(torrents_categories))
         .route("/torrents/setShareLimits", post(torrents_set_share_limits))
+        .route("/torrents/topPrio", post(torrents_top_prio))
+        .route("/torrents/setForceStart", post(torrents_set_force_start))
         .layer(axum::middleware::from_fn_with_state(state, auth_middleware));
 
     Router::new()

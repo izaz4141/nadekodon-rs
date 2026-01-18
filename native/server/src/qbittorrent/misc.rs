@@ -56,3 +56,36 @@ pub async fn torrents_set_share_limits(
 
     (StatusCode::OK, "Ok.").into_response()
 }
+
+#[derive(Deserialize)]
+pub struct TorrentsTopPrioForm {
+    hashes: String,
+}
+
+pub async fn torrents_top_prio(
+    State(state): State<SharedState>,
+    Form(query): Form<TorrentsTopPrioForm>,
+) -> impl IntoResponse {
+    let hashes: Vec<&str> = if query.hashes == "all" {
+        Vec::new()
+    } else {
+        query.hashes.split('|').collect()
+    };
+
+    state.context.dm().await.set_top_priority(hashes).await;
+
+    (StatusCode::OK, "Ok.").into_response()
+}
+
+#[derive(Deserialize)]
+pub struct TorrentsSetForceStartForm {
+    _hashes: String,
+    _value: Option<bool>,
+}
+
+pub async fn torrents_set_force_start(
+    State(_state): State<SharedState>,
+    Form(_query): Form<TorrentsSetForceStartForm>,
+) -> impl IntoResponse {
+    (StatusCode::OK, "Ok.").into_response()
+}

@@ -1981,6 +1981,39 @@ impl DownloadManager {
         out
     }
 
+    pub async fn set_top_priority(&self, hashes: Vec<&str>) {
+        let workers = self.workers.lock().await;
+
+        let mut to_top: Vec<(Uuid, Arc<DownloadWorker>)> = Vec::new();
+        let mut others: Vec<(Uuid, Arc<DownloadWorker>)> = Vec::new();
+
+        for (id, worker) in workers.iter() {
+            let info = worker.info().await;
+            if let Some(ref hash) = info.torrent_hash {
+                if hashes.is_empty() || hashes.contains(&hash.as_str()) {
+                    to_top.push((*id, worker.clone()));
+                } else {
+                    others.push((*id, worker.clone()));
+                }
+            } else {
+                others.push((*id, worker.clone()));
+            }
+        }
+
+        drop(workers);
+
+        let mut new_order = IndexMap::new();
+        for (id, worker) in to_top {
+            new_order.insert(id, worker);
+        }
+        for (id, worker) in others {
+            new_order.insert(id, worker);
+        }
+
+        let mut workers = self.workers.lock().await;
+        *workers = new_order;
+    }
+
     pub async fn sync_active_workers(&self) {
         let active_ids = {
             let active = self.active.lock().await;
