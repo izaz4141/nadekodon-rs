@@ -2,8 +2,9 @@ use crate::server::SharedState;
 use axum::{extract::State, http::StatusCode, response::IntoResponse};
 use futures_util::stream;
 use http_body_util::BodyExt;
+use librqbit::AddTorrent;
 use multer::Multipart;
-use nadekodon_core::utils::logger;
+use nadekodon_core::utils::{logger, url::resolve_torrent_info};
 use std::path::PathBuf;
 
 pub struct TorrentsAddMultipart {
@@ -66,8 +67,22 @@ impl TorrentsAddMultipart {
             .get("content-type")
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
-        let boundary = extract_boundary(content_type)
-            .ok_or_else(|| "Invalid or missing boundary".to_string())?;
+
+        let boundary = match extract_boundary(content_type) {
+            Some(b) => b,
+            None => {
+                let body = req
+                    .body_mut()
+                    .collect()
+                    .await
+                    .map_err(|e| format!("Failed to read body: {}", e))?
+                    .to_bytes();
+                let body_str = String::from_utf8_lossy(&body);
+                logger::debug(&format!("Received TorrentsAddRequest: {}", &body_str));
+                logger::debug(&format!("With headers: {:#?}", &req.headers()));
+                return Err("Invalid or missing boundary".to_string());
+            }
+        };
 
         let body = req
             .body_mut()
@@ -75,10 +90,6 @@ impl TorrentsAddMultipart {
             .await
             .map_err(|e| format!("Failed to read body: {}", e))?
             .to_bytes();
-
-        let body_str = String::from_utf8_lossy(&body);
-        logger::debug(&format!("Received TorrentsAddRequest: {}", &body_str));
-        logger::debug(&format!("With headers: {:#?}", &req.headers()));
 
         let stream = stream::once(async move { Ok::<_, std::convert::Infallible>(body) });
         let mut multipart = Multipart::new(stream, &boundary);
@@ -290,27 +301,30 @@ pub async fn torrents_add(
     };
 
     for url in urls {
-        let url_info = nadekodon_core::utils::url::get_url_info(
+        let url_info = match nadekodon_core::utils::url::get_url_info(
             state.context.dm().await.client.clone(),
             &url,
             cookie.clone(),
             None,
             None,
         )
-        .await;
-
-        let actual_url = match url_info {
-            Ok(info) => info.url,
-            Err(_) => url.clone(),
+        .await
+        {
+            Ok(info) => info,
+            Err(_) => {
+                return (StatusCode::BAD_REQUEST, "Invalid torrent url");
+            }
         };
+
+        let torrent_dest_dir: PathBuf = dest_dir.join(&url_info.name);
 
         match state
             .context
             .dm()
             .await
             .add_download(
-                actual_url.clone(),
-                dest_dir.clone(),
+                url_info.url.clone(),
+                torrent_dest_dir,
                 cookie.clone(),
                 None,
                 None,
@@ -320,7 +334,7 @@ pub async fn torrents_add(
         {
             Ok(id) => logger::debug(&format!(
                 "Added download via API: {} (ID: {}) category: {:?}",
-                actual_url, id, category
+                url_info.url, id, category
             )),
             Err(e) => logger::error(&format!("Failed to add download via API: {}", e)),
         }
@@ -330,12 +344,22 @@ pub async fn torrents_add(
         let temp_hash = uuid::Uuid::new_v4().to_string();
         let temp_path = std::env::temp_dir().join(format!("{}.torrent", temp_hash));
 
-        if let Err(e) = std::fs::write(&temp_path, bytes) {
+        if let Err(e) = std::fs::write(&temp_path, &bytes) {
             logger::error(&format!("Failed to save temp torrent file: {}", e));
             continue;
         }
-
+        let (name, _) = match resolve_torrent_info(AddTorrent::from_bytes(bytes)).await {
+            Ok((n, t)) => (n, t),
+            Err(e) => {
+                logger::error(&format!(
+                    "Fail to get torrent info from bytes in /torrents/add {:#?}",
+                    e
+                ));
+                return (StatusCode::BAD_REQUEST, "Invalid torrent bytes");
+            }
+        };
         let torrent_url = temp_path.to_string_lossy().to_string();
+        let torrent_dest_dir: PathBuf = dest_dir.join(&name);
 
         match state
             .context
@@ -343,7 +367,7 @@ pub async fn torrents_add(
             .await
             .add_download(
                 torrent_url.clone(),
-                dest_dir.clone(),
+                torrent_dest_dir.clone(),
                 None,
                 None,
                 None,

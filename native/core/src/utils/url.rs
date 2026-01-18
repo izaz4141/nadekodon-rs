@@ -195,7 +195,7 @@ pub fn is_torrent_file(url: &str, content_type: &Option<String>) -> bool {
         }
 }
 
-async fn resolve_torrent_info<'a>(add_torrent: AddTorrent<'a>) -> Result<(String, Option<u64>)> {
+pub async fn resolve_torrent_info<'a>(add_torrent: AddTorrent<'a>) -> Result<(String, Option<u64>)> {
     // Create a temporary directory for the session
     let temp_dir = std::env::temp_dir().join(format!("nadekodon_torrent_{}", Uuid::new_v4()));
     tokio::fs::create_dir_all(&temp_dir).await?;
