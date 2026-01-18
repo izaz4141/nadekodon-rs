@@ -36,6 +36,13 @@ class APIService {
     return 'http://$host:$port';
   }
 
+  static String wrapImageUrl(String externalUrl) {
+    if (externalUrl.isEmpty) return externalUrl;
+    if (!kIsWeb) return externalUrl;
+    final encoded = Uri.encodeComponent(externalUrl);
+    return '$baseUrl/img/?url=$encoded';
+  }
+
   static void _startPolling() {
     _timer?.cancel();
     _checkStatus();

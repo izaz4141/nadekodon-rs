@@ -5,6 +5,7 @@ import 'package:nadekodon/utils/helper.dart';
 import 'package:nadekodon/ui/widgets/components/dir_choose.dart';
 
 import 'package:nadekodon/src/bindings/bindings.dart';
+import 'package:nadekodon/utils/api_service.dart';
 
 class YtdlpView extends StatefulWidget {
   final TextEditingController nameController;
@@ -63,7 +64,7 @@ class _YtdlpView extends State<YtdlpView> {
     final isDesktop = AppTheme.isDesktop(context);
 
     Widget buildThumbnail() => Image.network(
-      ytdlOutput.thumbnail!,
+      APIService.wrapImageUrl(ytdlOutput.thumbnail!),
       fit: BoxFit.cover,
       errorBuilder: (context, error, stackTrace) => Container(
         color: colors.surfaceContainerHighest,
