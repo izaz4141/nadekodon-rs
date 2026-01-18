@@ -5,7 +5,7 @@ use indexmap::IndexMap;
 use reqwest::header::{ACCEPT_RANGES, CONTENT_LENGTH, RANGE};
 use std::{
     collections::{HashMap, HashSet},
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering},
@@ -13,7 +13,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::{
-    fs::File as TokioFile,
+    fs::{self, File as TokioFile},
     io::{AsyncSeekExt, AsyncWriteExt, SeekFrom},
     sync::{Mutex, Notify, RwLock, broadcast, mpsc},
     task::JoinHandle,
@@ -204,7 +204,7 @@ impl DownloadWorker {
         let threads = self.threads;
         let (url, dest) = self.extract_info().await;
 
-        if is_magnet_url(&url) {
+        if (Path::new(&url).is_file() && is_torrent_file(&url, &None)) || is_magnet_url(&url) {
             {
                 let mut info = self.info.lock().await;
                 info.download_type = DownloadType::Torrent;
@@ -922,7 +922,7 @@ impl DownloadWorker {
         let output_dir = if dest.exists() && dest.is_dir() {
             dest.to_path_buf()
         } else if let Some(stem) = dest.file_stem() {
-            let parent = dest.parent().unwrap_or(std::path::Path::new("."));
+            let parent = dest.parent().unwrap_or(Path::new("."));
             parent.join(stem)
         } else {
             dest.to_path_buf()
@@ -964,9 +964,9 @@ impl DownloadWorker {
                 AddTorrent::from_url(url)
             } else {
                 // Check if it's a local file path
-                let path = std::path::Path::new(url);
+                let path = Path::new(url);
                 let bytes = if path.is_file() {
-                    tokio::fs::read(path).await?
+                    fs::read(path).await?
                 } else {
                     // It's a torrent file URL, download it first
                     client.get(url).send().await?.bytes().await?.to_vec()
@@ -1686,7 +1686,9 @@ impl DownloadManager {
         let w = Arc::clone(&worker);
 
         tokio::spawn(async move {
-            let _ = w.start().await;
+            if let Err(e) = w.start().await {
+                logger::error(&format!("Worker start encountered error: {:#?}", e));
+            }
         });
         Ok(())
     }
@@ -1888,17 +1890,6 @@ impl DownloadManager {
                             let _ = session
                                 .delete(librqbit::api::TorrentIdOrHash::Id(id), delete_file)
                                 .await;
-                        }
-                    }
-                }
-
-                // Fallback
-                if delete_file {
-                    if info.dest.exists() {
-                        if info.dest.is_dir() {
-                            tokio::fs::remove_dir_all(&info.dest).await.ok();
-                        } else {
-                            tokio::fs::remove_file(&info.dest).await.ok();
                         }
                     }
                 }
