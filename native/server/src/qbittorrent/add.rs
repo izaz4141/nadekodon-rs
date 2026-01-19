@@ -43,6 +43,102 @@ fn extract_boundary(content_type: &str) -> Option<String> {
     None
 }
 
+fn is_urlencoded(content_type: &str) -> bool {
+    content_type.starts_with("application/x-www-form-urlencoded")
+}
+
+fn parse_urlencoded_body(body: &str) -> TorrentsAddMultipart {
+    fn decode(v: &str) -> String {
+        percent_encoding::percent_decode_str(v)
+            .decode_utf8_lossy()
+            .into_owned()
+    }
+
+    fn parse_bool(v: Option<&str>) -> Option<bool> {
+        v.map(|s| s.to_lowercase() == "true")
+    }
+
+    fn parse_i64(v: Option<&str>) -> Option<i64> {
+        v.and_then(|s| s.parse().ok())
+    }
+
+    fn parse_f64(v: Option<&str>) -> Option<f64> {
+        v.and_then(|s| s.parse().ok())
+    }
+
+    let mut urls = Vec::new();
+    let mut save_path = None;
+    let mut cookie = None;
+    let mut category = None;
+    let mut tags = None;
+    let mut skip_checking = None;
+    let mut paused = None;
+    let mut root_folder = None;
+    let mut rename = None;
+    let mut up_limit = None;
+    let mut dl_limit = None;
+    let mut ratio_limit = None;
+    let mut seeding_time_limit = None;
+    let mut auto_tmm = None;
+    let mut sequential_download = None;
+    let mut first_last_piece_prio = None;
+
+    for pair in body.split('&') {
+        let mut parts = pair.splitn(2, '=');
+        let key = parts.next().map(decode);
+        let value = parts.next().map(decode);
+
+        match key.as_deref() {
+            Some("urls") => {
+                if let Some(v) = value {
+                    for line in v.lines() {
+                        let u = line.trim();
+                        if !u.is_empty() {
+                            urls.push(u.to_string());
+                        }
+                    }
+                }
+            }
+            Some("savepath") => save_path = value,
+            Some("cookie") => cookie = value,
+            Some("category") => category = value,
+            Some("tags") => tags = value,
+            Some("skip_checking") => skip_checking = parse_bool(value.as_deref()),
+            Some("paused") => paused = parse_bool(value.as_deref()),
+            Some("root_folder") => root_folder = parse_bool(value.as_deref()),
+            Some("rename") => rename = value,
+            Some("upLimit") => up_limit = parse_i64(value.as_deref()),
+            Some("dlLimit") => dl_limit = parse_i64(value.as_deref()),
+            Some("ratioLimit") => ratio_limit = parse_f64(value.as_deref()),
+            Some("seedingTimeLimit") => seeding_time_limit = parse_i64(value.as_deref()),
+            Some("autoTMM") => auto_tmm = parse_bool(value.as_deref()),
+            Some("sequentialDownload") => sequential_download = parse_bool(value.as_deref()),
+            Some("firstLastPiecePrio") => first_last_piece_prio = parse_bool(value.as_deref()),
+            _ => {}
+        }
+    }
+
+    TorrentsAddMultipart {
+        urls,
+        torrents: Vec::new(),
+        save_path,
+        cookie,
+        category,
+        tags,
+        skip_checking,
+        paused,
+        root_folder,
+        rename,
+        up_limit,
+        dl_limit,
+        ratio_limit,
+        seeding_time_limit,
+        auto_tmm,
+        sequential_download,
+        first_last_piece_prio,
+    }
+}
+
 impl TorrentsAddMultipart {
     fn has_unsupported_fields(&self) -> bool {
         self.tags.is_some()
@@ -68,6 +164,17 @@ impl TorrentsAddMultipart {
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
 
+        if is_urlencoded(content_type) {
+            let body = req
+                .body_mut()
+                .collect()
+                .await
+                .map_err(|e| format!("Failed to read body: {}", e))?
+                .to_bytes();
+            let body_str = String::from_utf8_lossy(&body);
+            return Ok(parse_urlencoded_body(&body_str));
+        }
+
         let boundary = match extract_boundary(content_type) {
             Some(b) => b,
             None => {
@@ -78,8 +185,8 @@ impl TorrentsAddMultipart {
                     .map_err(|e| format!("Failed to read body: {}", e))?
                     .to_bytes();
                 let body_str = String::from_utf8_lossy(&body);
-                logger::debug(&format!("Received TorrentsAddRequest: {}", &body_str));
-                logger::debug(&format!("With headers: {:#?}", &req.headers()));
+                logger::error(&format!("Received TorrentsAddRequest: {}", &body_str));
+                logger::error(&format!("With headers: {:#?}", &req.headers()));
                 return Err("Invalid or missing boundary".to_string());
             }
         };
