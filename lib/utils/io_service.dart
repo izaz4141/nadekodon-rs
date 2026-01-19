@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:synchronized/synchronized.dart';
 import 'package:path_provider/path_provider.dart';
 
 abstract class IOService {
@@ -18,6 +19,10 @@ abstract class IOService {
 }
 
 class NativeIOService implements IOService {
+  final Map<String, Lock> _fileLocks = {};
+
+  Lock _getLock(String path) => _fileLocks.putIfAbsent(path, () => Lock(reentrant: true));
+
   @override
   Future<String> getConfigDir() async {
     final dir = await getApplicationSupportDirectory();
@@ -49,14 +54,17 @@ class NativeIOService implements IOService {
 
   @override
   Future<String> readFile(String path) async {
-    return File(path).readAsString();
+    return await _getLock(path).synchronized(() async {
+      return File(path).readAsString();
+    });
   }
 
   @override
   Future<void> writeFile(String path, String content) async {
-    final file = File(path);
-    await file.parent.create(recursive: true);
-    await file.writeAsString(content);
+    await File(path).parent.create(recursive: true);
+    await _getLock(path).synchronized(() async {
+      await File(path).writeAsString(content);
+    });
   }
 
   @override
@@ -72,14 +80,17 @@ class NativeIOService implements IOService {
 
   @override
   Future<Uint8List> readFileBytes(String path) async {
-    return File(path).readAsBytes();
+    return await _getLock(path).synchronized(() async {
+      return File(path).readAsBytes();
+    });
   }
 
   @override
   Future<void> writeFileBytes(String path, Uint8List bytes) async {
-    final file = File(path);
-    await file.parent.create(recursive: true);
-    await file.writeAsBytes(bytes);
+    await File(path).parent.create(recursive: true);
+    await _getLock(path).synchronized(() async {
+      await File(path).writeAsBytes(bytes);
+    });
   }
 }
 
