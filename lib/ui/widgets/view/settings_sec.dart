@@ -48,15 +48,28 @@ class SettingsSec extends StatelessWidget {
             ],
           ),
         ),
-        SwitchListTile(
-          title: Text('Require Login', style: textTheme.bodyMedium),
-          subtitle: Text(
-            'Show login screen on startup',
-            style: textTheme.bodySmall,
-          ),
-          value: SettingsManager.requireLogin.value,
-          onChanged: (value) {
-            SettingsManager.requireLogin.value = value;
+        ValueListenableBuilder<bool>(
+          valueListenable: SettingsManager.requireLogin,
+          builder: (context, value, _) {
+            return ListTile(
+              title: Text("Require Login", style: textTheme.bodyMedium),
+              subtitle: Text(
+                "Show login screen on startup",
+                style: textTheme.bodySmall?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+              trailing: Transform.scale(
+                scale: AppTheme.iconScale(context),
+                alignment: Alignment.centerRight,
+                child: Switch(
+                  value: value,
+                  onChanged: (newValue) {
+                    SettingsManager.requireLogin.value = newValue;
+                  },
+                ),
+              ),
+            );
           },
         ),
         SpinBox(
