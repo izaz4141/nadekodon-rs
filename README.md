@@ -34,6 +34,9 @@ Nadeko~don is a open-source download manager designed for efficiency and a seaml
 - **YT-DLP Support**: Download videos and audio from 1000+ websites by pasting a URL. Uses your system's `yt-dlp` installation. **Note**: This feature is not available on Android.
 - **System Tray Operation**: The application can be minimized to the system tray, allowing it to run in the background without cluttering your desktop.
 - **Modern UI**: A clean and intuitive user interface built with Flutter, following Material Design 3 principles.
+- **Speed Scheduling**: Configure bandwidth limits for different times of day.
+- **SQLite Persistence**: Download history and state stored locally.
+- **REST API**: Browser extension support + qBittorrent WebUI API for Sonarr/Radarr integration.
 
 ## Screenshots
 
@@ -53,11 +56,11 @@ Nadeko~don is a open-source download manager designed for efficiency and a seaml
 
 Here are some of the features and improvements planned for future releases:
 
-- [ ] Download scheduler
 - [ ] Proxy support
 - [ ] Open the app from link
-- [ ] Web & Docker support
-- [x] Variable/scheduled download bandwith
+- [x] Docker support
+- [ ] Remote session/app control
+- [x] Variable/scheduled download bandwidth
 
 ## Installation
 
@@ -72,7 +75,7 @@ You can download the latest pre-built binaries for your operating system from th
 
 ### From Source
 
-If you prefer to compile the application yourself, you can follow these steps. Make sure you have Flutter and Rust installed on your system. For more detailed instructions, refer to the [DEVELOPMENT](DEVELOPMENT.md) file.
+If you prefer to compile the application yourself, follow these steps. Prerequisites: Flutter 3.38.5 (FVM-managed), Rust toolchain, and FVM. For more details, see the [DEVELOPMENT](DEVELOPMENT.md) file.
 
 1.  **Clone the repository:**
     ```sh
@@ -80,15 +83,32 @@ If you prefer to compile the application yourself, you can follow these steps. M
     cd nadekodon-rs
     ```
 
-2.  **Generate Rinf bindings:**
+2.  **Install Flutter and generate bindings:**
     ```sh
+    fvm install
+    cargo install rinf_cli
     rinf gen
     ```
 
-3.  **Build the application:**
+3.  **Build for your platform:**
     ```sh
-    fvm flutter build
+    # Linux (x64)
+    fvm flutter build linux --release --target-platform linux-x64
+
+    # Windows
+    fvm flutter build windows --release
+
+    # Android (ARM64)
+    fvm flutter build apk --release --target-platform android-arm64
     ```
+
+#### Docker
+
+Build and run the standalone server for browser extension integration:
+```sh
+docker build -t nadekodon-server .
+docker run -p 8080:8080 nadekodon-server
+```
 
 
 ## License

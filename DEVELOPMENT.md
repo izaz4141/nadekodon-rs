@@ -7,7 +7,7 @@ This document provides an overview of the development process, code structure, a
 Nadeko~don uses a hybrid architecture:
 -   **Frontend**: Flutter (Dart) for the user interface and OS integration (system tray, window management).
 -   **Backend**: Rust for high-performance logic, including download management, file operations, database handling, and networking.
--   **Communication**: [Rinf](https://pub.dev/packages/rinf) (Rust in Flutter) is used for seamless communication between Dart and Rust using signals (Protobuf messages).
+-   **Communication**: [Rinf](https://pub.dev/packages/rinf) (Rust in Flutter) is used for seamless communication between Dart and Rust using signals.
 
 ## Project Structure
 
@@ -21,9 +21,18 @@ The project follows a standard Flutter + Rust structure:
     -   `src/bindings/`: Generated Dart bindings for Rust signals.
 -   **`native/hub/`**: Rust source code (crate name: `hub`).
     -   `src/lib.rs`: Rust entry point. Spawns async tasks for various services.
-    -   `src/downloader/`: Core download logic (Download Manager, Workers).
-    -   `src/utils/`: Utility modules (Database, Server, Settings, YouTube-DL).
-    -   `src/signals/`: Signal definitions and handlers.
+    -   `src/downloader/`: Signal handlers for download operations.
+    -   `src/utils/`: Utility modules (Database, Server, Settings, YouTube-DL, Security).
+    -   `src/signals/`: Signal definitions and handlers (DartSignal/RustSignal).
+-   **`native/core/`**: Core download logic (crate name: `nadekodon-core`).
+    -   Shared library providing download management, worker implementations, and data types.
+    -   `src/downloader/`: Download manager, workers (HTTP, HLS, Torrent), and controls.
+    -   `src/signals/`: Signal message structures.
+    -   `src/utils/`: Database, settings, URL handling, YT-DLP integration.
+-   **`native/server/`**: Standalone HTTP server (crate name: `nadekodon-server`).
+    -   Runs independently for browser extension (NadeCon) integration.
+    -   `src/server/`: HTTP server implementation.
+    -   `src/qbittorrent/`: qBittorrent API client for torrent management.
 
 ## Key Components
 
@@ -48,6 +57,18 @@ The project follows a standard Flutter + Rust structure:
 Communication happens via "Signals".
 -   **Dart to Rust**: Dart sends signals (e.g., `InitDatabase`, `StartServer`) to trigger actions in Rust.
 -   **Rust to Dart**: Rust sends signals to update the UI (e.g., download progress, status updates).
+
+Signals are defined in `native/core/src/signals/` and `native/hub/src/signals/` using Rinf's derive macros.
+
+## Browser Extension Integration
+
+Nadeko~don supports browser extension integration via the **NadeCon** browser extension. The standalone HTTP server (`native/server/`) provides a REST API for:
+
+-   Adding downloads from the browser
+-   Querying download status
+-   Managing torrent downloads via qBittorrent integration
+
+The server runs on a configurable port (default 8080) and supports API key authentication.
 
 ## Build Guide
 
@@ -75,10 +96,12 @@ Before you begin, ensure you have the following tools installed on your system:
     fvm install
     ```
 
+The project requires **Flutter 3.38.5** (configured in `.fvmrc`).
+
 ### 3. Development Workflow
 
 #### Signal Generation
-The communication between Dart and Rust is handled by `rinf`. If you modify the protocol buffer definitions (`.proto` files), you must regenerate the bindings:
+The communication between Dart and Rust is handled by `rinf`. Signals are defined using Rust struct attributes (`#[derive(DartSignal)]`, `#[derive(RustSignal)]`). After modifying signal definitions, regenerate the bindings:
 ```sh
 rinf gen
 ```
@@ -90,9 +113,28 @@ fvm flutter run
 ```
 
 #### Building for Release
-To create a release build for your target platform, use the `build` command. Replace `<platform>` with your target (e.g., `linux`, `windows`, `android`).
+To create a release build for your target platform, use the platform-specific command:
 ```sh
-fvm flutter build <platform>
+# Linux (x64)
+fvm flutter build linux --release --target-platform linux-x64
+
+# Windows
+fvm flutter build windows --release
+
+# Android (ARM64)
+fvm flutter build apk --release --target-platform android-arm64
+```
+
+#### Building Standalone Server
+The `nadekodon-server` binary provides HTTP API for browser extension integration:
+```sh
+cargo build -p nadekodon-server --release
+```
+
+#### Docker Build
+Build the server using Docker:
+```sh
+docker build -t nadekodon-server .
 ```
 
 #### Formatting and Linting
@@ -111,7 +153,7 @@ To maintain code quality and consistency, please format and lint your code befor
 
 -   **Lint Rust:**
     ```sh
-    cargo clippy -- -D warnings
+    cargo check
     ```
 
 ## Miscellanous
