@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use tokio::sync::{Notify, RwLock};
 
-use crate::downloader::main::DownloadManager;
+use crate::downloader::manager::DownloadManager;
 use crate::utils::database::DatabaseManager;
 use crate::utils::logger;
 use crate::utils::types::DMSettings;

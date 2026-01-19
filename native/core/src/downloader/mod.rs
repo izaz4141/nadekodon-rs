@@ -1,4 +1,6 @@
-pub mod main;
+pub mod constants;
+pub mod manager;
+pub mod worker;
 
 use crate::signals;
 use crate::utils::{
@@ -7,7 +9,7 @@ use crate::utils::{
     types::{DMSettings, DownloadInfo, DownloadState, DownloadType},
     url::get_url_info,
 };
-pub use main::DownloadManager;
+pub use manager::DownloadManager;
 
 use anyhow::{Result, anyhow};
 use reqwest::Client;

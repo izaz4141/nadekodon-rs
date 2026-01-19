@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::downloader::main::DownloadManager;
+use crate::downloader::manager::DownloadManager;
 use crate::signals::UpdateSettings;
 use crate::utils::logger;
 use crate::utils::types::DMSettings;
