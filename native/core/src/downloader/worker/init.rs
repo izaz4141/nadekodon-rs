@@ -65,9 +65,9 @@ impl DownloadWorker {
                 seeding_ratio_override: None,
                 seeding_time_override: None,
             }),
-            client: client,
+            client,
             threads: settings.clone().read().await.download_threads as u64,
-            settings: settings,
+            settings,
             paused: AtomicBool::new(false),
             started: AtomicBool::new(false),
             cancel: AtomicBool::new(false),
@@ -124,9 +124,9 @@ impl DownloadWorker {
 
         let worker = Arc::new(Self {
             info: Mutex::new(safe_info.clone()),
-            client: client,
+            client,
             threads: settings.clone().read().await.download_threads as u64,
-            settings: settings,
+            settings,
             paused: AtomicBool::new(is_paused),
             started: AtomicBool::new(false),
             cancel: AtomicBool::new(false),

@@ -108,8 +108,8 @@ pub async fn start_download_manager(
         seeding_time: 30,
         download_dir: "Downloads".to_string(),
     };
-    let manager = DownloadManager::new(client, settings, context).await;
-    manager
+
+    DownloadManager::new(client, settings, context).await
 }
 
 pub async fn query_url_info_internal(
@@ -142,7 +142,7 @@ pub async fn query_url_info_internal(
                 total_size: info.total_size,
                 accept_ranges: info.accept_ranges,
                 content_type: info.content_type,
-                is_webpage: is_webpage,
+                is_webpage,
                 error: false,
             })
         }
@@ -150,7 +150,7 @@ pub async fn query_url_info_internal(
             let err_str = format!("Failed to query info for {}: {:?}", url, e);
             logger::error(&err_str);
             Ok(signals::UrlQueryOutput {
-                url: url,
+                url,
                 name: err_str,
                 total_size: None,
                 accept_ranges: false,
@@ -518,10 +518,7 @@ pub async fn get_download_list_internal(
             for info in slice {
                 let state_str = info.state.to_string();
                 let dspeed: f64 = calc_speed(info.history.clone());
-                let uspeed: Option<f64> = match info.uspeed {
-                    Some(s) => Some(s),
-                    _ => None,
-                };
+                let uspeed: Option<f64> = info.uspeed;
                 let glance = signals::DownloadGlance {
                     id: info.id.to_string(),
                     download_type: info.download_type.to_string(),
@@ -535,8 +532,8 @@ pub async fn get_download_list_internal(
                     total_size: info.total_size,
                     downloaded: info.downloaded,
                     uploaded: info.uploaded,
-                    dspeed: dspeed,
-                    uspeed: uspeed,
+                    dspeed,
+                    uspeed,
                     state: state_str,
                     referer: info.referer.clone(),
                 };
@@ -587,8 +584,7 @@ pub async fn get_download_details_internal(
                         if let Some(handle) = handle_opt {
                             let stats = handle.stats();
                             if let Some(live_stats) = stats.live {
-                                upload_speed =
-                                    Some((live_stats.upload_speed.mbps * 125_000.0) as f64);
+                                upload_speed = Some((live_stats.upload_speed.mbps * 125_000.0));
                                 if let Some(duration) = live_stats.time_remaining {
                                     eta = Some(duration.to_string());
                                 }
@@ -618,7 +614,7 @@ pub async fn get_download_details_internal(
                 dest: info.dest.display().to_string(),
                 total_size: info.total_size,
                 downloaded: info.downloaded,
-                speed: speed,
+                speed,
                 state: state_str,
                 part_info: info
                     .parts

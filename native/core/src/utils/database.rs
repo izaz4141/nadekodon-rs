@@ -119,24 +119,24 @@ impl DatabaseManager {
             let seeding_time_override = seeding_time_override.map(|s| s as u64);
 
             downloads.push(DownloadInfo {
-                id: id,
-                url: url,
-                dest: dest,
-                total_size: total_size,
-                downloaded: downloaded,
-                uploaded: uploaded,
+                id,
+                url,
+                dest,
+                total_size,
+                downloaded,
+                uploaded,
                 uspeed: None,
-                state: state,
+                state,
                 history: Vec::new(),
-                parts: parts,
-                added_at: added_at,
-                updated_at: updated_at,
-                download_type: download_type,
-                torrent_hash: torrent_hash,
-                referer: referer,
-                category: category,
-                seeding_ratio_override: seeding_ratio_override,
-                seeding_time_override: seeding_time_override,
+                parts,
+                added_at,
+                updated_at,
+                download_type,
+                torrent_hash,
+                referer,
+                category,
+                seeding_ratio_override,
+                seeding_time_override,
             });
         }
 
@@ -164,15 +164,15 @@ impl DatabaseManager {
             std::fs::create_dir_all(parent).unwrap_or_default();
         }
 
-        if !path.exists() {
-            if let Err(e) = std::fs::File::create(&path) {
-                logger::error(&format!(
-                    "Failed to create db file at {}: {}",
-                    path.display(),
-                    e
-                ));
-                return Err(sqlx::Error::Io(e));
-            }
+        if !path.exists()
+            && let Err(e) = std::fs::File::create(path)
+        {
+            logger::error(&format!(
+                "Failed to create db file at {}: {}",
+                path.display(),
+                e
+            ));
+            return Err(sqlx::Error::Io(e));
         }
 
         let db_url = format!("sqlite://{}", path.display());

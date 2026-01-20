@@ -19,10 +19,10 @@ impl DownloadManager {
                 }
 
                 worker.pause().await?;
-                if self.active.lock().await.remove(&id) {
-                    if self.concurrency.load(Ordering::SeqCst) > 0 {
-                        self.concurrency.fetch_sub(1, Ordering::SeqCst);
-                    }
+                if self.active.lock().await.remove(&id)
+                    && self.concurrency.load(Ordering::SeqCst) > 0
+                {
+                    self.concurrency.fetch_sub(1, Ordering::SeqCst);
                 }
                 self.process_queue().await;
                 Ok(())
@@ -66,7 +66,7 @@ impl DownloadManager {
 
                 worker.cancel().await?;
                 self.active.lock().await.remove(&id);
-                let conc = self.concurrency.load(Ordering::SeqCst).clone();
+                let conc = self.concurrency.load(Ordering::SeqCst);
                 if conc > 0 {
                     self.concurrency.store(conc - 1, Ordering::SeqCst);
                 };

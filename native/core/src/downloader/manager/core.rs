@@ -108,7 +108,7 @@ impl DownloadManager {
             WorkerEvent::Completed(id) | WorkerEvent::Cancelled(id) | WorkerEvent::Error(id, _) => {
                 self.active.lock().await.remove(&id);
                 {
-                    let conc = self.concurrency.load(Ordering::SeqCst).clone();
+                    let conc = self.concurrency.load(Ordering::SeqCst);
                     if conc > 0 {
                         self.concurrency.store(conc - 1, Ordering::SeqCst);
                     };
@@ -122,8 +122,8 @@ impl DownloadManager {
     }
 
     pub async fn process_queue(&self) {
-        let limit = self.settings.read().await.concurrency_limit.clone();
-        let active_count = self.concurrency.load(Ordering::SeqCst).clone();
+        let limit = self.settings.read().await.concurrency_limit;
+        let active_count = self.concurrency.load(Ordering::SeqCst);
 
         if active_count == limit {
             return;

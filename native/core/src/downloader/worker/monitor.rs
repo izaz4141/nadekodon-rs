@@ -73,7 +73,7 @@ impl DownloadWorker {
                         logger::error(&err_str);
                         let mut info = monitor_worker.info.lock().await;
                         info.state = DownloadState::Error(err_str.clone());
-                        let id = info.id.clone();
+                        let id = info.id;
                         drop(info);
                         monitor_worker.sync_to_info().await;
                         let _ = monitor_worker
@@ -87,7 +87,7 @@ impl DownloadWorker {
                         logger::error(&err_str);
                         let mut info = monitor_worker.info.lock().await;
                         info.state = DownloadState::Error(err_str.clone());
-                        let id = info.id.clone();
+                        let id = info.id;
                         drop(info);
                         monitor_worker.sync_to_info().await;
                         let _ = monitor_worker
@@ -104,7 +104,7 @@ impl DownloadWorker {
                     info.total_size = Some(monitor_worker.downloaded.load(Ordering::SeqCst));
                 }
                 info.state = DownloadState::Completed;
-                let id = info.id.clone();
+                let id = info.id;
                 drop(info);
                 monitor_worker.sync_to_info().await;
                 let _ = monitor_worker

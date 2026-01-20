@@ -84,12 +84,11 @@ pub async fn get_url_info(
     // Send HEAD request
     let mut request_builder = client.head(url);
     if let Some(c) = &cookie {
-        request_builder =
-            request_builder.header(header::COOKIE, header::HeaderValue::from_str(&c)?);
+        request_builder = request_builder.header(header::COOKIE, header::HeaderValue::from_str(c)?);
     }
     if let Some(ua) = &user_agent {
         request_builder =
-            request_builder.header(header::USER_AGENT, header::HeaderValue::from_str(&ua)?);
+            request_builder.header(header::USER_AGENT, header::HeaderValue::from_str(ua)?);
     }
     let response = request_builder.send().await?;
 
@@ -156,7 +155,7 @@ pub async fn get_url_info(
                 .as_ref()
                 .and_then(|u| {
                     u.path_segments()
-                        .and_then(|segments| segments.last())
+                        .and_then(|mut segments| segments.next_back())
                         .map(|s| percent_decode_str(s).decode_utf8_lossy().to_string())
                 })
                 .unwrap_or_else(|| "download.bin".to_string())
@@ -190,7 +189,7 @@ pub fn is_magnet_url(url: &str) -> bool {
 pub fn is_torrent_file(url: &str, content_type: &Option<String>) -> bool {
     url.ends_with(".torrent")
         || match content_type {
-            Some(ct) => ct.to_ascii_lowercase() == "application/x-bittorrent",
+            Some(ct) => ct.eq_ignore_ascii_case("application/x-bittorrent"),
             None => false,
         }
 }

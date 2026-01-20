@@ -26,10 +26,10 @@ pub async fn handle_ffmpeg_results() {
     while let Some(signal_pack) = receiver.recv().await {
         let result = signal_pack.message;
         let waiters_lock = FFMPEG_WAITERS.get_or_init(|| std::sync::Mutex::new(HashMap::new()));
-        if let Ok(mut waiters) = waiters_lock.lock() {
-            if let Some(sender) = waiters.remove(&result.id) {
-                let _ = sender.send(result);
-            }
+        if let Ok(mut waiters) = waiters_lock.lock()
+            && let Some(sender) = waiters.remove(&result.id)
+        {
+            let _ = sender.send(result);
         }
     }
 }
@@ -151,23 +151,20 @@ pub async fn query_url_info(client: Client) {
             user_agent: data.user_agent,
             referer: data.referer,
         };
-        match downloader::query_url_info_internal(client.clone(), core_query).await {
-            Ok(u) => {
-                if u.error {
-                    logger::error(&u.name);
-                }
-                signals::UrlQueryOutput {
-                    name: u.name,
-                    url: u.url,
-                    total_size: u.total_size,
-                    accept_ranges: u.accept_ranges,
-                    content_type: u.content_type,
-                    is_webpage: u.is_webpage,
-                    error: u.error,
-                }
-                .send_signal_to_dart()
+        if let Ok(u) = downloader::query_url_info_internal(client.clone(), core_query).await {
+            if u.error {
+                logger::error(&u.name);
             }
-            _ => {}
+            signals::UrlQueryOutput {
+                name: u.name,
+                url: u.url,
+                total_size: u.total_size,
+                accept_ranges: u.accept_ranges,
+                content_type: u.content_type,
+                is_webpage: u.is_webpage,
+                error: u.error,
+            }
+            .send_signal_to_dart()
         }
     }
 }
@@ -199,8 +196,8 @@ pub async fn spawn_download_worker(manager: Arc<downloader::DownloadManager>) {
         let coredrequest = csignals::DoDownload {
             url: drequest.url.clone(),
             dest: drequest.dest,
-            video_format: video_format,
-            audio_format: audio_format,
+            video_format,
+            audio_format,
             is_ytdl: drequest.is_ytdl,
             cookie: drequest.cookie,
             user_agent: drequest.user_agent,
@@ -347,7 +344,7 @@ pub async fn get_download_details(manager: Arc<downloader::DownloadManager>) {
                 speed: details.speed,
                 upload_speed: details.upload_speed,
                 state: details.state,
-                part_info: part_info,
+                part_info,
                 peers: details.peers,
                 ratio: details.ratio,
                 eta: details.eta,

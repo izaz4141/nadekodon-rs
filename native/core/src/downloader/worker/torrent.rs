@@ -207,7 +207,7 @@ impl DownloadWorker {
             self.uploaded.store(uploaded, Ordering::SeqCst);
 
             if let Some(s) = stats.live {
-                let uspeed = s.upload_speed.mbps * 125_000 as f64;
+                let uspeed = s.upload_speed.mbps * 125_000_f64;
                 let mut info = self.info.lock().await;
                 info.uspeed = Some(uspeed);
             } else {
@@ -286,7 +286,7 @@ impl DownloadWorker {
             self.uploaded.store(uploaded, Ordering::SeqCst);
 
             if let Some(s) = stats.live {
-                let uspeed = s.upload_speed.mbps * 125_000 as f64;
+                let uspeed = s.upload_speed.mbps * 125_000_f64;
                 let mut info = self.info.lock().await;
                 info.uspeed = Some(uspeed);
             } else {

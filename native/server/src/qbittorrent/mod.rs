@@ -84,10 +84,10 @@ async fn auth_middleware(
     req: axum::http::Request<axum::body::Body>,
     next: axum::middleware::Next,
 ) -> impl IntoResponse {
-    if let Some(cookie) = jar.get("SID") {
-        if cookie.value() == state.api_key.read().await.clone() {
-            return next.run(req).await;
-        }
+    if let Some(cookie) = jar.get("SID")
+        && cookie.value() == state.api_key.read().await.clone()
+    {
+        return next.run(req).await;
     }
     StatusCode::FORBIDDEN.into_response()
 }

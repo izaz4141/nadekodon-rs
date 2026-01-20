@@ -39,12 +39,11 @@ impl DownloadManager {
         for w in map.values() {
             let info = w.info().await;
             if info.torrent_hash.is_some() {
-                if let Some(filter_hashes) = &hashes {
-                    if let Some(ref h) = info.torrent_hash {
-                        if !filter_hashes.contains(&h.as_str()) {
-                            continue;
-                        }
-                    }
+                if let Some(filter_hashes) = &hashes
+                    && let Some(ref h) = info.torrent_hash
+                    && !filter_hashes.contains(&h.as_str())
+                {
+                    continue;
                 }
                 out.push(info);
             }

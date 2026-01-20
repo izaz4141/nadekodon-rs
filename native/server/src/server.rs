@@ -52,7 +52,7 @@ pub struct AppState {
 }
 pub type SharedState = Arc<AppState>;
 
-pub fn normalize_secret<'a>(s: &'a str) -> &'a str {
+pub fn normalize_secret(s: &str) -> &str {
     let s = s.trim();
 
     if s.len() >= 2 {
@@ -71,21 +71,21 @@ pub fn get_config_path() -> String {
 
 pub fn load_config() -> Value {
     let mut cfg = Value::Null;
-    if let Ok(content) = std::fs::read_to_string("./assets/docs/default.json") {
-        if let Ok(mut v) = serde_json::from_str::<Value>(&content) {
-            v["server_api_key"] = Value::String(Uuid::new_v4().to_string());
-            let salt = utils::security::generate_salt();
-            v["salt"] = Value::String(salt.clone());
-            v["password"] = Value::String(utils::security::hash_password("admin", &salt).unwrap());
-            cfg = v;
-        }
+    if let Ok(content) = std::fs::read_to_string("./assets/docs/default.json")
+        && let Ok(mut v) = serde_json::from_str::<Value>(&content)
+    {
+        v["server_api_key"] = Value::String(Uuid::new_v4().to_string());
+        let salt = utils::security::generate_salt();
+        v["salt"] = Value::String(salt.clone());
+        v["password"] = Value::String(utils::security::hash_password("admin", &salt).unwrap());
+        cfg = v;
     }
     let path = get_config_path();
     logger::debug(&format!("Loading config from {}", path));
-    if let Ok(content) = std::fs::read_to_string(&path) {
-        if let Ok(v) = serde_json::from_str(&content) {
-            cfg = v;
-        }
+    if let Ok(content) = std::fs::read_to_string(&path)
+        && let Ok(v) = serde_json::from_str(&content)
+    {
+        cfg = v;
     }
     save_config(&cfg);
     cfg
@@ -112,17 +112,17 @@ pub async fn check_api_key(
 ) -> Result<impl IntoResponse, StatusCode> {
     let api_key = state.api_key.read().await.clone();
     // Check header first
-    if let Some(key) = req.headers().get("X-API-Key") {
-        if key.to_str().map(|k| k == api_key).unwrap_or(false) {
-            return Ok(next.run(req).await);
-        }
+    if let Some(key) = req.headers().get("X-API-Key")
+        && key.to_str().map(|k| k == api_key).unwrap_or(false)
+    {
+        return Ok(next.run(req).await);
     }
 
     // Check cookie
-    if let Some(cookie) = jar.get("nadeko_api_key") {
-        if cookie.value() == api_key {
-            return Ok(next.run(req).await);
-        }
+    if let Some(cookie) = jar.get("nadeko_api_key")
+        && cookie.value() == api_key
+    {
+        return Ok(next.run(req).await);
     }
 
     Err(StatusCode::UNAUTHORIZED)
@@ -140,10 +140,10 @@ async fn handle_login(
     Json(payload): Json<LoginRequest>,
 ) -> impl IntoResponse {
     let mut authorized = false;
-    if let Some(cookie) = jar.get("nadeko_api_key") {
-        if cookie.value() == state.api_key.read().await.clone() {
-            authorized = true;
-        }
+    if let Some(cookie) = jar.get("nadeko_api_key")
+        && cookie.value() == state.api_key.read().await.clone()
+    {
+        authorized = true;
     }
     if !authorized {
         authorized = match payload {

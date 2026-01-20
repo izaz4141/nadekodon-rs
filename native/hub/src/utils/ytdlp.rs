@@ -42,8 +42,8 @@ pub async fn handle_ytdl_query() {
                 YtdlQueryOutput {
                     name: output.name,
                     thumbnail: output.thumbnail,
-                    videos: videos,
-                    audios: audios,
+                    videos,
+                    audios,
                     error: output.error,
                 }
             }

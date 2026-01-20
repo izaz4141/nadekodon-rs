@@ -28,10 +28,10 @@ pub struct TorrentsAddMultipart {
 }
 
 fn extract_boundary(content_type: &str) -> Option<String> {
-    if let Ok(ct) = content_type.parse::<mime::Mime>() {
-        if let Some(boundary) = ct.get_param("boundary") {
-            return Some(boundary.as_str().to_string());
-        }
+    if let Ok(ct) = content_type.parse::<mime::Mime>()
+        && let Some(boundary) = ct.get_param("boundary")
+    {
+        return Some(boundary.as_str().to_string());
     }
 
     if let Some(start) = content_type.find("boundary=") {

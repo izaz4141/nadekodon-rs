@@ -30,15 +30,13 @@ pub async fn torrents_set_category(
             if let Some(worker) = state.context.dm().await.get_worker(d.id).await {
                 if query.category.is_empty() {
                     worker.clear_category().await;
-                } else {
-                    if let Err(e) = worker.set_category(query.category.clone()).await {
-                        logger::error(&format!("Failed to set category: {:?}", e));
-                        return (
-                            StatusCode::BAD_REQUEST,
-                            format!("Failed to set category: {:?}", e),
-                        )
-                            .into_response();
-                    }
+                } else if let Err(e) = worker.set_category(query.category.clone()).await {
+                    logger::error(&format!("Failed to set category: {:?}", e));
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        format!("Failed to set category: {:?}", e),
+                    )
+                        .into_response();
                 }
             }
         }
@@ -58,15 +56,13 @@ pub async fn torrents_set_category(
                     if let Some(worker) = state.context.dm().await.get_worker(d.id).await {
                         if query.category.is_empty() {
                             worker.clear_category().await;
-                        } else {
-                            if let Err(e) = worker.set_category(query.category.clone()).await {
-                                logger::error(&format!("Failed to set category: {:?}", e));
-                                return (
-                                    StatusCode::BAD_REQUEST,
-                                    format!("Failed to set category: {:?}", e),
-                                )
-                                    .into_response();
-                            }
+                        } else if let Err(e) = worker.set_category(query.category.clone()).await {
+                            logger::error(&format!("Failed to set category: {:?}", e));
+                            return (
+                                StatusCode::BAD_REQUEST,
+                                format!("Failed to set category: {:?}", e),
+                            )
+                                .into_response();
                         }
                     }
                 }

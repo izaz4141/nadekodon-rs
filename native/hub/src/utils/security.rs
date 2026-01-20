@@ -1,5 +1,5 @@
 extern crate nadekodon_core as core;
-use crate::signals::*;
+use crate::signals::{GenerateSalt, HashPassword, HashingOutput, SaltOutput};
 use crate::utils::logger;
 use core::utils::security::{generate_salt, hash_password};
 use rinf::{DartSignal, RustSignal};

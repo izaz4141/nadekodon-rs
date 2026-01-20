@@ -104,10 +104,8 @@ pub async fn torrents_info(
                     if d.category.is_some() {
                         return false;
                     }
-                } else {
-                    if d.category.as_deref() != Some(cat) {
-                        return false;
-                    }
+                } else if d.category.as_deref() != Some(cat) {
+                    return false;
                 }
             }
 
@@ -170,23 +168,23 @@ pub async fn torrents_info(
                 };
 
             let mut content_path = d.dest.to_string_lossy().to_string();
-            if d.dest.is_dir() {
-                if let Ok(mut entries) = tokio::fs::read_dir(&d.dest).await {
-                    let mut first_entry = None;
-                    let mut count = 0;
-                    while let Ok(Some(entry)) = entries.next_entry().await {
-                        count += 1;
-                        if count == 1 {
-                            first_entry = Some(entry.path());
-                        } else {
-                            break;
-                        }
-                    }
+            if d.dest.is_dir()
+                && let Ok(mut entries) = tokio::fs::read_dir(&d.dest).await
+            {
+                let mut first_entry = None;
+                let mut count = 0;
+                while let Ok(Some(entry)) = entries.next_entry().await {
+                    count += 1;
                     if count == 1 {
-                        if let Some(path) = first_entry {
-                            content_path = path.to_string_lossy().to_string();
-                        }
+                        first_entry = Some(entry.path());
+                    } else {
+                        break;
                     }
+                }
+                if count == 1
+                    && let Some(path) = first_entry
+                {
+                    content_path = path.to_string_lossy().to_string();
                 }
             }
 
@@ -265,7 +263,7 @@ pub async fn torrents_info(
     let start = if offset >= 0 {
         offset as usize
     } else {
-        info_list.len().saturating_sub(offset.abs() as usize)
+        info_list.len().saturating_sub(offset.unsigned_abs())
     };
 
     let end = if let Some(limit) = query.limit {

@@ -21,7 +21,8 @@ abstract class IOService {
 class NativeIOService implements IOService {
   final Map<String, Lock> _fileLocks = {};
 
-  Lock _getLock(String path) => _fileLocks.putIfAbsent(path, () => Lock(reentrant: true));
+  Lock _getLock(String path) =>
+      _fileLocks.putIfAbsent(path, () => Lock(reentrant: true));
 
   @override
   Future<String> getConfigDir() async {
@@ -111,23 +112,17 @@ class WasmIOService implements IOService {
 
   @override
   Future<String> getDatabasePath() async {
-    throw UnsupportedError(
-      'Filesystem access is not supported in WASM.',
-    );
+    throw UnsupportedError('Filesystem access is not supported in WASM.');
   }
 
   @override
   Future<String> getTorrentPersistencePath() async {
-    throw UnsupportedError(
-      'Filesystem access is not supported in WASM.',
-    );
+    throw UnsupportedError('Filesystem access is not supported in WASM.');
   }
 
   @override
   Future<bool> fileExists(String path) async {
-    throw UnsupportedError(
-      'Filesystem access is not supported in WASM.',
-    );
+    throw UnsupportedError('Filesystem access is not supported in WASM.');
   }
 
   @override
@@ -146,30 +141,22 @@ class WasmIOService implements IOService {
 
   @override
   Future<void> createDirectory(String path, {bool recursive = false}) async {
-    throw UnsupportedError(
-      'Filesystem access is not supported in WASM.',
-    );
+    throw UnsupportedError('Filesystem access is not supported in WASM.');
   }
 
   @override
   Future<bool> directoryExists(String path) async {
-    throw UnsupportedError(
-      'Filesystem access is not supported in WASM.',
-    );
+    throw UnsupportedError('Filesystem access is not supported in WASM.');
   }
 
   @override
   Future<Uint8List> readFileBytes(String path) async {
-    throw UnsupportedError(
-      'Filesystem access is not supported in WASM.',
-    );
+    throw UnsupportedError('Filesystem access is not supported in WASM.');
   }
 
   @override
   Future<void> writeFileBytes(String path, Uint8List bytes) async {
-    throw UnsupportedError(
-      'Filesystem access is not supported in WASM.',
-    );
+    throw UnsupportedError('Filesystem access is not supported in WASM.');
   }
 }
 

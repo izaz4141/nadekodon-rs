@@ -26,13 +26,13 @@ impl DownloadWorker {
         if let Some(cookie) = &self.cookie {
             request_builder = request_builder.header(
                 reqwest::header::COOKIE,
-                reqwest::header::HeaderValue::from_str(&cookie)?,
+                reqwest::header::HeaderValue::from_str(cookie)?,
             );
         }
         if let Some(ua) = &self.user_agent {
             request_builder = request_builder.header(
                 reqwest::header::USER_AGENT,
-                reqwest::header::HeaderValue::from_str(&ua)?,
+                reqwest::header::HeaderValue::from_str(ua)?,
             );
         }
         let head = request_builder.send().await?;
@@ -107,7 +107,7 @@ impl DownloadWorker {
                 } else {
                     let part_size = size / threads;
                     for i in 0..threads {
-                        let start = i as u64 * part_size;
+                        let start = i * part_size;
                         let end = if i == threads - 1 {
                             size - 1
                         } else {
@@ -225,13 +225,13 @@ impl DownloadWorker {
             if let Some(cookie) = &self.cookie {
                 request_builder = request_builder.header(
                     reqwest::header::COOKIE,
-                    reqwest::header::HeaderValue::from_str(&cookie)?,
+                    reqwest::header::HeaderValue::from_str(cookie)?,
                 );
             }
             if let Some(ua) = &self.user_agent {
                 request_builder = request_builder.header(
                     reqwest::header::USER_AGENT,
-                    reqwest::header::HeaderValue::from_str(&ua)?,
+                    reqwest::header::HeaderValue::from_str(ua)?,
                 );
             }
             if accept_ranges {
