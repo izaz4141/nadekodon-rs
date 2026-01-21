@@ -2,8 +2,9 @@ extern crate nadekodon_core as core;
 use core::app_context::AppContext;
 use core::utils::security;
 use nadekodon_server::{
+    nadeko::create_nadeko_router,
     qbittorrent::get_router,
-    server::{AppState, SharedState, check_api_key, create_nadeko_router, run_server},
+    server::{AppState, SharedState, check_api_key, run_server},
 };
 use tokio::sync::{Notify, RwLock};
 
@@ -83,7 +84,7 @@ pub async fn start_server_listener(context: Arc<AppContext>) {
         let qbt_router = get_router(state.clone());
         let nadeko_router = create_nadeko_router(state.clone());
         let ext_router = Router::new()
-            .route("/add-download", post(handle_add_download))
+            .route("/download/add", post(handle_add_download))
             .layer(middleware::from_fn_with_state(state.clone(), check_api_key))
             .with_state(state.clone());
         let router = Router::new()

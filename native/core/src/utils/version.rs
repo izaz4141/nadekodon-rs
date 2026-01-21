@@ -52,11 +52,11 @@ pub async fn get_all_tags(
 fn extract_text_from_xml(xml: &str, tag: &str) -> Option<String> {
     let open_tag = format!("<{}>", tag);
     let close_tag = format!("</{}>", tag);
-    if let Some(start) = xml.find(&open_tag) {
-        if let Some(end) = xml.find(&close_tag) {
-            let content_start = start + open_tag.len();
-            return Some(xml[content_start..end].to_string());
-        }
+    if let Some(start) = xml.find(&open_tag)
+        && let Some(end) = xml.find(&close_tag)
+    {
+        let content_start = start + open_tag.len();
+        return Some(xml[content_start..end].to_string());
     }
     None
 }
@@ -76,20 +76,20 @@ pub async fn get_latest_release_atom(
         .await
         .map_err(|e| e.to_string())?;
 
-    if let Some(start) = text.find("<entry>") {
-        if let Some(end) = text.find("</entry>") {
-            let entry = &text[start..end + 8];
-            let tag_name = extract_text_from_xml(entry, "title").unwrap_or_default();
-            let updated = extract_text_from_xml(entry, "updated").unwrap_or_default();
-            let content = extract_text_from_xml(entry, "content").unwrap_or_default();
+    if let Some(start) = text.find("<entry>")
+        && let Some(end) = text.find("</entry>")
+    {
+        let entry = &text[start..end + 8];
+        let tag_name = extract_text_from_xml(entry, "title").unwrap_or_default();
+        let updated = extract_text_from_xml(entry, "updated").unwrap_or_default();
+        let content = extract_text_from_xml(entry, "content").unwrap_or_default();
 
-            return Ok(json!({
-                "tag_name": tag_name,
-                "body": content,
-                "published_at": updated,
-                "assets": []
-            }));
-        }
+        return Ok(json!({
+            "tag_name": tag_name,
+            "body": content,
+            "published_at": updated,
+            "assets": []
+        }));
     }
     Err("No entry found in Atom feed".to_string())
 }
@@ -215,14 +215,12 @@ async fn fetch_pubspec_version(
 ) -> (Option<String>, Option<String>) {
     if let Some(assets_arr) = assets.as_array() {
         for asset in assets_arr {
-            if asset["name"].as_str() == Some("pubspec.yaml") {
-                if let Some(browser_url) = asset["browser_download_url"].as_str() {
-                    if let Ok(resp) = client.get(browser_url).send().await {
-                        if let Ok(text) = resp.text().await {
-                            return parse_pubspec_version(&text);
-                        }
-                    }
-                }
+            if asset["name"].as_str() == Some("pubspec.yaml")
+                && let Some(browser_url) = asset["browser_download_url"].as_str()
+                && let Ok(resp) = client.get(browser_url).send().await
+                && let Ok(text) = resp.text().await
+            {
+                return parse_pubspec_version(&text);
             }
         }
     }
@@ -238,9 +236,9 @@ pub async fn get_latest_version(
 ) -> Result<VersionInfo, String> {
     if check_nightly {
         let releases_result = if use_atom {
-            get_all_releases_atom(&client, owner, repo).await
+            get_all_releases_atom(client, owner, repo).await
         } else {
-            get_all_releases(&client, owner, repo).await
+            get_all_releases(client, owner, repo).await
         };
 
         let releases = releases_result.unwrap_or_else(|_| json!([]));
@@ -248,9 +246,9 @@ pub async fn get_latest_version(
 
         let items: Vec<Value> = if releases_arr.is_empty() {
             let tags_result = if use_atom {
-                get_all_tags_atom(&client, owner, repo).await
+                get_all_tags_atom(client, owner, repo).await
             } else {
-                get_all_tags(&client, owner, repo).await
+                get_all_tags(client, owner, repo).await
             };
 
             let tags = tags_result.unwrap_or_else(|_| json!([]));
@@ -279,7 +277,7 @@ pub async fn get_latest_version(
             let (pubspec_version, build_number) = if use_atom {
                 (None, None)
             } else {
-                fetch_pubspec_version(&client, &assets).await
+                fetch_pubspec_version(client, &assets).await
             };
 
             let version_string = if let Some(pub_ver) = &pubspec_version {
@@ -315,9 +313,9 @@ pub async fn get_latest_version(
         latest_info.ok_or("No release found".to_string())
     } else {
         let json_result = if use_atom {
-            get_latest_release_atom(&client, owner, repo).await
+            get_latest_release_atom(client, owner, repo).await
         } else {
-            get_latest_release(&client, owner, repo).await
+            get_latest_release(client, owner, repo).await
         };
 
         let json = json_result?;
@@ -327,7 +325,7 @@ pub async fn get_latest_version(
             (None, None)
         } else {
             let assets = json["assets"].clone();
-            fetch_pubspec_version(&client, &assets).await
+            fetch_pubspec_version(client, &assets).await
         };
 
         let version_string = match (&pubspec_version, &build_number) {
@@ -401,5 +399,5 @@ fn custom_compare(current: &Version, best: &Version) -> bool {
     if current.major != best.major || current.minor != best.minor || current.patch != best.patch {
         return current > best;
     }
-    return current.build > best.build;
+    current.build > best.build
 }

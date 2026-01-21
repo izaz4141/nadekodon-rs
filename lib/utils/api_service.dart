@@ -41,7 +41,7 @@ class APIService {
     if (externalUrl.isEmpty) return externalUrl;
     if (!kIsWeb) return externalUrl;
     final encoded = Uri.encodeComponent(externalUrl);
-    return '$baseUrl/api/nadeko/img?url=$encoded';
+    return '$baseUrl/api/nadeko/utils/img?url=$encoded';
   }
 
   static void _startPolling() {
@@ -64,7 +64,7 @@ class APIService {
       body = {'username': username, 'password': password};
 
       final response = await http.post(
-        Uri.parse('$baseUrl/api/nadeko/login'),
+        Uri.parse('$baseUrl/api/nadeko/auth/login'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(body),
       );
@@ -95,7 +95,7 @@ class APIService {
   static Future<bool> regenerateApiKey() async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/api/nadeko/generate-api'),
+        Uri.parse('$baseUrl/api/nadeko/auth/generate-api'),
         headers: {'X-API-Key': SettingsManager.serverApiKey.value},
       );
       if (response.statusCode == 200) {
@@ -122,7 +122,7 @@ class APIService {
   static Future<bool> restartServer() async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/api/nadeko/restart'),
+        Uri.parse('$baseUrl/api/nadeko/system/restart'),
         headers: {'X-API-Key': SettingsManager.serverApiKey.value},
       );
       if (response.statusCode == 200) {
@@ -142,7 +142,7 @@ class APIService {
   static Future<void> _checkStatus() async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/api/nadeko/status'),
+        Uri.parse('$baseUrl/api/nadeko/system/status'),
         headers: {'X-API-Key': SettingsManager.serverApiKey.value},
       );
 
@@ -186,7 +186,7 @@ class APIService {
       };
 
       final response = await http.post(
-        Uri.parse('$baseUrl/api/nadeko/list'),
+        Uri.parse('$baseUrl/api/nadeko/download/list'),
         headers: {
           'X-API-Key': SettingsManager.serverApiKey.value,
           'Content-Type': 'application/json',
@@ -231,7 +231,7 @@ class APIService {
   static Future<DownloadDetails?> getDownloadDetails(String id) async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/api/nadeko/details/$id'),
+        Uri.parse('$baseUrl/api/nadeko/download/details/$id'),
         headers: {'X-API-Key': SettingsManager.serverApiKey.value},
       );
 
@@ -314,7 +314,7 @@ class APIService {
         },
     };
 
-    return _sendAction('do-download', payload);
+    return _sendAction('download/do', payload);
   }
 
   static Future<UrlQueryOutput?> queryUrl({
@@ -332,7 +332,7 @@ class APIService {
       };
 
       final response = await http.post(
-        Uri.parse('$baseUrl/api/nadeko/query-url'),
+        Uri.parse('$baseUrl/api/nadeko/utils/query-url'),
         headers: {
           'Content-Type': 'application/json',
           'X-API-Key': SettingsManager.serverApiKey.value,
@@ -371,7 +371,7 @@ class APIService {
   static Future<YtdlQueryOutput?> queryYtdl({required String url}) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/api/nadeko/query-ytdl'),
+        Uri.parse('$baseUrl/api/nadeko/utils/query-ytdl'),
         headers: {
           'Content-Type': 'application/json',
           'X-API-Key': SettingsManager.serverApiKey.value,
@@ -430,23 +430,26 @@ class APIService {
   }
 
   static Future<bool> pauseDownload(String id) async {
-    return _sendAction('pause', {'id': id});
+    return _sendAction('download/pause', {'id': id});
   }
 
   static Future<bool> resumeDownload(String id) async {
-    return _sendAction('resume', {'id': id});
+    return _sendAction('download/resume', {'id': id});
   }
 
   static Future<bool> updateUrl(String id, String newUrl) async {
-    return _sendAction('update-url', {'id': id, 'new_url': newUrl});
+    return _sendAction('download/update-url', {'id': id, 'new_url': newUrl});
   }
 
   static Future<bool> cancelDownload(String id) async {
-    return _sendAction('cancel', {'id': id});
+    return _sendAction('download/cancel', {'id': id});
   }
 
   static Future<bool> deleteDownload(String id, bool deleteFile) async {
-    return _sendAction('delete', {'id': id, 'delete_file': deleteFile});
+    return _sendAction('download/delete', {
+      'id': id,
+      'delete_file': deleteFile,
+    });
   }
 
   static Future<bool> _sendAction(
@@ -472,7 +475,7 @@ class APIService {
   static Future<Map<String, dynamic>?> getSettings() async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/api/nadeko/settings'),
+        Uri.parse('$baseUrl/api/nadeko/system/settings'),
         headers: {'X-API-Key': SettingsManager.serverApiKey.value},
       );
       if (response.statusCode == 200) {
@@ -487,7 +490,7 @@ class APIService {
   static Future<bool> saveSettings(Map<String, dynamic> settings) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/api/nadeko/settings'),
+        Uri.parse('$baseUrl/api/nadeko/system/settings'),
         headers: {
           'Content-Type': 'application/json',
           'X-API-Key': SettingsManager.serverApiKey.value,
@@ -504,7 +507,7 @@ class APIService {
   static Future<String?> hashPassword(String plainText, String salt) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/api/nadeko/hash'),
+        Uri.parse('$baseUrl/api/nadeko/auth/hash'),
         headers: {
           'Content-Type': 'application/json',
           'X-API-Key': SettingsManager.serverApiKey.value,
@@ -523,7 +526,7 @@ class APIService {
   static Future<String?> generateSalt() async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/api/nadeko/generate-salt'),
+        Uri.parse('$baseUrl/api/nadeko/auth/generate-salt'),
         headers: {'X-API-Key': SettingsManager.serverApiKey.value},
       );
       if (response.statusCode == 200) {
@@ -531,25 +534,6 @@ class APIService {
       }
     } catch (e) {
       log("Error generating salt: $e", isError: true);
-    }
-    return null;
-  }
-
-  static Future<Map<String, String>?> getDepsVersion() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/nadeko/deps-version'),
-        headers: {'X-API-Key': SettingsManager.serverApiKey.value},
-      );
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return {
-          'ytdlp': data['ytdlp'] as String,
-          'ffmpeg': data['ffmpeg'] as String,
-        };
-      }
-    } catch (e) {
-      log("Error getting deps version: $e", isError: true);
     }
     return null;
   }

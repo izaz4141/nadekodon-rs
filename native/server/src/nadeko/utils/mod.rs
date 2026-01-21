@@ -1,0 +1,19 @@
+mod img;
+mod query_url;
+mod query_ytdl;
+
+pub use img::*;
+pub use query_url::*;
+pub use query_ytdl::*;
+
+use crate::server::{SharedState, check_api_key};
+use axum::middleware;
+use axum::{Router, routing::post};
+
+pub fn create_utils_router(state: SharedState) -> Router<SharedState> {
+    Router::new()
+        .route("/query-url", post(handle_query_url))
+        .route("/query-ytdl", post(handle_query_ytdl))
+        .route("/img", axum::routing::get(handle_proxy_image))
+        .layer(middleware::from_fn_with_state(state, check_api_key))
+}
