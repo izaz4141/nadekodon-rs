@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:nadekodon/utils/platform_service.dart';
 
 import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/ui/widgets/view/settings_dm.dart';

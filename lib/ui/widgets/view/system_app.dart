@@ -6,13 +6,12 @@ import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/ui/widgets/app_snackbar.dart';
 import 'package:nadekodon/ui/widgets/dialog/view_logs.dart';
 import 'package:nadekodon/ui/widgets/dialog/licenses_dialog.dart';
+import 'package:nadekodon/ui/widgets/dialog/app_update.dart';
 import 'package:nadekodon/utils/settings.dart';
 import 'package:nadekodon/utils/updater.dart';
-import 'package:nadekodon/utils/logger.dart';
 import 'package:nadekodon/utils/system_service.dart';
 import 'package:nadekodon/utils/platform_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:pub_semver/pub_semver.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SystemApp extends StatefulWidget {
@@ -23,7 +22,7 @@ class SystemApp extends StatefulWidget {
 }
 
 class _SystemAppState extends State<SystemApp> {
-  PackageInfo _packageInfo = SystemService().packageInfo;
+  final PackageInfo _packageInfo = SystemService().packageInfo;
 
   VersionInfo? _latestVersion;
   bool _checkingUpdates = true;
@@ -33,7 +32,6 @@ class _SystemAppState extends State<SystemApp> {
   @override
   void initState() {
     super.initState();
-    _initPackageInfo();
     _checkForUpdates();
     SettingsManager.checkNightly.addListener(_checkForUpdates);
   }
@@ -58,37 +56,9 @@ class _SystemAppState extends State<SystemApp> {
   Future<void> _performUpdate() async {
     if (kIsWeb || !PlatformService.isDesktop || _latestVersion == null) return;
 
-    // Show confirmation dialog
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          'Update Available',
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
-        content: Text(
-          'A new version (${_latestVersion!.version}) is available.\n'
-          'The app will download and install the update, then restart automatically.\n'
-          'Do you want to continue?',
-          style: Theme.of(context).textTheme.bodyMedium,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(
-              'Cancel',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(
-              'Update',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ),
-        ],
-      ),
+      builder: (context) => AppUpdateDialog(versionInfo: _latestVersion!),
     );
 
     if (confirmed != true) return;
@@ -136,13 +106,6 @@ class _SystemAppState extends State<SystemApp> {
         type: SnackType.error,
       );
     }
-  }
-
-  Future<void> _initPackageInfo() async {
-    if (!mounted) return;
-    setState(() {
-      _packageInfo = SystemService().packageInfo;
-    });
   }
 
   @override
@@ -232,17 +195,7 @@ class _SystemAppState extends State<SystemApp> {
       );
     }
 
-    bool hasUpdate = false;
-    try {
-      if (_latestVersion != null) {
-        final currentVer = Version.parse(
-          '${_packageInfo.version}+${_packageInfo.buildNumber}',
-        );
-        hasUpdate = isNewerThan(_latestVersion!.version, currentVer);
-      }
-    } catch (e) {
-      log(e.toString(), isError: true);
-    }
+    bool hasUpdate = _latestVersion != null;
 
     return Column(
       children: [

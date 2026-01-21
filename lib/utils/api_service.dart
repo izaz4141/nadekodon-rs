@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:nadekodon/src/bindings/bindings.dart';
 import 'package:nadekodon/utils/settings.dart';
 import 'package:nadekodon/utils/logger.dart';
+import 'package:nadekodon/utils/system_service.dart';
 
 class APIService {
   static final ValueNotifier<bool> isOnline = ValueNotifier(false);
@@ -549,6 +550,69 @@ class APIService {
       }
     } catch (e) {
       log("Error getting deps version: $e", isError: true);
+    }
+    return null;
+  }
+
+  static Future<String?> getCurrentVersion(String app) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/nadeko/version/current?app=$app'),
+        headers: {'X-API-Key': SettingsManager.serverApiKey.value},
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['version'] as String?;
+      }
+    } catch (e) {
+      log("Error getting current version: $e", isError: true);
+    }
+    return null;
+  }
+
+  static Future<VersionInfo?> getLatestVersion(
+    String owner,
+    String repo, {
+    bool nightly = false,
+    bool atomic = true,
+  }) async {
+    try {
+      final response = await http.get(
+        Uri.parse(
+          '$baseUrl/api/nadeko/version/latest?owner=$owner&repo=$repo&nightly=$nightly&atomic=$atomic',
+        ),
+        headers: {'X-API-Key': SettingsManager.serverApiKey.value},
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        if (data['error'] != Null) {
+          final version = VersionInfo.fromJson(data);
+          return version;
+        }
+      }
+    } catch (e) {
+      log("Error getting latest version: $e", isError: true);
+    }
+    return null;
+  }
+
+  static Future<String?> compareVersions(List<String> versions) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/nadeko/version/compare'),
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': SettingsManager.serverApiKey.value,
+        },
+        body: jsonEncode({'versions': versions}),
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['latest'] as String?;
+      }
+    } catch (e) {
+      log("Error comparing versions: $e", isError: true);
     }
     return null;
   }

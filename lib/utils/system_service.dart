@@ -3,6 +3,40 @@ import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:nadekodon/utils/api_service.dart';
+import 'package:nadekodon/src/bindings/bindings.dart';
+
+class VersionInfo {
+  final String version;
+  final String tagName;
+  late String? downloadUrl;
+  final String releaseNotes;
+  final String publishedAt;
+
+  VersionInfo({
+    required this.version,
+    required this.tagName,
+    this.downloadUrl,
+    required this.releaseNotes,
+    required this.publishedAt,
+  });
+
+  factory VersionInfo.fromJson(dynamic json) {
+    return VersionInfo(
+      version: json['version'] ?? json['tag_name'] ?? '',
+      tagName: json['tag_name'] ?? '',
+      releaseNotes: json['release_notes'] ?? '',
+      publishedAt: json['published_at'] ?? '',
+    );
+  }
+  factory VersionInfo.fromRust(VersionInfoResult result) {
+    return VersionInfo(
+      version: result.version,
+      tagName: result.tagName,
+      releaseNotes: result.releaseNotes,
+      publishedAt: result.publishedAt,
+    );
+  }
+}
 
 class SystemService {
   static final SystemService _instance = SystemService._internal();
@@ -10,10 +44,20 @@ class SystemService {
   SystemService._internal();
 
   PackageInfo? _packageInfo;
+  // VersionInfo? _latestAppVersion;
+  Future<String?>? _localYtdlpVersionFuture;
+  Future<VersionInfo?>? _latestYtdlpVersionFuture;
+  Future<String?>? _localFfmpegVersionFuture;
+  Future<VersionInfo?>? _latestFfmpegVersionFuture;
   final _deviceInfoPlugin = DeviceInfoPlugin();
 
   Future<void> init() async {
     _packageInfo = await PackageInfo.fromPlatform();
+    // latestAppVersion = await APIService.getLatestVersion(
+    //   'izaz4141',
+    //   'nadekodon-rs',
+    //   nightly: true,
+    // );
   }
 
   PackageInfo get packageInfo =>
@@ -24,6 +68,29 @@ class SystemService {
         version: 'Unknown',
         buildNumber: 'Unknown',
       );
+
+  Future<String?> get localYtdlpVersion {
+    return _localYtdlpVersionFuture ??= APIService.getCurrentVersion('yt-dlp');
+  }
+
+  Future<VersionInfo?> get latestYtdlpVersion {
+    return _latestYtdlpVersionFuture ??= APIService.getLatestVersion(
+      'yt-dlp',
+      'yt-dlp',
+    );
+  }
+
+  Future<String?> get localFfmpegVersion {
+    return _localFfmpegVersionFuture ??= APIService.getCurrentVersion('ffmpeg');
+  }
+
+  Future<VersionInfo?> get latestFfmpegVersion {
+    return _latestFfmpegVersionFuture ??= APIService.getLatestVersion(
+      'Ffmpeg',
+      'Ffmpeg',
+      nightly: true,
+    );
+  }
 
   String get versionString =>
       '${packageInfo.version}+${packageInfo.buildNumber}';
@@ -70,54 +137,6 @@ class SystemService {
     }
 
     return {'OS': kIsWeb ? 'Web' : Platform.operatingSystem};
-  }
-
-  Future<String> getYtdlpVersion() async {
-    if (kIsWeb) {
-      final deps = await APIService.getDepsVersion();
-      return deps?['ytdlp'] ?? 'Not found';
-    }
-    try {
-      if (Platform.isAndroid) {
-        // Placeholder for Android specific check if needed
-        return 'Managed by OS';
-      } else {
-        if (APIService.isOnline.value) {
-          final deps = await APIService.getDepsVersion();
-          if (deps != null) return deps['ytdlp']!;
-        }
-
-        final result = await Process.run('yt-dlp', ['--version']);
-        if (result.exitCode == 0) {
-          return result.stdout.toString().trim();
-        }
-      }
-    } catch (_) {}
-    return 'Not found';
-  }
-
-  Future<String> getFfmpegVersion() async {
-    if (kIsWeb) {
-      final deps = await APIService.getDepsVersion();
-      return deps?['ffmpeg'] ?? 'Not found';
-    }
-    try {
-      if (APIService.isOnline.value) {
-        final deps = await APIService.getDepsVersion();
-        if (deps != null) return deps['ffmpeg']!;
-      }
-
-      final result = await Process.run('ffmpeg', ['-version']);
-      if (result.exitCode == 0) {
-        final output = result.stdout.toString();
-        final firstLine = output.split('\n').first;
-        final versionMatch = RegExp(
-          r'ffmpeg version ([\S]+)',
-        ).firstMatch(firstLine);
-        return versionMatch?.group(1) ?? 'Unknown';
-      }
-    } catch (_) {}
-    return 'Not found';
   }
 
   int get processorCount => kIsWeb ? 1 : Platform.numberOfProcessors;

@@ -42,18 +42,18 @@ Future<void> main() async {
         final dbPath = await SettingsManager.getDatabasePath();
         InitDatabase(path: dbPath).sendSignalToRust();
         NotificationService().startListening();
-      }
-
-      if (PlatformService.isDesktop) {
-        await SingleInstance.init(() async {
-          await PlatformService().focusWindow();
-        });
         StartServer(
           port: SettingsManager.serverPort.value,
           apiKey: SettingsManager.serverApiKey.value,
           username: SettingsManager.username.value,
           password: SettingsManager.password.value,
         ).sendSignalToRust();
+      }
+
+      if (PlatformService.isDesktop) {
+        await SingleInstance.init(() async {
+          await PlatformService().focusWindow();
+        });
         await PlatformService().initWindow(
           listener: _windowListener,
           onReady: () async {

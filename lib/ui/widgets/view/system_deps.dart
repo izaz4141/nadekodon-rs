@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/ui/widgets/components/section_header.dart';
 import 'package:nadekodon/utils/system_service.dart';
-import 'package:nadekodon/utils/api_service.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class SystemDeps extends StatefulWidget {
   const SystemDeps({super.key});
@@ -13,41 +12,39 @@ class SystemDeps extends StatefulWidget {
 }
 
 class _SystemDepsState extends State<SystemDeps> {
-  String _ytdlpVersion = 'Checking...';
-  String _ffmpegVersion = 'Checking...';
+  String _ytdlpDisplay = 'Checking...';
+  String _ffmpegDisplay = 'Checking...';
+  bool _ytdlpAvailable = false;
+  bool _ffmpegAvailable = false;
 
   @override
   void initState() {
     super.initState();
-    _checkVersions();
-    APIService.isOnline.addListener(_checkVersions);
+    _loadDependencies();
+  }
+
+  Future<void> _loadDependencies() async {
+    final system = SystemService();
+
+    final ytdlpLocal = await system.localYtdlpVersion;
+    final ytdlpLatest = (await system.latestYtdlpVersion)?.version;
+
+    final ffmpegLocal = await system.localFfmpegVersion;
+    final ffmpegLatest = (await system.latestFfmpegVersion)?.version;
+
+    if (mounted) {
+      setState(() {
+        _ytdlpDisplay = _formatWithLatest(ytdlpLocal, ytdlpLatest);
+        _ffmpegDisplay = _formatWithLatest(ffmpegLocal, ffmpegLatest);
+        _ytdlpAvailable = ytdlpLocal != null;
+        _ffmpegAvailable = ffmpegLocal != null;
+      });
+    }
   }
 
   @override
   void dispose() {
-    APIService.isOnline.removeListener(_checkVersions);
     super.dispose();
-  }
-
-  void _checkVersions() {
-    _checkYtdlpVersion();
-    _checkFfmpegVersion();
-  }
-
-  Future<void> _checkYtdlpVersion() async {
-    final version = await SystemService().getYtdlpVersion();
-    if (!mounted) return;
-    setState(() {
-      _ytdlpVersion = version;
-    });
-  }
-
-  Future<void> _checkFfmpegVersion() async {
-    final version = await SystemService().getFfmpegVersion();
-    if (!mounted) return;
-    setState(() {
-      _ffmpegVersion = version;
-    });
   }
 
   @override
@@ -67,11 +64,9 @@ class _SystemDepsState extends State<SystemDeps> {
           ),
           title: Text('yt-dlp', style: textTheme.bodyMedium),
           subtitle: Text(
-            _ytdlpVersion == 'Not found' || _ytdlpVersion == 'Unknown'
-                ? 'Not found - yt-dlp downloads will not work'
-                : _ytdlpVersion,
+            _ytdlpDisplay,
             style: textTheme.bodySmall?.copyWith(
-              color: _ytdlpVersion == 'Not found' || _ytdlpVersion == 'Unknown'
+              color: !_ytdlpAvailable
                   ? Theme.of(context).colorScheme.error
                   : null,
             ),
@@ -91,12 +86,9 @@ class _SystemDepsState extends State<SystemDeps> {
           ),
           title: Text('ffmpeg', style: textTheme.bodyMedium),
           subtitle: Text(
-            _ffmpegVersion == 'Not found' || _ffmpegVersion == 'Unknown'
-                ? 'Not found - yt-dlp downloads will not work'
-                : _ffmpegVersion,
+            _ffmpegDisplay,
             style: textTheme.bodySmall?.copyWith(
-              color:
-                  _ffmpegVersion == 'Not found' || _ffmpegVersion == 'Unknown'
+              color: !_ffmpegAvailable
                   ? Theme.of(context).colorScheme.error
                   : null,
             ),
@@ -112,4 +104,9 @@ class _SystemDepsState extends State<SystemDeps> {
       ],
     );
   }
+}
+
+String _formatWithLatest(String? local, String? latest) {
+  String warning = (local != null) ? '' : 'yt-dlp will not work';
+  return '$local (Latest: $latest) $warning';
 }

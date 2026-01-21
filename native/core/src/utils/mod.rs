@@ -5,4 +5,5 @@ pub mod security;
 pub mod settings;
 pub mod types;
 pub mod url;
+pub mod version;
 pub mod ytdlp;

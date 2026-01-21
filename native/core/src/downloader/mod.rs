@@ -584,7 +584,7 @@ pub async fn get_download_details_internal(
                         if let Some(handle) = handle_opt {
                             let stats = handle.stats();
                             if let Some(live_stats) = stats.live {
-                                upload_speed = Some((live_stats.upload_speed.mbps * 125_000.0));
+                                upload_speed = Some(live_stats.upload_speed.mbps * 125_000.0);
                                 if let Some(duration) = live_stats.time_remaining {
                                     eta = Some(duration.to_string());
                                 }

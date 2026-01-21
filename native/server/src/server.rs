@@ -341,13 +341,80 @@ async fn handle_generate_salt() -> impl IntoResponse {
     utils::security::generate_salt()
 }
 
-async fn handle_get_deps_version() -> impl IntoResponse {
-    let ytdlp = utils::ytdlp::get_yt_dlp_version().await;
-    let ffmpeg = utils::ytdlp::get_ffmpeg_version().await;
-    Json(json!({
-        "ytdlp": ytdlp,
-        "ffmpeg": ffmpeg,
-    }))
+async fn handle_version_latest(
+    State(state): State<SharedState>,
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let repo_owner = match params.get("owner") {
+        Some(v) => v.clone(),
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                "Missing owner parameter".to_string(),
+            )
+                .into_response();
+        }
+    };
+    let repo_name = match params.get("repo") {
+        Some(v) => v.clone(),
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                "Missing repo parameter".to_string(),
+            )
+                .into_response();
+        }
+    };
+    let check_nightly = params.get("nightly").map(|v| v == "true").unwrap_or(false);
+    let use_atom = params.get("atomic").map(|v| v == "true").unwrap_or(true);
+
+    match utils::version::get_latest_version(
+        &state.context.dm().await.client,
+        &repo_owner,
+        &repo_name,
+        check_nightly,
+        use_atom,
+    )
+    .await
+    {
+        Ok(info) => Json(info).into_response(),
+        Err(e) => {
+            logger::error(&format!(
+                "Error getting latest {}/{}: {:#?}",
+                &repo_owner, &repo_name, &e
+            ));
+            (StatusCode::BAD_REQUEST, e.to_string()).into_response()
+        }
+    }
+}
+
+async fn handle_version_current(
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let app = match params.get("app") {
+        Some(v) => v.as_str(),
+        None => {
+            return (StatusCode::BAD_REQUEST, "Missing app parameter".to_string()).into_response();
+        }
+    };
+
+    match utils::version::get_local_version(app).await {
+        Ok(version) => Json(json!({ "version": version })).into_response(),
+        Err(e) => {
+            logger::error(&format!("Cant get local {}: {:#?}", &app, &e));
+            (StatusCode::NOT_FOUND, e).into_response()
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct CompareVersionsRequest {
+    versions: Vec<String>,
+}
+
+async fn handle_compare_versions(Json(payload): Json<CompareVersionsRequest>) -> impl IntoResponse {
+    let latest = utils::version::compare_versions(&payload.versions);
+    Json(json!({ "latest": latest }))
 }
 
 async fn handle_generate_api(
@@ -503,7 +570,9 @@ pub fn create_nadeko_router(state: SharedState) -> Router<SharedState> {
         .route("/hash", post(handle_hashing_password))
         .route("/generate-salt", get(handle_generate_salt))
         .route("/generate-api", get(handle_generate_api))
-        .route("/deps-version", get(handle_get_deps_version))
+        .route("/version/latest", get(handle_version_latest))
+        .route("/version/current", get(handle_version_current))
+        .route("/version/compare", post(handle_compare_versions))
         .route("/img", get(handle_proxy_image))
         .layer(middleware::from_fn_with_state(state.clone(), check_api_key));
 
