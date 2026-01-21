@@ -38,7 +38,9 @@ Future<VersionInfo?> checkForUpdate({bool checkNightly = false}) async {
       latestVersion.version,
       "${currentVersion.version}+${currentVersion.buildNumber}",
     ]);
-    if (compareResult == latestVersion.version) {
+    if (compareResult == latestVersion.version &&
+        compareResult !=
+            "${currentVersion.version}+${currentVersion.buildNumber}") {
       String targetName = '';
       if (!kIsWeb) {
         targetName = Platform.isWindows ? _windowsZipName : _appImageName;
