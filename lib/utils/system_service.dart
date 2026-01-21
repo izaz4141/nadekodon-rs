@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:nadekodon/utils/api_service.dart';
-import 'package:nadekodon/src/bindings/bindings.dart';
 
 class VersionInfo {
   final String version;
@@ -26,14 +25,6 @@ class VersionInfo {
       tagName: json['tag_name'] ?? '',
       releaseNotes: json['release_notes'] ?? '',
       publishedAt: json['published_at'] ?? '',
-    );
-  }
-  factory VersionInfo.fromRust(VersionInfoResult result) {
-    return VersionInfo(
-      version: result.version,
-      tagName: result.tagName,
-      releaseNotes: result.releaseNotes,
-      publishedAt: result.publishedAt,
     );
   }
 }

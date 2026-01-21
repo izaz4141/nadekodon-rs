@@ -86,6 +86,7 @@ class SettingsSec extends StatelessWidget {
           title: "Username",
           subtitle: "qBittorrent API username",
           valueListenable: SettingsManager.username,
+          autofillHints: AutofillHints.newUsername,
         ),
         _buildTextField(
           context: context,
@@ -95,6 +96,7 @@ class SettingsSec extends StatelessWidget {
           subtitle: "qBittorrent API password",
           valueListenable: SettingsManager.password,
           isObscured: true,
+          autofillHints: AutofillHints.newPassword,
           onConfirm: (newValue) {
             SettingsManager.password.value = newValue;
           },
@@ -160,6 +162,7 @@ class SettingsSec extends StatelessWidget {
     required ValueListenable<String> valueListenable,
     bool isObscured = false,
     Function(String)? onConfirm,
+    String? autofillHints,
   }) {
     final obscureNotifier = ValueNotifier<bool>(isObscured);
 
@@ -179,6 +182,7 @@ class SettingsSec extends StatelessWidget {
               controller: controller,
               obscureText: obscureText,
               style: textTheme.bodyMedium,
+              autofillHints: autofillHints != null ? [autofillHints] : null,
               decoration: InputDecoration(
                 contentPadding: EdgeInsets.symmetric(
                   horizontal: AppTheme.spaceSM * AppTheme.spaceScale(context),
