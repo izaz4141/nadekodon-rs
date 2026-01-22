@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/utils/settings.dart';
@@ -50,6 +51,7 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     if (success) {
+      TextInput.finishAutofillContext();
       SettingsManager.isLoggedIn.value = true;
       widget.onLoginSuccess();
     } else {

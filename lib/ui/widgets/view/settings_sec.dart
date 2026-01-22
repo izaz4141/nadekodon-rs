@@ -102,6 +102,7 @@ class SettingsSec extends StatelessWidget {
                 autofillHints: AutofillHints.newPassword,
                 onConfirm: (newValue) {
                   SettingsManager.password.value = newValue;
+                  TextInput.finishAutofillContext();
                 },
               ),
             ],
