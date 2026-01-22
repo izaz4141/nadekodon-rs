@@ -108,73 +108,87 @@ class _LoginPageState extends State<LoginPage> {
                     SizedBox(
                       height: AppTheme.spaceLG * AppTheme.spaceScale(context),
                     ),
-                    TextField(
-                      controller: _usernameController,
-                      autofocus: true,
-                      autofillHints: const [AutofillHints.username],
-                      style: textTheme.bodyMedium?.copyWith(
-                        color: colors.onSurfaceVariant,
-                      ),
-                      decoration: InputDecoration(
-                        labelText: 'Username',
-                        labelStyle: textTheme.bodyMedium?.copyWith(
-                          color: colors.onSurfaceVariant,
-                        ),
-                        prefixIcon: Icon(
-                          Icons.person_outline,
-                          color: colors.onSurfaceVariant,
-                          size: AppTheme.iconMD * AppTheme.iconScale(context),
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(
-                            AppTheme.radiusMD,
+                    AutofillGroup(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          TextField(
+                            controller: _usernameController,
+                            autofocus: true,
+                            autofillHints: const [AutofillHints.username],
+                            style: textTheme.bodyMedium?.copyWith(
+                              color: colors.onSurfaceVariant,
+                            ),
+                            decoration: InputDecoration(
+                              labelText: 'Username',
+                              labelStyle: textTheme.bodyMedium?.copyWith(
+                                color: colors.onSurfaceVariant,
+                              ),
+                              prefixIcon: Icon(
+                                Icons.person_outline,
+                                color: colors.onSurfaceVariant,
+                                size:
+                                    AppTheme.iconMD *
+                                    AppTheme.iconScale(context),
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(
+                                  AppTheme.radiusMD,
+                                ),
+                              ),
+                            ),
+                            textInputAction: TextInputAction.next,
                           ),
-                        ),
-                      ),
-                      textInputAction: TextInputAction.next,
-                    ),
-                    SizedBox(
-                      height: AppTheme.spaceMD * AppTheme.spaceScale(context),
-                    ),
-                    TextField(
-                      controller: _passwordController,
-                      obscureText: _obscurePassword,
-                      autofillHints: const [AutofillHints.password],
-                      style: textTheme.bodyMedium?.copyWith(
-                        color: colors.onSurfaceVariant,
-                      ),
-                      decoration: InputDecoration(
-                        labelText: 'Password',
-                        labelStyle: textTheme.bodyMedium?.copyWith(
-                          color: colors.onSurfaceVariant,
-                        ),
-                        prefixIcon: Icon(
-                          Icons.lock_outline,
-                          color: colors.onSurfaceVariant,
-                          size: AppTheme.iconMD * AppTheme.iconScale(context),
-                        ),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_off
-                                : Icons.visibility,
-                            color: colors.onSurfaceVariant,
-                            size: AppTheme.iconMD * AppTheme.iconScale(context),
+                          SizedBox(
+                            height:
+                                AppTheme.spaceMD * AppTheme.spaceScale(context),
                           ),
-                          onPressed: () {
-                            setState(() {
-                              _obscurePassword = !_obscurePassword;
-                            });
-                          },
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(
-                            AppTheme.radiusMD,
+                          TextField(
+                            controller: _passwordController,
+                            obscureText: _obscurePassword,
+                            autofillHints: const [AutofillHints.password],
+                            style: textTheme.bodyMedium?.copyWith(
+                              color: colors.onSurfaceVariant,
+                            ),
+                            decoration: InputDecoration(
+                              labelText: 'Password',
+                              labelStyle: textTheme.bodyMedium?.copyWith(
+                                color: colors.onSurfaceVariant,
+                              ),
+                              prefixIcon: Icon(
+                                Icons.lock_outline,
+                                color: colors.onSurfaceVariant,
+                                size:
+                                    AppTheme.iconMD *
+                                    AppTheme.iconScale(context),
+                              ),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _obscurePassword
+                                      ? Icons.visibility_off
+                                      : Icons.visibility,
+                                  color: colors.onSurfaceVariant,
+                                  size:
+                                      AppTheme.iconMD *
+                                      AppTheme.iconScale(context),
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _obscurePassword = !_obscurePassword;
+                                  });
+                                },
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(
+                                  AppTheme.radiusMD,
+                                ),
+                              ),
+                            ),
+                            textInputAction: TextInputAction.done,
+                            onSubmitted: (_) => _login(),
                           ),
-                        ),
+                        ],
                       ),
-                      textInputAction: TextInputAction.done,
-                      onSubmitted: (_) => _login(),
                     ),
                     if (_errorMessage != null) ...[
                       SizedBox(

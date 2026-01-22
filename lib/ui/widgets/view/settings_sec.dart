@@ -79,27 +79,33 @@ class SettingsSec extends StatelessWidget {
           min: 1024,
           max: 65535,
         ),
-        _buildTextField(
-          context: context,
-          textTheme: textTheme,
-          colors: colors,
-          title: "Username",
-          subtitle: "qBittorrent API username",
-          valueListenable: SettingsManager.username,
-          autofillHints: AutofillHints.newUsername,
-        ),
-        _buildTextField(
-          context: context,
-          textTheme: textTheme,
-          colors: colors,
-          title: "Password",
-          subtitle: "qBittorrent API password",
-          valueListenable: SettingsManager.password,
-          isObscured: true,
-          autofillHints: AutofillHints.newPassword,
-          onConfirm: (newValue) {
-            SettingsManager.password.value = newValue;
-          },
+        AutofillGroup(
+          child: Column(
+            children: [
+              _buildTextField(
+                context: context,
+                textTheme: textTheme,
+                colors: colors,
+                title: "Username",
+                subtitle: "qBittorrent API username",
+                valueListenable: SettingsManager.username,
+                autofillHints: AutofillHints.newUsername,
+              ),
+              _buildTextField(
+                context: context,
+                textTheme: textTheme,
+                colors: colors,
+                title: "Password",
+                subtitle: "qBittorrent API password",
+                valueListenable: SettingsManager.password,
+                isObscured: true,
+                autofillHints: AutofillHints.newPassword,
+                onConfirm: (newValue) {
+                  SettingsManager.password.value = newValue;
+                },
+              ),
+            ],
+          ),
         ),
         _buildApiKeyDisplay(context, textTheme, colors),
       ],
