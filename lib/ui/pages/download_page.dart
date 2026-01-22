@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:nadekodon/ui/widgets/components/download_card.dart';
+import 'package:nadekodon/ui/widgets/components/web_context_menu.dart';
 import 'package:nadekodon/ui/widgets/dialog/delete_download.dart';
 
 import 'package:nadekodon/ui/theme/app_theme.dart';
@@ -647,56 +648,58 @@ class _DownloadListTabState extends State<_DownloadListTab>
 
               final isSelected = state.selectedIds.contains(item.id);
 
-              return DownloadCard(
-                item: item,
-                isSelected: isSelected,
-                isSelectionMode: state.isSelectionMode,
-                onTap: () {
-                  if (state.isSelectionMode) {
+              return DisableWebContextMenu(
+                child: DownloadCard(
+                  item: item,
+                  isSelected: isSelected,
+                  isSelectionMode: state.isSelectionMode,
+                  onTap: () {
+                    if (state.isSelectionMode) {
+                      widget.onToggleSelection(item.id);
+                    }
+                  },
+                  onLongPress: () {
                     widget.onToggleSelection(item.id);
-                  }
-                },
-                onLongPress: () {
-                  widget.onToggleSelection(item.id);
-                },
-                onSecondaryTapDown: (details) {
-                  showDownloadContextMenu(
-                    context,
-                    details.globalPosition,
-                    item,
-                    onDelete:
-                        (state.isSelectionMode &&
-                            state.selectedIds.contains(item.id))
-                        ? widget.onDeleteSelected
-                        : null,
-                  );
-                },
-                onMenuPressed: (details) {
-                  showDownloadContextMenu(
-                    context,
-                    details.globalPosition,
-                    item,
-                    onDelete:
-                        (state.isSelectionMode &&
-                            state.selectedIds.contains(item.id))
-                        ? widget.onDeleteSelected
-                        : null,
-                  );
-                },
-                onPauseResume: () {
-                  if (item.status == DownloadStatus.running ||
-                      item.status == DownloadStatus.seeding ||
-                      item.status == DownloadStatus.queued) {
-                    DownloadService().pauseDownload(item.id);
-                  } else {
-                    DownloadService().resumeDownload(item.id);
-                  }
-                },
-                onCancel: () {
-                  if (DownloadPage.activeStatuses.contains(item.status)) {
-                    DownloadService().cancelDownload(item.id);
-                  }
-                },
+                  },
+                  onSecondaryTapDown: (details) {
+                    showDownloadContextMenu(
+                      context,
+                      details.globalPosition,
+                      item,
+                      onDelete:
+                          (state.isSelectionMode &&
+                              state.selectedIds.contains(item.id))
+                          ? widget.onDeleteSelected
+                          : null,
+                    );
+                  },
+                  onMenuPressed: (details) {
+                    showDownloadContextMenu(
+                      context,
+                      details.globalPosition,
+                      item,
+                      onDelete:
+                          (state.isSelectionMode &&
+                              state.selectedIds.contains(item.id))
+                          ? widget.onDeleteSelected
+                          : null,
+                    );
+                  },
+                  onPauseResume: () {
+                    if (item.status == DownloadStatus.running ||
+                        item.status == DownloadStatus.seeding ||
+                        item.status == DownloadStatus.queued) {
+                      DownloadService().pauseDownload(item.id);
+                    } else {
+                      DownloadService().resumeDownload(item.id);
+                    }
+                  },
+                  onCancel: () {
+                    if (DownloadPage.activeStatuses.contains(item.status)) {
+                      DownloadService().cancelDownload(item.id);
+                    }
+                  },
+                ),
               );
             },
           ),

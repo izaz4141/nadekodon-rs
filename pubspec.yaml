@@ -61,6 +61,7 @@ dependencies:
   device_info_plus: ^12.3.0
   synchronized: ^3.4.0
   gpt_markdown: ^1.1.5
+  web: ^1.1.1
 
 dev_dependencies:
   flutter_test:
