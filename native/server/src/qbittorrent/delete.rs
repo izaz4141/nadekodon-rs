@@ -1,6 +1,6 @@
 use crate::server::SharedState;
 use axum::{
-    extract::{Query, State},
+    extract::{Form, Query, State},
     http::StatusCode,
     response::IntoResponse,
 };
@@ -13,12 +13,22 @@ pub struct TorrentsDeleteQuery {
     #[serde(rename = "deleteFiles")]
     delete_files: Option<bool>,
 }
+
 pub async fn torrents_delete(
     State(state): State<SharedState>,
-    Query(query): Query<TorrentsDeleteQuery>,
+    query: Option<Query<TorrentsDeleteQuery>>,
+    form: Option<Form<TorrentsDeleteQuery>>,
 ) -> impl IntoResponse {
-    let hashes: Vec<&str> = query.hashes.split('|').collect();
-    let delete_files = query.delete_files.unwrap_or(false);
+    let params = if let Some(Form(p)) = form {
+        p
+    } else if let Some(Query(p)) = query {
+        p
+    } else {
+        return (StatusCode::BAD_REQUEST, "Missing required parameters").into_response();
+    };
+
+    let hashes: Vec<&str> = params.hashes.split('|').collect();
+    let delete_files = params.delete_files.unwrap_or(false);
 
     let downloads = state
         .context
