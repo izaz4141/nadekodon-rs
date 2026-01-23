@@ -29,7 +29,7 @@ class _DisableWebContextMenuState extends State<DisableWebContextMenu> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final element = findElement();
       if (element != null) {
-        element.setAttribute('oncontextmenu', 'return false;');
+        element.addEventListener('contextmenu', ((html.Event event) => event.preventDefault()).toJS);
       }
     });
     addObserver();
@@ -53,7 +53,7 @@ class _DisableWebContextMenuState extends State<DisableWebContextMenu> {
                 ?.value;
 
             if (id == identifier) {
-              node.setAttribute('oncontextmenu', 'return false;');
+              node.addEventListener('contextmenu', ((html.Event event) => event.preventDefault()).toJS);
               removeObserver();
               break;
             }
