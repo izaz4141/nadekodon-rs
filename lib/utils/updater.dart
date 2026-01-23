@@ -73,7 +73,7 @@ Future<bool> downloadAndReplaceAppImage(
     return false;
   }
 
-  if (versionInfo.downloadUrl != null) {
+  if (versionInfo.downloadUrl == null) {
     log('No download URL available', isError: true);
     return false;
   }
@@ -165,7 +165,7 @@ Future<bool> downloadAndReplaceWindows(
     return false;
   }
 
-  if (versionInfo.downloadUrl != null) {
+  if (versionInfo.downloadUrl == null) {
     log('No download URL available', isError: true);
     return false;
   }
