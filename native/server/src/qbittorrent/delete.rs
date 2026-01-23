@@ -9,7 +9,7 @@ use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
 pub struct TorrentsDeleteQuery {
-    hashes: String,
+    hashes: Option<String>,
     #[serde(rename = "deleteFiles")]
     delete_files: Option<bool>,
 }
@@ -19,16 +19,26 @@ pub async fn torrents_delete(
     query: Option<Query<TorrentsDeleteQuery>>,
     form: Option<Form<TorrentsDeleteQuery>>,
 ) -> impl IntoResponse {
-    let params = if let Some(Form(p)) = form {
-        p
-    } else if let Some(Query(p)) = query {
-        p
-    } else {
-        return (StatusCode::BAD_REQUEST, "Missing required parameters").into_response();
+    let form_data = form.map(|Form(f)| f);
+    let query_data = query.map(|Query(q)| q);
+
+    let hashes_opt = form_data
+        .as_ref()
+        .and_then(|d| d.hashes.clone())
+        .or_else(|| query_data.as_ref().and_then(|d| d.hashes.clone()));
+
+    let delete_files = form_data
+        .as_ref()
+        .and_then(|d| d.delete_files)
+        .or_else(|| query_data.as_ref().and_then(|d| d.delete_files))
+        .unwrap_or(false);
+
+    let hashes_str = match hashes_opt {
+        Some(h) => h,
+        None => return (StatusCode::BAD_REQUEST, "Missing required field: hashes").into_response(),
     };
 
-    let hashes: Vec<&str> = params.hashes.split('|').collect();
-    let delete_files = params.delete_files.unwrap_or(false);
+    let hashes: Vec<&str> = hashes_str.split('|').collect();
 
     let downloads = state
         .context
