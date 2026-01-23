@@ -1,6 +1,7 @@
 import 'dart:js_interop';
 import 'package:web/web.dart' as html;
 import 'package:flutter/widgets.dart';
+import 'package:flutter/semantics.dart';
 
 class DisableWebContextMenu extends StatefulWidget {
   const DisableWebContextMenu({
@@ -26,6 +27,7 @@ class _DisableWebContextMenuState extends State<DisableWebContextMenu> {
   @override
   void initState() {
     super.initState();
+    SemanticsBinding.instance.ensureSemantics();
     _activeIdentifiers.add(identifier);
 
     if (!_globalListenerAdded) {
@@ -38,9 +40,12 @@ class _DisableWebContextMenuState extends State<DisableWebContextMenu> {
     final target = event.target as html.Element?;
     if (target == null) return;
 
-    final id = target.getAttribute('flt-semantics-identifier');
-    if (id != null && _activeIdentifiers.contains(id)) {
-      event.preventDefault();
+    final elementWithIdentifier = target.closest('[flt-semantics-identifier]');
+    if (elementWithIdentifier != null) {
+      final id = elementWithIdentifier.getAttribute('flt-semantics-identifier');
+      if (id != null && _activeIdentifiers.contains(id)) {
+        event.preventDefault();
+      }
     }
   }
 
