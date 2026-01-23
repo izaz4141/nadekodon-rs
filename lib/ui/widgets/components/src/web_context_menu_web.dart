@@ -1,6 +1,5 @@
 import 'dart:js_interop';
 import 'package:web/web.dart' as html;
-import 'package:flutter/semantics.dart';
 import 'package:flutter/widgets.dart';
 
 class DisableWebContextMenu extends StatefulWidget {
@@ -18,74 +17,44 @@ class DisableWebContextMenu extends StatefulWidget {
 }
 
 class _DisableWebContextMenuState extends State<DisableWebContextMenu> {
-  html.MutationObserver? observer;
+  static final _activeIdentifiers = <String>{};
+  static bool _globalListenerAdded = false;
+
   final _identifier = UniqueKey();
   String get identifier => widget.identifier ?? _identifier.toString();
 
   @override
   void initState() {
     super.initState();
-    SemanticsBinding.instance.ensureSemantics();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final element = findElement();
-      if (element != null) {
-        element.addEventListener('contextmenu', ((html.Event event) => event.preventDefault()).toJS);
-      }
-    });
-    addObserver();
+    _activeIdentifiers.add(identifier);
+
+    if (!_globalListenerAdded) {
+      _globalListenerAdded = true;
+      html.document.addEventListener('contextmenu', _handleContextMenu.toJS);
+    }
   }
 
-  html.Element? findElement() => html.document
-      .querySelector('flt-semantics-host')
-      ?.querySelector('[flt-semantics-identifier="$identifier"]');
+  void _handleContextMenu(html.Event event) {
+    final target = event.target as html.Element?;
+    if (target == null) return;
 
-  void addObserver() {
-    observer = html.MutationObserver(
-      (JSArray jsMutations, void _) {
-        final mutations = jsMutations.dartify() as List<dynamic>;
-        for (final mutation in mutations) {
-          final m = mutation as html.MutationRecord;
-          if (m.type == 'attributes' &&
-              m.attributeName == 'flt-semantics-identifier') {
-            final node = m.target as html.HTMLElement;
-            final id = node.attributes
-                .getNamedItem('flt-semantics-identifier')
-                ?.value;
-
-            if (id == identifier) {
-              node.addEventListener('contextmenu', ((html.Event event) => event.preventDefault()).toJS);
-              removeObserver();
-              break;
-            }
-          }
-        }
-      }.toJS,
-    );
-
-    observer!.observe(
-      html.document,
-      html.MutationObserverInit(
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter:
-            (['flt-semantics-identifier'].jsify() as JSArray<JSString>),
-      ),
-    );
-  }
-
-  void removeObserver() {
-    observer?.disconnect();
+    final id = target.getAttribute('flt-semantics-identifier');
+    if (id != null && _activeIdentifiers.contains(id)) {
+      event.preventDefault();
+    }
   }
 
   @override
   void dispose() {
-    removeObserver();
+    _activeIdentifiers.remove(identifier);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(identifier: identifier, child: widget.child);
+    return Semantics(
+      identifier: identifier,
+      child: widget.child,
+    );
   }
 }
