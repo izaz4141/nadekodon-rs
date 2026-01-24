@@ -18,12 +18,15 @@ pub use update_url::*;
 
 use crate::server::{SharedState, check_api_key};
 use axum::middleware;
-use axum::{Router, routing::post};
+use axum::{
+    Router,
+    routing::{get, post},
+};
 
 pub fn create_download_router(state: SharedState) -> Router<SharedState> {
     Router::new()
         .route("/list", post(handle_get_download_list))
-        .route("/details/:id", post(handle_get_download_details))
+        .route("/details/:id", get(handle_get_download_details))
         .route("/do", post(handle_do_download))
         .route("/pause", post(handle_pause_download))
         .route("/resume", post(handle_resume_download))

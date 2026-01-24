@@ -8,12 +8,15 @@ pub use query_ytdl::*;
 
 use crate::server::{SharedState, check_api_key};
 use axum::middleware;
-use axum::{Router, routing::post};
+use axum::{
+    Router,
+    routing::{get, post},
+};
 
 pub fn create_utils_router(state: SharedState) -> Router<SharedState> {
     Router::new()
         .route("/query-url", post(handle_query_url))
         .route("/query-ytdl", post(handle_query_ytdl))
-        .route("/img", axum::routing::get(handle_proxy_image))
+        .route("/img", get(handle_proxy_image))
         .layer(middleware::from_fn_with_state(state, check_api_key))
 }
