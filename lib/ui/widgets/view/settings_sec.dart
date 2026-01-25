@@ -1,11 +1,12 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/utils/settings.dart';
 import 'package:nadekodon/ui/widgets/app_snackbar.dart';
 import 'package:nadekodon/ui/widgets/components/section_header.dart';
 import 'package:nadekodon/ui/widgets/components/spin_box.dart';
+import 'package:nadekodon/ui/widgets/components/list_text_field.dart';
 import 'package:nadekodon/utils/api_service.dart';
 
 class SettingsSec extends StatelessWidget {
@@ -82,19 +83,13 @@ class SettingsSec extends StatelessWidget {
         AutofillGroup(
           child: Column(
             children: [
-              _buildTextField(
-                context: context,
-                textTheme: textTheme,
-                colors: colors,
+              ListTextField(
                 title: "Username",
                 subtitle: "qBittorrent API username",
                 valueListenable: SettingsManager.username,
                 autofillHints: AutofillHints.newUsername,
               ),
-              _buildTextField(
-                context: context,
-                textTheme: textTheme,
-                colors: colors,
+              ListTextField(
                 title: "Password",
                 subtitle: "qBittorrent API password",
                 valueListenable: SettingsManager.password,
@@ -156,90 +151,6 @@ class SettingsSec extends StatelessWidget {
             },
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildTextField({
-    required BuildContext context,
-    required TextTheme textTheme,
-    required ColorScheme colors,
-    required String title,
-    required String subtitle,
-    required ValueListenable<String> valueListenable,
-    bool isObscured = false,
-    Function(String)? onConfirm,
-    String? autofillHints,
-  }) {
-    final obscureNotifier = ValueNotifier<bool>(isObscured);
-
-    final controller = TextEditingController(
-      text: isObscured ? '' : valueListenable.value,
-    );
-
-    return ListTile(
-      title: Text(title, style: textTheme.bodyMedium),
-      subtitle: Text(subtitle, style: textTheme.bodySmall),
-      trailing: SizedBox(
-        width: 250 * AppTheme.spaceScale(context),
-        child: ValueListenableBuilder<bool>(
-          valueListenable: obscureNotifier,
-          builder: (context, obscureText, _) {
-            return TextField(
-              controller: controller,
-              obscureText: obscureText,
-              style: textTheme.bodyMedium,
-              autofillHints: autofillHints != null ? [autofillHints] : null,
-              decoration: InputDecoration(
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: AppTheme.spaceSM * AppTheme.spaceScale(context),
-                  vertical: AppTheme.spaceSM * AppTheme.spaceScale(context),
-                ),
-                border: const OutlineInputBorder(
-                  borderRadius: BorderRadius.all(
-                    Radius.circular(AppTheme.radiusSM),
-                  ),
-                ),
-                suffixIcon: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (isObscured)
-                      IconButton(
-                        icon: Icon(
-                          obscureText ? Icons.visibility_off : Icons.visibility,
-                        ),
-                        iconSize: AppTheme.iconSM * AppTheme.iconScale(context),
-                        onPressed: () =>
-                            obscureNotifier.value = !obscureNotifier.value,
-                      ),
-
-                    if (onConfirm != null)
-                      IconButton(
-                        icon: const Icon(Icons.check, color: Colors.green),
-                        iconSize: AppTheme.iconSM * AppTheme.iconScale(context),
-                        onPressed: () {
-                          onConfirm(controller.text);
-                          FocusScope.of(context).unfocus();
-                        },
-                      ),
-                  ],
-                ),
-              ),
-              textInputAction: (onConfirm == null)
-                  ? TextInputAction.next
-                  : TextInputAction.done,
-              onSubmitted: (_) => {
-                if (onConfirm != null) {onConfirm(controller.text)},
-              },
-              onChanged: (newValue) {
-                if (onConfirm == null &&
-                    valueListenable is ValueNotifier<String>) {
-                  valueListenable.value = newValue;
-                }
-              },
-            );
-          },
-        ),
       ),
     );
   }
