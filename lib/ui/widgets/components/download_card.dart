@@ -33,6 +33,7 @@ class DownloadCard extends StatefulWidget {
 
 class _DownloadCardState extends State<DownloadCard> {
   bool _isHovering = false;
+  TapDownDetails? _tapDownDetails;
 
   Color _progressColor(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -123,8 +124,13 @@ class _DownloadCardState extends State<DownloadCard> {
                       Material(
                         color: Colors.transparent,
                         child: InkResponse(
-                          onTapDown: widget.onMenuPressed,
-                          onTap: () {}, // Required for ripple
+                          onTapDown: (details) => _tapDownDetails = details,
+                          onTap: () {
+                            if (_tapDownDetails != null &&
+                                widget.onMenuPressed != null) {
+                              widget.onMenuPressed!(_tapDownDetails!);
+                            }
+                          },
                           radius: AppTheme.iconSM,
                           customBorder: const CircleBorder(),
                           child: Padding(
