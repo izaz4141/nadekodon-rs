@@ -342,6 +342,23 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  prune-images:
+    name: Prune Old Docker Images
+    runs-on: ubuntu-latest
+    needs: docker-build
+    if: needs.setup.outputs.is_nightly == 'true'
+    permissions:
+      packages: write
+    steps:
+      - name: Delete old nightly images
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: ${{ github.event.repository.name }}
+          package-type: 'container'
+          min-versions-to-keep: 5
+          delete-only-untagged-versions: 'false'
+          ignore-versions: '^v.*|^latest$'
+
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest

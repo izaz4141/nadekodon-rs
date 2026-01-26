@@ -19,11 +19,10 @@ COPY native ./native
 COPY analysis_options.yaml ./
 
 # Generate Rinf signals
-RUN cargo install rinf_cli --version 8.7.2
-RUN rinf gen
+RUN cargo install rinf_cli --version 8.7.2 && rinf gen
 
-# Build Flutter web with WASM and tree shaking
-RUN flutter build web --wasm
+# Build Flutter web 
+RUN flutter build web
 
 # Stage 2: Build Rust server
 FROM rust:slim-bookworm AS rust-build
@@ -31,35 +30,56 @@ FROM rust:slim-bookworm AS rust-build
 WORKDIR /app
 
 # Install build dependencies
-RUN apt-get update && apt-get install -y pkg-config libssl-dev perl make && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config libssl-dev perl make \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy workspace Cargo files
 COPY Cargo.toml Cargo.lock ./
-
-# Copy core and server crates (copy whole native to avoid workspace issues)
 COPY native native
 
-# Build Rust server (release)
-RUN cargo build --release -p nadekodon-server
+# Build Rust server (release) and strip symbols
+RUN cargo build --release -p nadekodon-server && \
+    strip /app/target/release/nadekodon-server
 
-# Stage 3: Final image
+# Stage 3: Fetch static tools
+FROM debian:bookworm-slim AS tool-fetcher
+
+WORKDIR /tools
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl xz-utils ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download static ffmpeg
+# Using a specific version for reproducibility, but latest is also fine.
+RUN curl -L https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz -o ffmpeg.tar.xz \
+    && tar xvf ffmpeg.tar.xz --strip-components=1 \
+    && mv ffmpeg /tools/ffmpeg \
+    && mv ffprobe /tools/ffprobe \
+    && chmod a+rx /tools/ffmpeg /tools/ffprobe
+
+# Stage 4: Final image
 FROM debian:bookworm-slim
 
 WORKDIR /app
 
-# Install minimal runtime and media tools
-RUN apt-get update && apt-get install -y \
+# Install minimal runtime dependencies and download yt-dlp
+RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
-    curl \
     nginx \
     gettext-base \
     ca-certificates \
     libssl3 \
-    ffmpeg \
-    python3 \
-    && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
+    curl \
+    && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o /usr/local/bin/yt-dlp \
     && chmod a+rx /usr/local/bin/yt-dlp \
+    && apt-get purge -y --auto-remove curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Copy tools from fetcher
+COPY --from=tool-fetcher /tools/ffmpeg /usr/local/bin/ffmpeg
+COPY --from=tool-fetcher /tools/ffprobe /usr/local/bin/ffprobe
 
 # Copy Flutter web build
 COPY --from=flutter-build /app/build/web ./web
