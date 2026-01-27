@@ -1,5 +1,5 @@
 # Stage 1: Build Flutter web
-FROM ghcr.io/cirruslabs/flutter:latest AS flutter-build
+FROM ghcr.io/cirruslabs/flutter:3.38.5 AS flutter-build
 
 WORKDIR /app
 
@@ -22,7 +22,7 @@ COPY analysis_options.yaml ./
 RUN cargo install rinf_cli --version 8.7.2 && rinf gen
 
 # Build Flutter web
-RUN flutter build web --release
+RUN flutter build web --wasm
 
 # Stage 2: Build Rust server
 FROM rust:slim-bookworm AS rust-build
