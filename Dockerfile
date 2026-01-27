@@ -55,9 +55,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Using a specific version for reproducibility, but latest is also fine.
 RUN curl -L https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz -o ffmpeg.tar.xz \
     && tar xvf ffmpeg.tar.xz --strip-components=1 \
-    && mv ffmpeg /tools/ffmpeg \
-    && mv ffprobe /tools/ffprobe \
-    && chmod a+rx /tools/ffmpeg /tools/ffprobe
+    && chmod a+rx ffmpeg ffprobe
 
 # Stage 4: Final image
 FROM debian:bookworm-slim
