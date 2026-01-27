@@ -21,8 +21,8 @@ COPY analysis_options.yaml ./
 # Generate Rinf signals
 RUN cargo install rinf_cli --version 8.7.2 && rinf gen
 
-# Build Flutter web
-RUN flutter build web --release --web-renderer canvaskit
+# Build Flutter web with WASM and tree shaking
+RUN flutter build web --wasm
 
 # Stage 2: Build Rust server
 FROM rust:slim-bookworm AS rust-build
