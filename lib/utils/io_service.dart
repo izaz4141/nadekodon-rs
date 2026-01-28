@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:synchronized/synchronized.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:file_picker/file_picker.dart';
 
 abstract class IOService {
   Future<String> getConfigDir();
@@ -16,6 +17,7 @@ abstract class IOService {
   Future<bool> directoryExists(String path);
   Future<Uint8List> readFileBytes(String path);
   Future<void> writeFileBytes(String path, Uint8List bytes);
+  Future<String?> getDirectoryPath();
 }
 
 class NativeIOService implements IOService {
@@ -93,6 +95,11 @@ class NativeIOService implements IOService {
       await File(path).writeAsBytes(bytes);
     });
   }
+
+  @override
+  Future<String?> getDirectoryPath() async {
+    return await FilePicker.platform.getDirectoryPath();
+  }
 }
 
 class WasmIOService implements IOService {
@@ -157,6 +164,11 @@ class WasmIOService implements IOService {
   @override
   Future<void> writeFileBytes(String path, Uint8List bytes) async {
     throw UnsupportedError('Filesystem access is not supported in WASM.');
+  }
+
+  @override
+  Future<String?> getDirectoryPath() async {
+    throw UnsupportedError('Directory picker is not supported in WASM.');
   }
 }
 

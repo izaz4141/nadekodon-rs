@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:nadekodon/utils/io_service.dart';
 
 import 'package:nadekodon/ui/theme/app_theme.dart';
 
@@ -50,7 +50,8 @@ class DirChoose extends StatelessWidget {
             ),
           ),
           onPressed: () async {
-            final dir = await FilePicker.platform.getDirectoryPath();
+            final ioService = IOServiceFactory.create();
+            final dir = await ioService.getDirectoryPath();
             if (dir != null) {
               selectedDir.value = dir;
             }

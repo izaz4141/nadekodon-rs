@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:nadekodon/utils/io_service.dart';
 
 import 'package:nadekodon/utils/settings.dart';
 import 'package:nadekodon/utils/speed_scheduler.dart';
@@ -44,7 +44,8 @@ class SettingsDM extends StatelessWidget {
                 icon: const Icon(Icons.folder_open),
                 iconSize: AppTheme.iconMD * AppTheme.spaceScale(context),
                 onPressed: () async {
-                  String? selectedDirectory = await FilePicker.platform
+                  final ioService = IOServiceFactory.create();
+                  String? selectedDirectory = await ioService
                       .getDirectoryPath();
                   if (selectedDirectory != null) {
                     SettingsManager.downloadFolder.value = selectedDirectory;
