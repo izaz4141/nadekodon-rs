@@ -228,6 +228,10 @@ class APIService {
     return null;
   }
 
+  static String getDownloadUrl(String id) {
+    return '$baseUrl/api/nadeko/download/file/$id';
+  }
+
   static Future<DownloadDetails?> getDownloadDetails(String id) async {
     try {
       final response = await http.get(

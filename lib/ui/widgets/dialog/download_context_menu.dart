@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
-
+import 'package:flutter/foundation.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'package:nadekodon/utils/platform_service.dart';
+import 'package:nadekodon/utils/api_service.dart';
 import 'package:nadekodon/ui/widgets/app_snackbar.dart';
 import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/utils/helper.dart';
@@ -33,6 +35,22 @@ Future<void> showDownloadContextMenu(
       side: BorderSide(color: Theme.of(context).dividerColor, width: 1),
     ),
     items: [
+      if (kIsWeb &&
+          (item.status == DownloadStatus.completed ||
+              item.status == DownloadStatus.seeding))
+        PopupMenuItem<String>(
+          value: 'download',
+          child: Row(
+            children: [
+              Icon(
+                Icons.download_outlined,
+                size: AppTheme.iconSM * AppTheme.iconScale(context),
+              ),
+              SizedBox(width: AppTheme.spaceSM),
+              Text('Download', style: textTheme.bodySmall),
+            ],
+          ),
+        ),
       PopupMenuItem<String>(
         value: 'open_file',
         child: Row(
@@ -166,6 +184,10 @@ Future<void> showDownloadContextMenu(
       } else {
         await showDeleteDownloadsDialog(context, [item]);
       }
+      break;
+    case 'download':
+      final url = APIService.getDownloadUrl(item.id);
+      await launchUrl(Uri.parse(url));
       break;
   }
 }

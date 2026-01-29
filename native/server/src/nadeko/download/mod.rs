@@ -6,6 +6,7 @@ mod list;
 mod pause;
 mod resume;
 mod update_url;
+mod file;
 
 pub use cancel::handle_cancel_download;
 pub use delete::*;
@@ -15,6 +16,7 @@ pub use list::*;
 pub use pause::handle_pause_download;
 pub use resume::*;
 pub use update_url::*;
+pub use file::handle_download_file;
 
 use crate::server::{SharedState, check_api_key};
 use axum::middleware;
@@ -33,5 +35,6 @@ pub fn create_download_router(state: SharedState) -> Router<SharedState> {
         .route("/cancel", post(handle_cancel_download))
         .route("/delete", post(handle_delete_download))
         .route("/update-url", post(handle_update_url))
+        .route("/file/:id", get(handle_download_file))
         .layer(middleware::from_fn_with_state(state, check_api_key))
 }
