@@ -42,7 +42,7 @@ pub async fn handle_download_file(
     }
 
     if path.is_dir() {
-        let (temp_file, temp_path) = match tempfile::NamedTempFile::new() {
+        let (temp_file, _temp_path) = match tempfile::NamedTempFile::new() {
             Ok(tf) => {
                 let path = tf.path().to_path_buf();
                 (tf, path)
@@ -56,9 +56,9 @@ pub async fn handle_download_file(
 
         let path_clone = path.clone();
         let zip_res = tokio::task::spawn_blocking(move || {
-            use std::io::Write;
-            let file = temp_file.reopen()?;
-            let mut zip = zip::ZipWriter::new(file);
+            use std::io::Seek;
+            let mut file = temp_file.reopen()?;
+            let mut zip = zip::ZipWriter::new(&mut file);
             let options = zip::write::SimpleFileOptions::default()
                 .compression_method(zip::CompressionMethod::Stored);
 
@@ -76,12 +76,13 @@ pub async fn handle_download_file(
                 }
             }
             zip.finish()?;
-            Ok::<(), anyhow::Error>(())
+            file.rewind()?;
+            Ok::<std::fs::File, anyhow::Error>(file)
         })
         .await;
 
-        match zip_res {
-            Ok(Ok(_)) => {}
+        let std_file = match zip_res {
+            Ok(Ok(file)) => file,
             Ok(Err(e)) => {
                 logger::error(&format!("Failed to zip directory {:?}: {}", path, e));
                 return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to zip directory")
@@ -92,16 +93,9 @@ pub async fn handle_download_file(
                 return (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error")
                     .into_response();
             }
-        }
-
-        let file = match tokio::fs::File::open(&temp_path).await {
-            Ok(file) => file,
-            Err(e) => {
-                logger::error(&format!("Failed to open zipped file {:?}: {}", temp_path, e));
-                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to open zipped file")
-                    .into_response();
-            }
         };
+
+        let file = tokio::fs::File::from_std(std_file);
 
         let stream = tokio_util::io::ReaderStream::new(file);
         let body = Body::from_stream(stream);
