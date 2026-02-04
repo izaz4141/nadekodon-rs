@@ -40,7 +40,7 @@ class DownloadService {
   }
 
   void fetchDetails(String id) {
-    if (kIsWeb) {
+    if (PlatformService().isRemote) {
       APIService.getDownloadDetails(id).then((details) {
         if (details != null && _detailControllers.containsKey(id)) {
           _detailControllers[id]!.add(details);
@@ -52,7 +52,7 @@ class DownloadService {
   }
 
   void fetchList(GetDownloadList query) {
-    if (kIsWeb) {
+    if (PlatformService().isRemote) {
       APIService.getDownloadList(
         anchorId: query.anchorId,
         before: query.before.toInt(),
@@ -78,7 +78,7 @@ class DownloadService {
     String? userAgent,
     String? referer,
   }) async {
-    if (kIsWeb) {
+    if (PlatformService().isRemote) {
       return APIService.queryUrl(
         url: url,
         cookie: cookie,
@@ -98,10 +98,10 @@ class DownloadService {
   }
 
   Future<YtdlQueryOutput?> queryYtdl({required String url}) async {
-    if (PlatformService.isAndroid) {
-      return YtDlpAndroid.ytdlpExtractInfo(url);
-    } else if (kIsWeb) {
+    if (PlatformService().isRemote) {
       return APIService.queryYtdl(url: url);
+    } else if (PlatformService.isAndroid) {
+      return YtDlpAndroid.ytdlpExtractInfo(url);
     } else {
       QueryYtdl(url: url).sendSignalToRust();
       final signal = await YtdlQueryOutput.rustSignalStream.first;
@@ -119,7 +119,7 @@ class DownloadService {
     String? userAgent,
     String? referer,
   }) async {
-    if (kIsWeb) {
+    if (PlatformService().isRemote) {
       await APIService.addDownload(
         url: url,
         dest: dest,
@@ -145,7 +145,7 @@ class DownloadService {
   }
 
   Future<void> pauseDownload(String id) async {
-    if (kIsWeb) {
+    if (PlatformService().isRemote) {
       await APIService.pauseDownload(id);
     } else {
       PauseDownload(id: id).sendSignalToRust();
@@ -153,7 +153,7 @@ class DownloadService {
   }
 
   Future<void> resumeDownload(String id) async {
-    if (kIsWeb) {
+    if (PlatformService().isRemote) {
       await APIService.resumeDownload(id);
     } else {
       ResumeDownload(id: id).sendSignalToRust();
@@ -161,7 +161,7 @@ class DownloadService {
   }
 
   Future<void> updateUrl(String id, String newUrl) async {
-    if (kIsWeb) {
+    if (PlatformService().isRemote) {
       await APIService.updateUrl(id, newUrl);
     } else {
       UpdateDownloadUrl(id: id, newUrl: newUrl).sendSignalToRust();
@@ -169,7 +169,7 @@ class DownloadService {
   }
 
   Future<void> cancelDownload(String id) async {
-    if (kIsWeb) {
+    if (PlatformService().isRemote) {
       await APIService.cancelDownload(id);
     } else {
       CancelDownload(id: id).sendSignalToRust();
@@ -177,7 +177,7 @@ class DownloadService {
   }
 
   Future<void> deleteDownload(String id, bool deleteFile) async {
-    if (kIsWeb) {
+    if (PlatformService().isRemote) {
       await APIService.deleteDownload(id, deleteFile);
     } else {
       DeleteDownload(id: id, deleteFile: deleteFile).sendSignalToRust();

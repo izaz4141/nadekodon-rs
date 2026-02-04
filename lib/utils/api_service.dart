@@ -33,8 +33,11 @@ class APIService {
       return Uri.base.origin;
     }
     String host = SettingsManager.serverHost.value;
+    if (!host.contains('://')) {
+      host = 'http://$host';
+    }
     final port = SettingsManager.serverPort.value;
-    return 'http://$host:$port';
+    return '$host:$port';
   }
 
   static String wrapImageUrl(String externalUrl) {
@@ -90,6 +93,35 @@ class APIService {
     }
 
     return false;
+  }
+
+  static Future<String?> testLogin({
+    required String host,
+    required int port,
+    required String username,
+    required String password,
+  }) async {
+    try {
+      final body = {'username': username, 'password': password};
+      final response = await http.post(
+        Uri.parse(
+          '${host.contains('://') ? host : 'http://$host'}:$port/api/nadeko/auth/login',
+        ),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(body),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final key = data['api_key'];
+        if (key is String && key.isNotEmpty) {
+          return key;
+        }
+      }
+    } catch (e) {
+      log('Test login error: $e', isError: true);
+    }
+    return null;
   }
 
   static Future<bool> regenerateApiKey() async {

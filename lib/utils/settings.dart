@@ -10,6 +10,7 @@ import 'package:nadekodon/utils/logger.dart';
 import 'package:nadekodon/utils/speed_scheduler.dart';
 import 'package:nadekodon/utils/io_service.dart';
 import 'package:nadekodon/utils/api_service.dart';
+import 'package:nadekodon/models/account.dart';
 
 class SettingsManager {
   static late IOService _ioService;
@@ -26,6 +27,9 @@ class SettingsManager {
   static final username = ValueNotifier<String>('');
   static final password = ValueNotifier<String>('');
   static final salt = ValueNotifier<String>('');
+
+  static final accounts = ValueNotifier<List<Account>>([]);
+  static final Map<ValueNotifier, VoidCallback> _autoSaveListeners = {};
 
   // Speed Scheduler
   static final speedLimit = ValueNotifier<double>(0.0);
@@ -94,7 +98,13 @@ class SettingsManager {
     final configExists = await _ioService.fileExists(configPath);
 
     if (configExists) {
-      final data = jsonDecode(await _ioService.readFile(configPath));
+      final Map<String, dynamic> data = jsonDecode(
+        await _ioService.readFile(configPath),
+      );
+      serverHost.value =
+          data['server_host'] ?? (_defaults['server_host'] ?? '127.0.0.1');
+      serverPort.value =
+          data['server_port'] ?? (_defaults['server_port'] ?? 8080);
       await _applyFromJson(data);
       log(configPath);
     } else {
@@ -114,11 +124,6 @@ class SettingsManager {
         json['retreat_to_tray'] ?? _defaults['retreat_to_tray'] ?? true;
     downloadFolder.value = json['download_folder'] ?? '';
 
-    // Server settings: Environment variables override saved settings
-    serverHost.value =
-        json['server_host'] ?? (_defaults['server_host'] ?? '127.0.0.1');
-    serverPort.value =
-        json['server_port'] ?? (_defaults['server_port'] ?? 8080);
     serverApiKey.value =
         json['server_api_key'] ?? (_defaults['server_api_key'] ?? '');
     if (serverApiKey.value.isEmpty) {
@@ -179,6 +184,12 @@ class SettingsManager {
     checkNightly.value =
         json['check_nightly'] ?? _defaults['check_nightly'] ?? false;
     requireLogin.value = json['require_login'] ?? (kIsWeb ? true : false);
+
+    if (json['accounts'] != null) {
+      accounts.value = (json['accounts'] as List)
+          .map((e) => Account.fromJson(e))
+          .toList();
+    }
   }
 
   static Future<Map<String, dynamic>> _toJson() async => {
@@ -204,6 +215,7 @@ class SettingsManager {
     'custom_color': customColor.value,
     'check_nightly': checkNightly.value,
     'require_login': requireLogin.value,
+    'accounts': accounts.value.map((e) => e.toJson()).toList(),
   };
 
   static Future<void> _saveAll() async {
@@ -219,10 +231,12 @@ class SettingsManager {
   }
 
   static Future<void> _saveChanged(String key, dynamic value) async {
-    if (!kIsWeb) {
-      _sendSettings(key, value);
+    if (PlatformService().isRemote) {
+      if (key != 'accounts') {
+        await _saveToBackend();
+      }
     } else {
-      await _saveToBackend();
+      _sendSettings(key, value);
     }
 
     Map<String, dynamic> data = {};
@@ -249,65 +263,53 @@ class SettingsManager {
   }
 
   static void attachAutoSave() {
-    retreatToTray.addListener(
-      () => _saveChanged('retreat_to_tray', retreatToTray.value),
-    );
-    downloadFolder.addListener(
-      () => _saveChanged('download_folder', downloadFolder.value),
-    );
-    serverHost.addListener(() => _saveChanged('server_host', serverHost.value));
-    serverPort.addListener(() => _saveChanged('server_port', serverPort.value));
-    serverApiKey.addListener(
-      () => _saveChanged('server_api_key', serverApiKey.value),
-    );
-    username.addListener(() => _saveChanged('username', username.value));
-    password.addListener(() => _saveChanged('password', password.value));
-    salt.addListener(() => _saveChanged('salt', salt.value));
-    speedLimit.addListener(() => _saveChanged('speed_limit', speedLimit.value));
-    speedMode.addListener(
-      () => _saveChanged('speed_mode', speedMode.value.index),
-    );
-    speedSchedule.addListener(
-      () => _saveChanged(
-        'speed_schedule',
-        speedSchedule.value.map((e) => e.toJson()).toList(),
-      ),
-    );
-    downloadThreads.addListener(
-      () => _saveChanged('download_threads', downloadThreads.value),
-    );
-    concurrencyLimit.addListener(
-      () => _saveChanged('concurrency_limit', concurrencyLimit.value),
-    );
-    downloadTimeout.addListener(
-      () => _saveChanged('download_timeout', downloadTimeout.value),
-    );
-    downloadRetries.addListener(
-      () => _saveChanged('download_retries', downloadRetries.value),
-    );
+    detachAutoSave();
 
-    seedingRatio.addListener(
-      () => _saveChanged('seeding_ratio', seedingRatio.value),
-    );
-    seedingTime.addListener(
-      () => _saveChanged('seeding_time', seedingTime.value),
-    );
+    void add(ValueNotifier n, String key, [dynamic Function()? getValue]) {
+      void listener() =>
+          _saveChanged(key, getValue != null ? getValue() : n.value);
+      n.addListener(listener);
+      _autoSaveListeners[n] = listener;
+    }
 
-    themeMode.addListener(
-      () => _saveChanged('theme_mode', themeMode.value.index),
+    add(retreatToTray, 'retreat_to_tray');
+    add(downloadFolder, 'download_folder');
+    add(serverHost, 'server_host');
+    add(serverPort, 'server_port');
+    add(serverApiKey, 'server_api_key');
+    add(username, 'username');
+    add(password, 'password');
+    add(salt, 'salt');
+    add(speedLimit, 'speed_limit');
+    add(speedMode, 'speed_mode', () => speedMode.value.index);
+    add(
+      speedSchedule,
+      'speed_schedule',
+      () => speedSchedule.value.map((e) => e.toJson()).toList(),
     );
-    useDynamicColor.addListener(
-      () => _saveChanged('use_dynamic_color', useDynamicColor.value),
+    add(downloadThreads, 'download_threads');
+    add(concurrencyLimit, 'concurrency_limit');
+    add(downloadTimeout, 'download_timeout');
+    add(downloadRetries, 'download_retries');
+    add(seedingRatio, 'seeding_ratio');
+    add(seedingTime, 'seeding_time');
+    add(themeMode, 'theme_mode', () => themeMode.value.index);
+    add(useDynamicColor, 'use_dynamic_color');
+    add(customColor, 'custom_color');
+    add(checkNightly, 'check_nightly');
+    add(requireLogin, 'require_login');
+    add(
+      accounts,
+      'accounts',
+      () => accounts.value.map((e) => e.toJson()).toList(),
     );
-    customColor.addListener(
-      () => _saveChanged('custom_color', customColor.value),
-    );
-    checkNightly.addListener(
-      () => _saveChanged('check_nightly', checkNightly.value),
-    );
-    requireLogin.addListener(
-      () => _saveChanged('require_login', requireLogin.value),
-    );
+  }
+
+  static void detachAutoSave() {
+    _autoSaveListeners.forEach((notifier, listener) {
+      notifier.removeListener(listener);
+    });
+    _autoSaveListeners.clear();
   }
 
   static void _sendSettings(String key, dynamic value) {
@@ -379,6 +381,7 @@ class SettingsManager {
     if (salt.value.isEmpty) {
       await _generateSalt();
     }
+    serverHost.value = _defaults['server_host'] ?? '127.0.0.1';
     serverPort.value = _defaults['server_port'] ?? 8080;
     speedLimit.value = (_defaults['speed_limit'] ?? 0.0).toDouble();
     downloadThreads.value = _defaults['download_threads'] ?? 8;
@@ -408,7 +411,7 @@ class SettingsManager {
   }
 
   static Future<void> regenerateApiKey() async {
-    if (kIsWeb) {
+    if (PlatformService().isRemote) {
       await APIService.regenerateApiKey();
       return;
     }
@@ -418,7 +421,7 @@ class SettingsManager {
   }
 
   static Future<void> restartServer() async {
-    if (kIsWeb) {
+    if (PlatformService().isRemote) {
       await APIService.restartServer();
       return;
     }
@@ -431,7 +434,7 @@ class SettingsManager {
   }
 
   static Future<void> _generateSalt() async {
-    if (kIsWeb) {
+    if (PlatformService().isRemote) {
       final newSalt = await APIService.generateSalt();
       if (newSalt != null) salt.value = newSalt;
       return;
@@ -449,7 +452,7 @@ class SettingsManager {
   static Future<String> _hashPassword(String plainText) async {
     if (plainText.isEmpty) return '';
     try {
-      if (kIsWeb) {
+      if (PlatformService().isRemote) {
         final hashed = await APIService.hashPassword(plainText, salt.value);
         if (hashed != null) return hashed;
       } else {
@@ -475,7 +478,7 @@ class SettingsManager {
   }
 
   static Future<void> loadFromBackend() async {
-    if (!kIsWeb) return;
+    if (!PlatformService().isRemote) return;
     final data = await APIService.getSettings();
     if (data != null) {
       await _applyFromJson(data);
@@ -486,9 +489,69 @@ class SettingsManager {
 
   static Future<void> _saveToBackend() async {
     final jsonMap = await _toJson();
+    jsonMap.remove('accounts');
+    if (PlatformService().isRemote) {
+      jsonMap.remove('server_host');
+      jsonMap.remove('server_port');
+    }
     final success = await APIService.saveSettings(jsonMap);
     if (!success) {
       log('Failed to save settings to backend', isError: true);
     }
+  }
+
+  static void addAccount(Account account) {
+    // Check if account already exists with same host and port
+    final index = accounts.value.indexWhere(
+      (a) => a.host == account.host && a.port == account.port,
+    );
+    if (index != -1) {
+      // Update existing
+      final newAccounts = List<Account>.from(accounts.value);
+      newAccounts[index] = account;
+      accounts.value = newAccounts;
+    } else {
+      accounts.value = [...accounts.value, account];
+    }
+  }
+
+  static void removeAccount(Account account) {
+    accounts.value = accounts.value
+        .where((a) => !(a.host == account.host && a.port == account.port))
+        .toList();
+  }
+
+  static Future<void> switchAccount(Account account) async {
+    isLoggedIn.value = false;
+    detachAutoSave();
+    serverHost.value = account.host;
+    serverPort.value = account.port;
+    username.value = account.username;
+    serverApiKey.value = account.apiKey;
+    attachAutoSave();
+    APIService.restartPolling();
+  }
+
+  static Future<void> switchToLocal() async {
+    if (kIsWeb) return;
+    if (PlatformService().isRemote) {
+      isLoggedIn.value = false;
+    }
+    detachAutoSave();
+    final configExists = await _ioService.fileExists(configPath);
+    if (configExists) {
+      final Map<String, dynamic> data = jsonDecode(
+        await _ioService.readFile(configPath),
+      );
+      serverHost.value =
+          data['server_host'] ?? (_defaults['server_host'] ?? '127.0.0.1');
+      serverPort.value =
+          data['server_port'] ?? (_defaults['server_port'] ?? 8080);
+      await _applyFromJson(data);
+    } else {
+      await applyDefaultSettings();
+    }
+    attachAutoSave();
+    APIService.restartPolling();
   }
 }

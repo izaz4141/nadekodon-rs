@@ -7,6 +7,8 @@ import 'package:file_share_intent/file_share_intent.dart';
 import 'package:app_links/app_links.dart';
 import 'package:nadekodon/utils/logger.dart';
 
+import 'package:nadekodon/utils/settings.dart';
+
 class PlatformService {
   static final PlatformService _instance = PlatformService._internal();
   factory PlatformService() => _instance;
@@ -141,4 +143,16 @@ class PlatformService {
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
   static bool get isIOS =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+
+  bool get isRemote {
+    if (kIsWeb) return true;
+    final host = SettingsManager.serverHost.value;
+    String hostname = host;
+    if (host.contains('://')) {
+      try {
+        hostname = Uri.parse(host).host;
+      } catch (_) {}
+    }
+    return hostname != '127.0.0.1' && hostname != 'localhost';
+  }
 }

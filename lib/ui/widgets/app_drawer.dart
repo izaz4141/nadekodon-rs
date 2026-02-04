@@ -1,10 +1,10 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:package_info_plus/package_info_plus.dart';
-
 import 'package:nadekodon/ui/theme/app_theme.dart';
+
 import 'package:nadekodon/ui/pages/home_page.dart';
+import 'package:nadekodon/ui/widgets/components/account_switcher.dart';
 
 const double railWidth = 72;
 const double sidebarWidth = 360.00;
@@ -21,12 +21,6 @@ class SidebarOverlayHandler extends StatefulWidget {
 class _SidebarOverlayHandlerState extends State<SidebarOverlayHandler>
     with SingleTickerProviderStateMixin {
   OverlayEntry? _overlayEntry;
-  PackageInfo _packageInfo = PackageInfo(
-    appName: 'Unknown',
-    packageName: 'Unknown',
-    version: 'Unknown',
-    buildNumber: 'Unknown',
-  );
 
   late final AnimationController _ctrl;
   late final Animation<Offset> _slideAnim;
@@ -35,7 +29,6 @@ class _SidebarOverlayHandlerState extends State<SidebarOverlayHandler>
   @override
   void initState() {
     super.initState();
-    _initPackageInfo();
 
     _ctrl = AnimationController(
       vsync: this,
@@ -54,13 +47,6 @@ class _SidebarOverlayHandlerState extends State<SidebarOverlayHandler>
     if (isExpandedNotifier.value == true) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _showSidebar());
     }
-  }
-
-  Future<void> _initPackageInfo() async {
-    final info = await PackageInfo.fromPlatform();
-    setState(() {
-      _packageInfo = info;
-    });
   }
 
   @override
@@ -280,15 +266,9 @@ class _SidebarOverlayHandlerState extends State<SidebarOverlayHandler>
         buildItem(index: 3, icon: Icons.monitor, label: "System"),
         const Spacer(),
         const Divider(height: 1),
-        Padding(
-          padding: EdgeInsets.all(AppTheme.spaceMD),
-          child: Text(
-            "v${_packageInfo.version}+${_packageInfo.buildNumber}",
-            style: textTheme.bodySmall?.copyWith(
-              color: colors.onSurfaceVariant,
-            ),
-            textAlign: TextAlign.center,
-          ),
+
+        AccountSwitcher(
+          onAccountSwitch: () => isExpandedNotifier.value = false,
         ),
       ],
     );
