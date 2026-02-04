@@ -95,6 +95,15 @@ pub async fn handle_download_file(
             }
         };
 
+        let content_length = match std_file.metadata() {
+            Ok(m) => m.len(),
+            Err(e) => {
+                logger::error(&format!("Failed to get metadata for zipped file: {}", e));
+                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get metadata")
+                    .into_response();
+            }
+        };
+
         let file = tokio::fs::File::from_std(std_file);
 
         let stream = tokio_util::io::ReaderStream::new(file);
@@ -112,6 +121,7 @@ pub async fn handle_download_file(
             header::CONTENT_DISPOSITION,
             HeaderValue::from_str(&format!("attachment; filename=\"{}\"", zip_filename)).unwrap(),
         );
+        headers.insert(header::CONTENT_LENGTH, HeaderValue::from(content_length));
         
         (headers, body).into_response()
     } else {
@@ -120,6 +130,15 @@ pub async fn handle_download_file(
             Err(e) => {
                 logger::error(&format!("Failed to open file {:?}: {}", path, e));
                 return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to open file").into_response();
+            }
+        };
+
+        let content_length = match file.metadata().await {
+            Ok(m) => m.len(),
+            Err(e) => {
+                logger::error(&format!("Failed to get metadata for file {:?}: {}", path, e));
+                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get metadata")
+                    .into_response();
             }
         };
 
@@ -140,6 +159,7 @@ pub async fn handle_download_file(
             header::CONTENT_DISPOSITION,
             HeaderValue::from_str(&format!("attachment; filename=\"{}\"", filename)).unwrap(),
         );
+        headers.insert(header::CONTENT_LENGTH, HeaderValue::from(content_length));
 
         (headers, body).into_response()
     }
