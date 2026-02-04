@@ -79,10 +79,15 @@ class _SidebarOverlayHandlerState extends State<SidebarOverlayHandler>
             onTap: () => isExpandedNotifier.value = false,
             child: Stack(
               children: [
-                // Slightly blurred scrim
-                BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 2, sigmaY: 2),
-                  child: Container(color: colors.shadow.withAlpha(64)),
+                // Slightly blurred scrim with fade animation
+                RepaintBoundary(
+                  child: FadeTransition(
+                    opacity: _fadeAnim,
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 2, sigmaY: 2),
+                      child: Container(color: colors.shadow.withAlpha(64)),
+                    ),
+                  ),
                 ),
 
                 // Sidebar
@@ -94,30 +99,32 @@ class _SidebarOverlayHandlerState extends State<SidebarOverlayHandler>
                       position: _slideAnim,
                       child: FadeTransition(
                         opacity: _fadeAnim,
-                        child: Container(
-                          width: sidebarWidth * AppTheme.widthScale(context),
-                          margin: const EdgeInsets.all(AppTheme.spaceLG),
-                          decoration: BoxDecoration(
-                            color: colors.surface,
-                            borderRadius: BorderRadius.circular(
-                              AppTheme.radiusLG * 1.2,
-                            ),
-                            border: Border.all(
-                              color: colors.outlineVariant.withAlpha(128),
-                              width: 1.2,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: colors.shadow.withAlpha(40),
-                                blurRadius: 20,
-                                offset: const Offset(0, 8),
+                        child: RepaintBoundary(
+                          child: Container(
+                            width: sidebarWidth * AppTheme.widthScale(context),
+                            margin: const EdgeInsets.all(AppTheme.spaceLG),
+                            decoration: BoxDecoration(
+                              color: colors.surface,
+                              borderRadius: BorderRadius.circular(
+                                AppTheme.radiusLG * 1.2,
                               ),
-                            ],
-                          ),
-                          clipBehavior: Clip.antiAlias,
-                          child: Material(
-                            type: MaterialType.transparency,
-                            child: _buildSidebarContent(),
+                              border: Border.all(
+                                color: colors.outlineVariant.withAlpha(128),
+                                width: 1.2,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: colors.shadow.withAlpha(40),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 8),
+                                ),
+                              ],
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: const Material(
+                              type: MaterialType.transparency,
+                              child: _SidebarContent(),
+                            ),
                           ),
                         ),
                       ),
@@ -151,72 +158,70 @@ class _SidebarOverlayHandlerState extends State<SidebarOverlayHandler>
     });
   }
 
-  Widget _buildSidebarContent() {
+  @override
+  Widget build(BuildContext context) {
+    // This widget is invisible but listens to isExpandedNotifier
+    return const SizedBox.shrink();
+  }
+}
+
+class _SidebarContent extends StatelessWidget {
+  const _SidebarContent();
+
+  @override
+  Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
-    final selectedIndex = navIndexNotifier.value;
 
-    Widget buildItem({
-      required int index,
-      required IconData icon,
-      required String label,
-    }) {
-      final selected = selectedIndex == index;
-      final bg = selected
-          ? colors.primaryContainer.withAlpha(204)
-          : Colors.transparent;
-      final fg = selected ? colors.primary : colors.onSurfaceVariant;
-
-      return InkWell(
-        onTap: () {
-          navIndexNotifier.value = index;
-          isExpandedNotifier.value = false;
-        },
-        borderRadius: BorderRadius.circular(AppTheme.radiusMD),
-        hoverColor: colors.surfaceContainerHighest.withAlpha(16),
-        splashColor: colors.primary.withAlpha(32),
-        child: Container(
-          margin: EdgeInsets.symmetric(
-            horizontal: AppTheme.spaceMD * AppTheme.spaceScale(context),
-            vertical: AppTheme.spaceXS,
-          ),
-          padding: EdgeInsets.symmetric(
-            horizontal: AppTheme.spaceLG * AppTheme.spaceScale(context),
-            vertical: AppTheme.spaceMD * AppTheme.spaceScale(context),
-          ),
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(AppTheme.radiusMD),
-            border: Border.all(
-              color: selected
-                  ? colors.primary.withAlpha(64)
-                  : Colors.transparent,
+    return ValueListenableBuilder<int>(
+      valueListenable: navIndexNotifier,
+      builder: (context, selectedIndex, _) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 8),
+            _SidebarHeader(colors: colors, textTheme: textTheme),
+            const Divider(height: 1),
+            const SizedBox(height: 4),
+            _SidebarItem(
+              index: 1,
+              icon: Icons.download,
+              label: "Downloads",
+              selected: selectedIndex == 1,
             ),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                icon,
-                size: AppTheme.iconMD * AppTheme.iconScale(context),
-                color: fg,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  label,
-                  style: textTheme.bodyMedium?.copyWith(
-                    color: fg,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
+            _SidebarItem(
+              index: 2,
+              icon: Icons.settings,
+              label: "Settings",
+              selected: selectedIndex == 2,
+            ),
+            _SidebarItem(
+              index: 3,
+              icon: Icons.monitor,
+              label: "System",
+              selected: selectedIndex == 3,
+            ),
+            const Spacer(),
+            const Divider(height: 1),
+            AccountSwitcher(
+              onAccountSwitch: () => isExpandedNotifier.value = false,
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
 
-    final header = Padding(
+class _SidebarHeader extends StatelessWidget {
+  const _SidebarHeader({required this.colors, required this.textTheme});
+
+  final ColorScheme colors;
+  final TextTheme textTheme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
       padding: EdgeInsets.symmetric(
         horizontal: AppTheme.spaceXL * AppTheme.spaceScale(context),
         vertical: AppTheme.spaceMD * AppTheme.spaceScale(context),
@@ -253,31 +258,77 @@ class _SidebarOverlayHandlerState extends State<SidebarOverlayHandler>
         ],
       ),
     );
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SizedBox(height: 8),
-        header,
-        const Divider(height: 1),
-        const SizedBox(height: 4),
-        buildItem(index: 1, icon: Icons.download, label: "Downloads"),
-        buildItem(index: 2, icon: Icons.settings, label: "Settings"),
-        buildItem(index: 3, icon: Icons.monitor, label: "System"),
-        const Spacer(),
-        const Divider(height: 1),
-
-        AccountSwitcher(
-          onAccountSwitch: () => isExpandedNotifier.value = false,
-        ),
-      ],
-    );
   }
+}
+
+class _SidebarItem extends StatelessWidget {
+  final int index;
+  final IconData icon;
+  final String label;
+  final bool selected;
+
+  const _SidebarItem({
+    required this.index,
+    required this.icon,
+    required this.label,
+    required this.selected,
+  });
 
   @override
   Widget build(BuildContext context) {
-    // This widget is invisible but listens to isExpandedNotifier
-    return const SizedBox.shrink();
+    final colors = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    final bg = selected
+        ? colors.primaryContainer.withAlpha(204)
+        : Colors.transparent;
+    final fg = selected ? colors.primary : colors.onSurfaceVariant;
+
+    return InkWell(
+      onTap: () {
+        navIndexNotifier.value = index;
+        isExpandedNotifier.value = false;
+      },
+      borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+      hoverColor: colors.surfaceContainerHighest.withAlpha(16),
+      splashColor: colors.primary.withAlpha(32),
+      child: Container(
+        margin: EdgeInsets.symmetric(
+          horizontal: AppTheme.spaceMD * AppTheme.spaceScale(context),
+          vertical: AppTheme.spaceXS,
+        ),
+        padding: EdgeInsets.symmetric(
+          horizontal: AppTheme.spaceLG * AppTheme.spaceScale(context),
+          vertical: AppTheme.spaceMD * AppTheme.spaceScale(context),
+        ),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+          border: Border.all(
+            color: selected ? colors.primary.withAlpha(64) : Colors.transparent,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: AppTheme.iconMD * AppTheme.iconScale(context),
+              color: fg,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: textTheme.bodyMedium?.copyWith(
+                  color: fg,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -293,60 +344,64 @@ class NavigationRailSection extends StatelessWidget {
       first: navIndexNotifier,
       second: isExpandedNotifier,
       builder: (context, selectedIndex, isExpanded, _) {
-        return Container(
-          decoration: BoxDecoration(
-            border: Border(
-              right: BorderSide(color: colors.surfaceContainer, width: 2),
+        return RepaintBoundary(
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border(
+                right: BorderSide(color: colors.surfaceContainer, width: 2),
+              ),
             ),
-          ),
-          child: NavigationRail(
-            minWidth: railWidth * AppTheme.widthScale(context),
-            extended: false,
-            selectedIndex: selectedIndex == 0 ? 1 : selectedIndex,
-            onDestinationSelected: (index) {
-              if (index == 0) {
-                isExpandedNotifier.value = !isExpandedNotifier.value;
-              } else {
-                navIndexNotifier.value = index;
-                if (isExpandedNotifier.value) isExpandedNotifier.value = false;
-              }
-            },
-            labelType: NavigationRailLabelType.none,
-            unselectedLabelTextStyle: textTheme.titleMedium,
-            selectedLabelTextStyle: textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-              color: colors.primary,
+            child: NavigationRail(
+              minWidth: railWidth * AppTheme.widthScale(context),
+              extended: false,
+              selectedIndex: selectedIndex == 0 ? 1 : selectedIndex,
+              onDestinationSelected: (index) {
+                if (index == 0) {
+                  isExpandedNotifier.value = !isExpandedNotifier.value;
+                } else {
+                  navIndexNotifier.value = index;
+                  if (isExpandedNotifier.value) {
+                    isExpandedNotifier.value = false;
+                  }
+                }
+              },
+              labelType: NavigationRailLabelType.none,
+              unselectedLabelTextStyle: textTheme.titleMedium,
+              selectedLabelTextStyle: textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: colors.primary,
+              ),
+              destinations: [
+                NavigationRailDestination(
+                  icon: Icon(
+                    isExpanded ? Icons.arrow_back_ios_new : Icons.menu_rounded,
+                    size: AppTheme.iconMD * AppTheme.iconScale(context),
+                  ),
+                  label: Text(" Menu", style: textTheme.titleLarge),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(
+                    Icons.download,
+                    size: AppTheme.iconMD * AppTheme.iconScale(context),
+                  ),
+                  label: const Text(" Downloads"),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(
+                    Icons.settings,
+                    size: AppTheme.iconMD * AppTheme.iconScale(context),
+                  ),
+                  label: const Text(" Settings"),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(
+                    Icons.monitor,
+                    size: AppTheme.iconMD * AppTheme.iconScale(context),
+                  ),
+                  label: const Text(" System"),
+                ),
+              ],
             ),
-            destinations: [
-              NavigationRailDestination(
-                icon: Icon(
-                  isExpanded ? Icons.arrow_back_ios_new : Icons.menu_rounded,
-                  size: AppTheme.iconMD * AppTheme.iconScale(context),
-                ),
-                label: Text(" Menu", style: textTheme.titleLarge),
-              ),
-              NavigationRailDestination(
-                icon: Icon(
-                  Icons.download,
-                  size: AppTheme.iconMD * AppTheme.iconScale(context),
-                ),
-                label: const Text(" Downloads"),
-              ),
-              NavigationRailDestination(
-                icon: Icon(
-                  Icons.settings,
-                  size: AppTheme.iconMD * AppTheme.iconScale(context),
-                ),
-                label: const Text(" Settings"),
-              ),
-              NavigationRailDestination(
-                icon: Icon(
-                  Icons.monitor,
-                  size: AppTheme.iconMD * AppTheme.iconScale(context),
-                ),
-                label: const Text(" System"),
-              ),
-            ],
           ),
         );
       },
