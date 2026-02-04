@@ -8,7 +8,6 @@ use axum::{
 use nadekodon_core::utils::{logger, types::DownloadState};
 use std::path::PathBuf;
 use tokio::fs::File;
-use tokio::io::AsyncReadExt;
 use uuid::Uuid;
 
 pub async fn handle_download_file(
@@ -42,42 +41,112 @@ pub async fn handle_download_file(
         return (StatusCode::NOT_FOUND, "File not found on disk").into_response();
     }
 
-    let file = match File::open(&path).await {
-        Ok(file) => file,
-        Err(e) => {
-            logger::error(&format!("Failed to open file {:?}: {}", path, e));
-            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to open file").into_response();
-        }
-    };
-
-    let stream = futures_util::stream::unfold(file, |mut file| async move {
-        let mut buf = vec![0u8; 65536];
-        match file.read(&mut buf).await {
-            Ok(0) => None,
-            Ok(n) => {
-                buf.truncate(n);
-                Some((Ok::<_, std::io::Error>(axum::body::Bytes::from(buf)), file))
+    if path.is_dir() {
+        let (temp_file, temp_path) = match tempfile::NamedTempFile::new() {
+            Ok(tf) => {
+                let path = tf.path().to_path_buf();
+                (tf, path)
             }
-            Err(e) => Some((Err(e), file)),
+            Err(e) => {
+                logger::error(&format!("Failed to create temp file: {}", e));
+                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create temp file")
+                    .into_response();
+            }
+        };
+
+        let path_clone = path.clone();
+        let zip_res = tokio::task::spawn_blocking(move || {
+            use std::io::Write;
+            let file = temp_file.reopen()?;
+            let mut zip = zip::ZipWriter::new(file);
+            let options = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
+
+            for entry in walkdir::WalkDir::new(&path_clone) {
+                let entry = entry?;
+                let entry_path = entry.path();
+                let name = entry_path.strip_prefix(&path_clone).unwrap();
+
+                if entry_path.is_file() {
+                    zip.start_file(name.to_string_lossy(), options)?;
+                    let mut f = std::fs::File::open(entry_path)?;
+                    std::io::copy(&mut f, &mut zip)?;
+                } else if !name.as_os_str().is_empty() {
+                    zip.add_directory(name.to_string_lossy(), options)?;
+                }
+            }
+            zip.finish()?;
+            Ok::<(), anyhow::Error>(())
+        })
+        .await;
+
+        match zip_res {
+            Ok(Ok(_)) => {}
+            Ok(Err(e)) => {
+                logger::error(&format!("Failed to zip directory {:?}: {}", path, e));
+                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to zip directory")
+                    .into_response();
+            }
+            Err(e) => {
+                logger::error(&format!("Zip task panicked for {:?}: {}", path, e));
+                return (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error")
+                    .into_response();
+            }
         }
-    });
 
-    let body = Body::from_stream(stream);
+        let file = match tokio::fs::File::open(&temp_path).await {
+            Ok(file) => file,
+            Err(e) => {
+                logger::error(&format!("Failed to open zipped file {:?}: {}", temp_path, e));
+                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to open zipped file")
+                    .into_response();
+            }
+        };
 
-    let filename = path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("download");
+        let stream = tokio_util::io::ReaderStream::new(file);
+        let body = Body::from_stream(stream);
 
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_static("application/octet-stream"),
-    );
-    headers.insert(
-        header::CONTENT_DISPOSITION,
-        HeaderValue::from_str(&format!("attachment; filename=\"{}\"", filename)).unwrap(),
-    );
+        let filename = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("download");
+        let zip_filename = format!("{}.zip", filename);
 
-    (headers, body).into_response()
+        let mut headers = HeaderMap::new();
+        headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("application/zip"));
+        headers.insert(
+            header::CONTENT_DISPOSITION,
+            HeaderValue::from_str(&format!("attachment; filename=\"{}\"", zip_filename)).unwrap(),
+        );
+        
+        (headers, body).into_response()
+    } else {
+        let file = match File::open(&path).await {
+            Ok(file) => file,
+            Err(e) => {
+                logger::error(&format!("Failed to open file {:?}: {}", path, e));
+                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to open file").into_response();
+            }
+        };
+
+        let stream = tokio_util::io::ReaderStream::new(file);
+        let body = Body::from_stream(stream);
+
+        let filename = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("download");
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/octet-stream"),
+        );
+        headers.insert(
+            header::CONTENT_DISPOSITION,
+            HeaderValue::from_str(&format!("attachment; filename=\"{}\"", filename)).unwrap(),
+        );
+
+        (headers, body).into_response()
+    }
 }
