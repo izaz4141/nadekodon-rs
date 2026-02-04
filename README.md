@@ -110,6 +110,9 @@ docker build -t nadekodon-server .
 docker run -p 8080:8080 nadekodon-server
 ```
 
+## Notes
+
+- **Default Credentials**: The default username and password is `admin`.
 
 ## License
 
