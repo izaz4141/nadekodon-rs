@@ -84,7 +84,14 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                           child: Text('https://'),
                         ),
                       ],
-                      onChanged: (v) => setState(() => _protocol = v!),
+                      onChanged: (v) {
+                        setState(() {
+                          _protocol = v!;
+                          if (_protocol == 'https://') {
+                            _portCtrl.text = '443';
+                          }
+                        });
+                      },
                     ),
                   ),
                   const SizedBox(width: AppTheme.spaceSM),
