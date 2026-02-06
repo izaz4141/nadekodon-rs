@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:nadekodon/utils/settings.dart';
+import 'package:nadekodon/utils/io_service.dart';
+
 import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/ui/widgets/app_snackbar.dart';
 import 'package:nadekodon/utils/helper.dart';
@@ -19,6 +21,7 @@ Future<void> showAddDownloadDialog(
   String? cookie,
   String? userAgent,
   String? referer,
+  bool forceLocal = false,
 }) async {
   await showDialog(
     context: context,
@@ -28,6 +31,7 @@ Future<void> showAddDownloadDialog(
         cookie: cookie,
         userAgent: userAgent,
         referer: referer,
+        forceLocal: forceLocal,
       );
     },
   );
@@ -39,12 +43,14 @@ class _AddDownloadDialog extends StatefulWidget {
   final String? cookie;
   final String? userAgent;
   final String? referer;
+  final bool forceLocal;
 
   const _AddDownloadDialog({
     this.initialUrl,
     this.cookie,
     this.userAgent,
     this.referer,
+    this.forceLocal = false,
   });
 
   @override
@@ -67,9 +73,19 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
   final _queryFinished = ValueNotifier<bool>(false);
   final _isQueryingYtdl = ValueNotifier<bool>(false);
 
+  Future<void> _fetchLocalDownloadDir() async {
+    final dir = await IOServiceFactory.create().getDownloadsDir();
+    if (mounted) {
+      _selectedDir.value = dir;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    if (widget.forceLocal) {
+      _fetchLocalDownloadDir();
+    }
     // Prioritize initialUrl over clipboard content
     if (widget.initialUrl != null && isUrl(widget.initialUrl!)) {
       _urlController.text = widget.initialUrl!;
@@ -106,9 +122,17 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
       _ytdlOutput = null;
     });
 
-    final result = await DownloadService().queryYtdl(
-      url: _urlController.text.trim(),
-    );
+    YtdlQueryOutput? result;
+
+    if (widget.forceLocal) {
+      QueryYtdl(url: _urlController.text.trim()).sendSignalToRust();
+      final signal = await YtdlQueryOutput.rustSignalStream.first;
+      result = signal.message;
+    } else {
+      result = await DownloadService().queryYtdl(
+        url: _urlController.text.trim(),
+      );
+    }
 
     if (mounted) {
       setState(() {
@@ -141,12 +165,25 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
       _urlOutput = null;
     });
 
-    final result = await DownloadService().queryUrl(
-      url: url,
-      cookie: widget.cookie,
-      userAgent: widget.userAgent,
-      referer: widget.referer,
-    );
+    UrlQueryOutput? result;
+
+    if (widget.forceLocal) {
+      QueryUrl(
+        url: url,
+        cookie: widget.cookie,
+        userAgent: widget.userAgent,
+        referer: widget.referer,
+      ).sendSignalToRust();
+      final signal = await UrlQueryOutput.rustSignalStream.first;
+      result = signal.message;
+    } else {
+      result = await DownloadService().queryUrl(
+        url: url,
+        cookie: widget.cookie,
+        userAgent: widget.userAgent,
+        referer: widget.referer,
+      );
+    }
 
     if (mounted) {
       setState(() {
@@ -182,15 +219,28 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
     }
     if (!mounted) return;
     Navigator.pop(context);
-    DownloadService().addDownload(
-      url: url,
-      dest: "${_selectedDir.value}/$name",
-      isYtdl: false,
-      cookie: widget.cookie,
-      userAgent: widget.userAgent,
-      referer: widget.referer,
-    );
-    AppSnackBar.show(context, "Added download");
+
+    if (widget.forceLocal) {
+      DoDownload(
+        url: url,
+        dest: "${_selectedDir.value}/$name",
+        isYtdl: false,
+        cookie: widget.cookie,
+        userAgent: widget.userAgent,
+        referer: widget.referer,
+      ).sendSignalToRust();
+      AppSnackBar.show(context, "Added local download");
+    } else {
+      DownloadService().addDownload(
+        url: url,
+        dest: "${_selectedDir.value}/$name",
+        isYtdl: false,
+        cookie: widget.cookie,
+        userAgent: widget.userAgent,
+        referer: widget.referer,
+      );
+      AppSnackBar.show(context, "Added download");
+    }
   }
 
   Future<void> _handleYtdlDownload() async {

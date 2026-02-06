@@ -9,9 +9,11 @@ import 'package:nadekodon/utils/api_service.dart';
 import 'package:nadekodon/ui/widgets/app_snackbar.dart';
 import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/utils/helper.dart';
+import 'package:nadekodon/utils/settings.dart';
 import 'package:nadekodon/ui/widgets/dialog/delete_download.dart';
 import 'package:nadekodon/ui/widgets/dialog/download_details_dialog.dart';
 import 'package:nadekodon/ui/widgets/dialog/update_url_dialog.dart';
+import 'package:nadekodon/ui/widgets/dialog/add_download.dart';
 
 /// Shows a context menu for a download item
 Future<void> showDownloadContextMenu(
@@ -35,7 +37,7 @@ Future<void> showDownloadContextMenu(
       side: BorderSide(color: Theme.of(context).dividerColor, width: 1),
     ),
     items: [
-      if (kIsWeb &&
+      if ((kIsWeb || PlatformService().isRemote) &&
           (item.status == DownloadStatus.completed ||
               item.status == DownloadStatus.seeding))
         PopupMenuItem<String>(
@@ -187,7 +189,17 @@ Future<void> showDownloadContextMenu(
       break;
     case 'download':
       final url = APIService.getDownloadUrl(item.id);
-      await launchUrl(Uri.parse(url));
+      if (kIsWeb) {
+        await launchUrl(Uri.parse(url));
+      } else {
+        final apiKey = SettingsManager.serverApiKey.value;
+        await showAddDownloadDialog(
+          context,
+          initialUrl: url,
+          cookie: 'nadeko_api_key=$apiKey',
+          forceLocal: true,
+        );
+      }
       break;
   }
 }
