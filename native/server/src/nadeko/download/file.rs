@@ -121,7 +121,10 @@ pub async fn handle_download_file(
             header::CONTENT_DISPOSITION,
             HeaderValue::from_str(&format!("attachment; filename=\"{}\"", zip_filename)).unwrap(),
         );
-        headers.insert(header::CONTENT_LENGTH, HeaderValue::from(content_length));
+        headers.insert(
+            header::CONTENT_LENGTH,
+            HeaderValue::from_str(&content_length.to_string()).unwrap(),
+        );
         
         (headers, body).into_response()
     } else {
@@ -159,7 +162,10 @@ pub async fn handle_download_file(
             header::CONTENT_DISPOSITION,
             HeaderValue::from_str(&format!("attachment; filename=\"{}\"", filename)).unwrap(),
         );
-        headers.insert(header::CONTENT_LENGTH, HeaderValue::from(content_length));
+        headers.insert(
+            header::CONTENT_LENGTH,
+            HeaderValue::from_str(&content_length.to_string()).unwrap(),
+        );
 
         (headers, body).into_response()
     }
