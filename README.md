@@ -59,7 +59,7 @@ Here are some of the features and improvements planned for future releases:
 - [ ] Proxy support
 - [ ] Open the app from link
 - [x] Docker support
-- [ ] Remote session/app control
+- [x] Remote session/app control
 - [x] Variable/scheduled download bandwidth
 
 ## Installation
