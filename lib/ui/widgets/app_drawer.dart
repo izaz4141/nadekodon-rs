@@ -79,14 +79,11 @@ class _SidebarOverlayHandlerState extends State<SidebarOverlayHandler>
             onTap: () => isExpandedNotifier.value = false,
             child: Stack(
               children: [
-                // Slightly blurred scrim with fade animation
+                // Scrim with fade animation (no blur for performance)
                 RepaintBoundary(
                   child: FadeTransition(
                     opacity: _fadeAnim,
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 2, sigmaY: 2),
-                      child: Container(color: colors.shadow.withAlpha(64)),
-                    ),
+                    child: Container(color: colors.shadow.withAlpha(100)),
                   ),
                 ),
 
