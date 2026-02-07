@@ -37,7 +37,7 @@ Future<void> showDownloadContextMenu(
       side: BorderSide(color: Theme.of(context).dividerColor, width: 1),
     ),
     items: [
-      if ((kIsWeb || PlatformService().isRemote) &&
+      if (PlatformService().isRemote &&
           (item.status == DownloadStatus.completed ||
               item.status == DownloadStatus.seeding))
         PopupMenuItem<String>(
@@ -53,32 +53,34 @@ Future<void> showDownloadContextMenu(
             ],
           ),
         ),
-      PopupMenuItem<String>(
-        value: 'open_file',
-        child: Row(
-          children: [
-            Icon(
-              Icons.open_in_new,
-              size: AppTheme.iconSM * AppTheme.iconScale(context),
-            ),
-            SizedBox(width: AppTheme.spaceXS),
-            Text('Open file', style: textTheme.bodySmall),
-          ],
+      if (!PlatformService().isRemote) ...[
+        PopupMenuItem<String>(
+          value: 'open_file',
+          child: Row(
+            children: [
+              Icon(
+                Icons.open_in_new,
+                size: AppTheme.iconSM * AppTheme.iconScale(context),
+              ),
+              SizedBox(width: AppTheme.spaceXS),
+              Text('Open file', style: textTheme.bodySmall),
+            ],
+          ),
         ),
-      ),
-      PopupMenuItem<String>(
-        value: 'show_in_folder',
-        child: Row(
-          children: [
-            Icon(
-              Icons.folder_open,
-              size: AppTheme.iconSM * AppTheme.iconScale(context),
-            ),
-            SizedBox(width: AppTheme.spaceSM),
-            Text('Show in folder', style: textTheme.bodySmall),
-          ],
+        PopupMenuItem<String>(
+          value: 'show_in_folder',
+          child: Row(
+            children: [
+              Icon(
+                Icons.folder_open,
+                size: AppTheme.iconSM * AppTheme.iconScale(context),
+              ),
+              SizedBox(width: AppTheme.spaceSM),
+              Text('Show in folder', style: textTheme.bodySmall),
+            ],
+          ),
         ),
-      ),
+      ],
       PopupMenuItem<String>(
         value: 'update_url',
         child: Row(
