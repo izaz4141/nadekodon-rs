@@ -80,6 +80,7 @@ pub async fn start_server_listener(context: Arc<AppContext>) {
             restart_signal: restart_signal.clone(),
             shutdown_signal: shutdown_signal.clone(),
             shutdown_requested: shutdown_requested.clone(),
+            version: Arc::new(RwLock::new(None)),
         });
         let qbt_router = get_router(state.clone());
         let nadeko_router = create_nadeko_router(state.clone());

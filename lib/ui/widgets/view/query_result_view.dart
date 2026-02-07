@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import 'package:nadekodon/utils/platform_service.dart';
 import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/utils/helper.dart';
 import 'package:nadekodon/ui/widgets/components/dir_choose.dart';
+import 'package:nadekodon/utils/system_service.dart';
 
 import 'package:nadekodon/src/bindings/bindings.dart';
 
@@ -129,22 +129,33 @@ class QueryResultView extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   if (urlQuery.isWebpage)
-                    Row(
-                      children: [
-                        Text(
-                          "RETURNED WEBPAGE",
-                          style: textTheme.bodySmall?.copyWith(
-                            color: colors.error,
-                          ),
-                        ),
-                        if (!PlatformService.isAndroid) ...[
-                          const SizedBox(width: AppTheme.spaceMD),
-                          ElevatedButton(
-                            onPressed: onQueryYtdl,
-                            child: Text("YTDL", style: textTheme.bodySmall),
-                          ),
-                        ],
-                      ],
+                    AnimatedBuilder(
+                      animation: Listenable.merge([
+                        SystemService().ytdlpVersion,
+                        SystemService().ffmpegVersion,
+                      ]),
+                      builder: (context, _) {
+                        final ytdlp = SystemService().ytdlpVersion.value;
+                        final ffmpeg = SystemService().ffmpegVersion.value;
+
+                        return Row(
+                          children: [
+                            Text(
+                              "RETURNED WEBPAGE",
+                              style: textTheme.bodySmall?.copyWith(
+                                color: colors.error,
+                              ),
+                            ),
+                            if (ytdlp != null && ffmpeg != null) ...[
+                              const SizedBox(width: AppTheme.spaceMD),
+                              ElevatedButton(
+                                onPressed: onQueryYtdl,
+                                child: Text("YTDL", style: textTheme.bodySmall),
+                              ),
+                            ],
+                          ],
+                        );
+                      },
                     ),
                   Text(
                     "Filesize: ${urlQuery.totalSize != null ? formatBytes(urlQuery.totalSize!.toInt()) : '?'}",

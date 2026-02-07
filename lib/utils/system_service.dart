@@ -35,20 +35,25 @@ class SystemService {
   SystemService._internal();
 
   PackageInfo? _packageInfo;
-  // VersionInfo? _latestAppVersion;
-  Future<String?>? _localYtdlpVersionFuture;
-  Future<VersionInfo?>? _latestYtdlpVersionFuture;
-  Future<String?>? _localFfmpegVersionFuture;
-  Future<VersionInfo?>? _latestFfmpegVersionFuture;
   final _deviceInfoPlugin = DeviceInfoPlugin();
+  final ytdlpVersion = ValueNotifier<String?>(null);
+  final ffmpegVersion = ValueNotifier<String?>(null);
+  final latestAppVersion = ValueNotifier<VersionInfo?>(null);
+  final latestYtdlpVersion = ValueNotifier<VersionInfo?>(null);
+  final latestFfmpegVersion = ValueNotifier<VersionInfo?>(null);
 
   Future<void> init() async {
     _packageInfo = await PackageInfo.fromPlatform();
-    // latestAppVersion = await APIService.getLatestVersion(
-    //   'izaz4141',
-    //   'nadekodon-rs',
-    //   nightly: true,
-    // );
+
+    // Listen to online status to fetch versions accurately
+    APIService.isOnline.addListener(_onStatusChanged);
+    _onStatusChanged();
+  }
+
+  void _onStatusChanged() {
+    if (APIService.isOnline.value) {
+      fetchVersions();
+    }
   }
 
   PackageInfo get packageInfo =>
@@ -60,28 +65,45 @@ class SystemService {
         buildNumber: 'Unknown',
       );
 
-  Future<String?> get localYtdlpVersion {
-    return _localYtdlpVersionFuture ??= APIService.getCurrentVersion('yt-dlp');
+  void refreshVersions() {
+    ytdlpVersion.value = null;
+    ffmpegVersion.value = null;
+    latestAppVersion.value = null;
+    latestYtdlpVersion.value = null;
+    latestFfmpegVersion.value = null;
+
+    if (APIService.isOnline.value) {
+      fetchVersions();
+    }
   }
 
-  Future<VersionInfo?> get latestYtdlpVersion {
-    return _latestYtdlpVersionFuture ??= APIService.getLatestVersion(
+  Future<void> fetchVersions() async {
+    // Local tool versions
+    ytdlpVersion.value = await APIService.getCurrentVersion('yt-dlp');
+    ffmpegVersion.value = await APIService.getCurrentVersion('ffmpeg');
+
+    // Latest app version
+    latestAppVersion.value = await APIService.getLatestVersion(
+      'izaz4141',
+      'nadekodon-rs',
+      nightly: true,
+    );
+
+    // Latest tool versions
+    latestYtdlpVersion.value = await APIService.getLatestVersion(
       'yt-dlp',
       'yt-dlp',
     );
-  }
-
-  Future<String?> get localFfmpegVersion {
-    return _localFfmpegVersionFuture ??= APIService.getCurrentVersion('ffmpeg');
-  }
-
-  Future<VersionInfo?> get latestFfmpegVersion {
-    return _latestFfmpegVersionFuture ??= APIService.getLatestVersion(
+    latestFfmpegVersion.value = await APIService.getLatestVersion(
       'Ffmpeg',
       'Ffmpeg',
       nightly: true,
     );
   }
+
+  String? get serverVersion => APIService.serverVersion.value;
+
+  Future<String?> getServerVersion() => APIService.getServerVersion();
 
   String get versionString =>
       '${packageInfo.version}+${packageInfo.buildNumber}';

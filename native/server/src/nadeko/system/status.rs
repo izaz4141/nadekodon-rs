@@ -1,5 +1,43 @@
-use axum::response::IntoResponse;
+use crate::server::SharedState;
+use axum::{extract::State, response::IntoResponse, Json};
+use serde_json::json;
 
-pub async fn handle_status() -> impl IntoResponse {
-    (axum::http::StatusCode::OK, "Online")
+pub async fn handle_status(State(state): State<SharedState>) -> impl IntoResponse {
+    let version = {
+        let read = state.version.read().await;
+        if let Some(v) = &*read {
+            v.clone()
+        } else {
+            drop(read);
+            let mut v_str = "Unknown".to_string();
+            let paths = ["./pubspec.yaml", "../pubspec.yaml", "../../pubspec.yaml"];
+            for path in paths {
+                if let Ok(content) = std::fs::read_to_string(path) {
+                    let (v, b) = nadekodon_core::utils::version::parse_pubspec_version(&content);
+                    if let Some(version_val) = v {
+                        v_str = if let Some(build_val) = b {
+                            format!("{}+{}", version_val, build_val)
+                        } else {
+                            version_val
+                        };
+                        break;
+                    }
+                }
+            }
+            {
+                let mut write = state.version.write().await;
+                *write = Some(v_str.clone());
+            }
+            v_str
+        }
+    };
+
+    let mut res = json!({
+        "status": "Online",
+    });
+    if version != "Unknown" {
+        res["version"] = json!(version);
+    }
+
+    Json(res)
 }

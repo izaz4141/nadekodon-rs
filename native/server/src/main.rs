@@ -122,6 +122,7 @@ async fn main() {
         restart_signal: Arc::new(tokio::sync::Notify::new()),
         shutdown_signal: Arc::new(tokio::sync::Notify::new()),
         shutdown_requested: Arc::new(AtomicBool::new(false)),
+        version: Arc::new(RwLock::new(None)),
     });
 
     let state_clone = state.clone();

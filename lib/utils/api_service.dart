@@ -10,7 +10,9 @@ import 'package:nadekodon/utils/system_service.dart';
 
 class APIService {
   static final ValueNotifier<bool> isOnline = ValueNotifier(false);
+  static final ValueNotifier<String?> serverVersion = ValueNotifier(null);
   static Timer? _timer;
+  static Timer? _debounce;
 
   static Future<void> init() async {
     // Check for cookie on web
@@ -49,12 +51,19 @@ class APIService {
 
   static void _startPolling() {
     _timer?.cancel();
+
+    isOnline.value = false;
+    serverVersion.value = null;
+
     _checkStatus();
     _timer = Timer.periodic(const Duration(seconds: 5), (_) => _checkStatus());
   }
 
   static void restartPolling() {
-    _startPolling();
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 200), () {
+      _startPolling();
+    });
   }
 
   static Future<bool> login({
@@ -177,11 +186,19 @@ class APIService {
         Uri.parse('$baseUrl/api/nadeko/system/status'),
         headers: {'X-API-Key': SettingsManager.serverApiKey.value},
       );
-
       if (response.statusCode == 200) {
         isOnline.value = true;
+        try {
+          final data = jsonDecode(response.body);
+          if (data is Map) {
+            serverVersion.value = data['version'] as String?;
+          }
+        } catch (_) {
+          // Fallback for non-JSON status response if any
+        }
       } else {
         isOnline.value = false;
+        serverVersion.value = null;
         log("Server status check failed: ${response.statusCode}");
       }
     } catch (e) {
@@ -192,7 +209,13 @@ class APIService {
         log("Server status check failed: $e", isError: true);
       }
       isOnline.value = false;
+      serverVersion.value = null;
     }
+  }
+
+  static Future<String?> getServerVersion() async {
+    await _checkStatus();
+    return serverVersion.value;
   }
 
   static Future<DownloadList?> getDownloadList({

@@ -38,6 +38,7 @@ pub struct AppState {
     pub restart_signal: Arc<Notify>,
     pub shutdown_signal: Arc<Notify>,
     pub shutdown_requested: Arc<AtomicBool>,
+    pub version: Arc<RwLock<Option<String>>>,
 }
 pub type SharedState = Arc<AppState>;
 

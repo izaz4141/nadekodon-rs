@@ -11,6 +11,7 @@ import 'package:nadekodon/utils/settings.dart';
 import 'package:nadekodon/utils/updater.dart';
 import 'package:nadekodon/utils/system_service.dart';
 import 'package:nadekodon/utils/platform_service.dart';
+import 'package:nadekodon/utils/api_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -33,6 +34,9 @@ class _SystemAppState extends State<SystemApp> {
   void initState() {
     super.initState();
     _checkForUpdates();
+    if (PlatformService().isRemote) {
+      SystemService().getServerVersion();
+    }
     SettingsManager.checkNightly.addListener(_checkForUpdates);
   }
 
@@ -263,6 +267,18 @@ class _SystemAppState extends State<SystemApp> {
             ],
           ],
         ),
+        if (PlatformService().isRemote) ...[
+          SizedBox(height: AppTheme.spaceXS),
+          ValueListenableBuilder<String?>(
+            valueListenable: APIService.serverVersion,
+            builder: (context, version, _) {
+              return Text(
+                'Remote Version: ${version ?? "Unknown"}',
+                style: textTheme.bodyMedium,
+              );
+            },
+          ),
+        ],
       ],
     );
   }

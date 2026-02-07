@@ -10,6 +10,7 @@ import 'package:nadekodon/utils/logger.dart';
 import 'package:nadekodon/utils/speed_scheduler.dart';
 import 'package:nadekodon/utils/io_service.dart';
 import 'package:nadekodon/utils/api_service.dart';
+import 'package:nadekodon/utils/system_service.dart';
 import 'package:nadekodon/models/account.dart';
 
 class SettingsManager {
@@ -528,6 +529,9 @@ class SettingsManager {
     serverPort.value = account.port;
     username.value = account.username;
     serverApiKey.value = account.apiKey;
+    APIService.isOnline.value = false;
+    APIService.serverVersion.value = null;
+    SystemService().refreshVersions();
     attachAutoSave();
     APIService.restartPolling();
   }
@@ -551,6 +555,9 @@ class SettingsManager {
     } else {
       await applyDefaultSettings();
     }
+    APIService.isOnline.value = false;
+    APIService.serverVersion.value = null;
+    SystemService().refreshVersions();
     attachAutoSave();
     APIService.restartPolling();
   }
