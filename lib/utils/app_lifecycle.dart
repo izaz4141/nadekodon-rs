@@ -62,10 +62,15 @@ Future<void> removeTray() async {
   await trayManager.destroy();
 }
 
-Future<void> closeApp() async {
+Future<void> cleanupIntegrations() async {
   if (kIsWeb) return;
   await SingleInstance.dispose();
   NotificationService().stopListening();
   await removeTray();
+}
+
+Future<void> closeApp() async {
+  if (kIsWeb) return;
+  await cleanupIntegrations();
   await windowManager.destroy();
 }

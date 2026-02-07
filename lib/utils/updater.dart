@@ -7,7 +7,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:nadekodon/utils/api_service.dart';
 import 'package:nadekodon/utils/logger.dart';
 import 'package:nadekodon/utils/app_lifecycle.dart';
-import 'package:nadekodon/utils/single_instance.dart';
 import 'package:nadekodon/utils/system_service.dart';
 
 import 'package:archive/archive_io.dart';
@@ -139,8 +138,11 @@ Future<bool> downloadAndReplaceAppImage(
 
     log('Update successful! Restarting application...');
 
-    // Release the single instance lock so the new process can start
-    await SingleInstance.dispose();
+    // Clean up integrations (tray, notifications, single instance)
+    await cleanupIntegrations();
+
+    // Give the desktop environment a moment to process DBus removals
+    await Future.delayed(const Duration(milliseconds: 500));
 
     await Process.start(
       currentAppImagePath,
@@ -148,7 +150,6 @@ Future<bool> downloadAndReplaceAppImage(
       mode: ProcessStartMode.detached,
     );
 
-    await closeApp();
     exit(0);
   } catch (e) {
     log('Error updating AppImage: $e', isError: true);
@@ -233,8 +234,11 @@ Future<bool> downloadAndReplaceWindows(
 
     log('Update successful! Restarting application...');
 
-    // Release the single instance lock so the new process can start
-    await SingleInstance.dispose();
+    // Clean up integrations (tray, notifications, single instance)
+    await cleanupIntegrations();
+
+    // Give the OS a moment to process removals
+    await Future.delayed(const Duration(milliseconds: 500));
 
     await Process.start(
       Platform.resolvedExecutable,
@@ -242,7 +246,6 @@ Future<bool> downloadAndReplaceWindows(
       mode: ProcessStartMode.detached,
     );
 
-    await closeApp();
     exit(0);
   } catch (e) {
     log('Error updating Windows app: $e', isError: true);
