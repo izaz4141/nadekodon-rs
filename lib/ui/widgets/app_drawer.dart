@@ -157,8 +157,28 @@ class _SidebarOverlayHandlerState extends State<SidebarOverlayHandler>
 
   @override
   Widget build(BuildContext context) {
-    // This widget is invisible but listens to isExpandedNotifier
-    return const SizedBox.shrink();
+    // Provide a thin strip on the left edge to detect swipes
+    return ValueListenableBuilder<bool>(
+      valueListenable: isExpandedNotifier,
+      builder: (context, isExpanded, _) {
+        if (isExpanded) return const SizedBox.shrink();
+
+        return Positioned(
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: railWidth,
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onHorizontalDragUpdate: (details) {
+              if (details.primaryDelta! > 7) {
+                isExpandedNotifier.value = true;
+              }
+            },
+          ),
+        );
+      },
+    );
   }
 }
 
