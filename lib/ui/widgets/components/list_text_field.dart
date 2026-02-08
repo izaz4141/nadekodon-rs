@@ -10,6 +10,7 @@ class ListTextField extends StatefulWidget {
   final bool isObscured;
   final Function(String)? onConfirm;
   final String? autofillHints;
+  final TextInputType? keyboardType;
 
   const ListTextField({
     super.key,
@@ -19,6 +20,7 @@ class ListTextField extends StatefulWidget {
     this.isObscured = false,
     this.onConfirm,
     this.autofillHints,
+    this.keyboardType,
   });
 
   @override
@@ -60,6 +62,7 @@ class _ListTextFieldState extends State<ListTextField> {
             return TextField(
               controller: _controller,
               obscureText: obscureText,
+              keyboardType: widget.keyboardType,
               style: textTheme.bodyMedium,
               autofillHints: widget.autofillHints != null
                   ? [widget.autofillHints!]

@@ -95,6 +95,7 @@ class SettingsSec extends StatelessWidget {
                 valueListenable: SettingsManager.password,
                 isObscured: true,
                 autofillHints: AutofillHints.newPassword,
+                keyboardType: TextInputType.visiblePassword,
                 onConfirm: (newValue) {
                   SettingsManager.password.value = newValue;
                   TextInput.finishAutofillContext();

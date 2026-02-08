@@ -147,6 +147,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
               const SizedBox(height: AppTheme.spaceSM),
               TextFormField(
                 controller: _passwordCtrl,
+                keyboardType: TextInputType.visiblePassword,
                 style: textTheme.bodyMedium,
                 decoration: InputDecoration(
                   labelText: "Password",

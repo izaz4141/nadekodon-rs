@@ -158,6 +158,7 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                               TextField(
                                 controller: _passwordController,
+                                keyboardType: TextInputType.visiblePassword,
                                 obscureText: _obscurePassword,
                                 autofillHints: const [AutofillHints.password],
                                 style: textTheme.bodyMedium?.copyWith(
