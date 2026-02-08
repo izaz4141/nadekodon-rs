@@ -209,6 +209,15 @@ pub fn parse_pubspec_version(content: &str) -> (Option<String>, Option<String>) 
     (None, None)
 }
 
+pub fn parse_version_json(content: &str) -> (Option<String>, Option<String>) {
+    if let Ok(json) = serde_json::from_str::<Value>(content) {
+        let version = json["version"].as_str().map(|s| s.to_string());
+        let build_number = json["build_number"].as_str().map(|s| s.to_string());
+        return (version, build_number);
+    }
+    (None, None)
+}
+
 async fn fetch_pubspec_version(
     client: &reqwest::Client,
     assets: &Value,

@@ -49,8 +49,8 @@ Future<void> initTray() async {
   await trayManager.setContextMenu(
     Menu(
       items: [
-        MenuItem(key: 'show', label: 'Show App'),
-        MenuItem(key: 'exit', label: 'Close App'),
+        MenuItem(key: 'show', label: 'Show'),
+        MenuItem(key: 'exit', label: 'Close'),
       ],
     ),
   );

@@ -10,10 +10,17 @@ pub async fn handle_status(State(state): State<SharedState>) -> impl IntoRespons
         } else {
             drop(read);
             let mut v_str = "Unknown".to_string();
-            let paths = ["./pubspec.yaml", "../pubspec.yaml", "../../pubspec.yaml"];
-            for path in paths {
+            let paths = [
+                ("./version.json", true),
+                ("./pubspec.yaml", false),
+            ];
+            for (path, is_json) in paths {
                 if let Ok(content) = std::fs::read_to_string(path) {
-                    let (v, b) = nadekodon_core::utils::version::parse_pubspec_version(&content);
+                    let (v, b) = if is_json {
+                        nadekodon_core::utils::version::parse_version_json(&content)
+                    } else {
+                        nadekodon_core::utils::version::parse_pubspec_version(&content)
+                    };
                     if let Some(version_val) = v {
                         v_str = if let Some(build_val) = b {
                             format!("{}+{}", version_val, build_val)
