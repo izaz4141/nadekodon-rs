@@ -136,6 +136,9 @@ Future<ResultType> openFile(String filePath) async {
       }
     }
     final result = await OpenFilex.open(filePath);
+    if (result.type != ResultType.done) {
+      log('Error opening file: ${result.message}', isError: true);
+    }
     return result.type;
   } catch (e) {
     log('Error opening file: $e', isError: true);
