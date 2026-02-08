@@ -136,9 +136,12 @@ jobs:
           name: pubspec
           path: .
 
+      - name: Copy pubspec to assets directory (for version)
+        run: |
+          mkdir -p ./assets/docs
+          cp ./pubspec.yaml ./assets/docs/pubspec.yaml
+
       - name: Cache Linux System Dependencies (APT)
-        # Use a specific, fixed key to re-run this step only if the key is missing.
-        # This prevents repeated slow 'sudo apt install' on subsequent runs.
         if: matrix.target == 'linux-x64'
         id: apt-cache
         uses: actions/cache@v4
@@ -223,7 +226,7 @@ jobs:
         if: startsWith(matrix.target, 'android')
         run: |
           if [ -n "${{ secrets.UPLOAD_KEYSTORE_BASE64 }}" ]; then
-            echo "${{ secrets.UPLOAD_KEYSTORE_BASE64 }}" | base64 -d > android/upload-keystore.jks  
+            echo "${{ secrets.UPLOAD_KEYSTORE_BASE64 }}" | base64 -d > android/upload-keystore.jks
             printf "storePassword=${{ secrets.STORE_PASSWORD }}\nkeyPassword=${{ secrets.KEY_PASSWORD }}\nkeyAlias=upload\nstoreFile=upload-keystore.jks\n" > android/key.properties
           else
             echo "Warning: UPLOAD_KEYSTORE_BASE64 secret not found. Skipping signing configuration."
@@ -246,22 +249,22 @@ jobs:
         if: matrix.target == 'linux-x64'
         run: |
           echo "Building AppImage using go-appimage appimagetool..."
-          
+
           # Download appimagetool (go-appimage)
           wget -O appimagetool https://github.com/$(wget -q https://github.com/probonopd/go-appimage/releases/expanded_assets/continuous -O - | grep "appimagetool-.*-x86_64.AppImage" | head -n 1 | cut -d '"' -f 2)
           chmod +x appimagetool
-          
+
           # Prepare AppDir
           mkdir -p AppDir/usr/bin
           cp -r build/linux/x64/release/bundle/* AppDir/usr/bin/
-          
+
           # Copy icon and desktop file to root of AppDir
           cp assets/icons/nadeko-don-512.png AppDir/nadeko-don.png
           cp linux/nadekodon.desktop AppDir/
-          
+
           # Create AppRun symlink
           ln -s usr/bin/nadekodon AppDir/AppRun
-          
+
           # Determine Update Info
           if [[ "${{ needs.setup.outputs.is_nightly }}" == "true" ]]; then
             export UPDATE_INFORMATION="gh-releases-zsync|izaz4141|nadekodon-rs|nightly|nadekodon-linux-x64.AppImage.zsync"
@@ -271,7 +274,7 @@ jobs:
 
           # Generate AppImage
           VERSION="${{ needs.setup.outputs.version_name }}" ./appimagetool ./AppDir
-          
+
           # Rename output
           mv Nadeko*.AppImage ${{ matrix.artifact_path }}
           mv Nadeko*.zsync ${{ matrix.artifact_path }}.zsync
@@ -310,6 +313,11 @@ jobs:
         with:
           name: pubspec
           path: .
+
+      - name: Copy pubspec to assets directory (for version)
+        run: |
+          mkdir -p ./assets/docs
+          cp ./pubspec.yaml ./assets/docs/pubspec.yaml
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -354,10 +362,10 @@ jobs:
         uses: actions/delete-package-versions@v5
         with:
           package-name: ${{ github.event.repository.name }}
-          package-type: 'container'
+          package-type: "container"
           min-versions-to-keep: 5
-          delete-only-untagged-versions: 'false'
-          ignore-versions: '^v.*|^latest$'
+          delete-only-untagged-versions: "false"
+          ignore-versions: "^v.*|^latest$"
 
   release:
     name: Create GitHub Release
