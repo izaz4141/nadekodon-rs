@@ -127,6 +127,13 @@ class _SystemAppState extends State<SystemApp> {
           Text('Nadeko~don', style: textTheme.titleLarge),
           SizedBox(height: AppTheme.spaceSM),
           _buildVersionInfo(context, textTheme),
+          if (PlatformService().isRemote) ...[
+            SizedBox(height: AppTheme.spaceSM),
+            Text(
+              'Remote Version: ${APIService.serverVersion.value ?? "Unknown"}',
+              style: textTheme.bodyMedium,
+            ),
+          ],
           SizedBox(height: AppTheme.spaceSM),
           Text('Author: Glicole', style: textTheme.bodyMedium),
           SizedBox(height: AppTheme.spaceSM),
@@ -267,18 +274,6 @@ class _SystemAppState extends State<SystemApp> {
             ],
           ],
         ),
-        if (PlatformService().isRemote) ...[
-          SizedBox(height: AppTheme.spaceXS),
-          ValueListenableBuilder<String?>(
-            valueListenable: APIService.serverVersion,
-            builder: (context, version, _) {
-              return Text(
-                'Remote Version: ${version ?? "Unknown"}',
-                style: textTheme.bodyMedium,
-              );
-            },
-          ),
-        ],
       ],
     );
   }
