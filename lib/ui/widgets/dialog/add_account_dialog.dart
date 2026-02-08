@@ -99,6 +99,9 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                     flex: 2,
                     child: TextFormField(
                       controller: _hostCtrl,
+                      keyboardType: TextInputType.url,
+                      autocorrect: false,
+                      enableSuggestions: false,
                       style: textTheme.bodyMedium,
                       decoration: InputDecoration(
                         labelText: "Host (IP/Domain)",
