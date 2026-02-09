@@ -137,6 +137,7 @@ jobs:
           path: .
 
       - name: Copy pubspec to assets directory (for version)
+        shell: bash
         run: |
           mkdir -p ./assets/docs
           cp ./pubspec.yaml ./assets/docs/pubspec.yaml
