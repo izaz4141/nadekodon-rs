@@ -70,8 +70,8 @@ class HomePage extends StatelessWidget {
                       const Expanded(child: _PageContent()),
                     ],
                   ),
-                  // Always include sidebar overlay handler so it can respond to hamburger menu
-                  const SidebarOverlayHandler(),
+                  // Always include interactive sidebar so it can respond to swipes and hamburger menu
+                  const InteractiveSidebar(),
                 ],
               ),
             ),
