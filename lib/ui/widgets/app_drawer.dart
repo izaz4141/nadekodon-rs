@@ -36,9 +36,9 @@ class _InteractiveSidebarState extends State<InteractiveSidebar>
     _slideAnim = Tween<Offset>(
       begin: const Offset(-1.0, 0),
       end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic));
+    ).animate(_ctrl);
 
-    _fadeAnim = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut);
+    _fadeAnim = _ctrl;
 
     isExpandedNotifier.addListener(_onExpandedChanged);
 
@@ -56,9 +56,9 @@ class _InteractiveSidebarState extends State<InteractiveSidebar>
 
   void _onExpandedChanged() {
     if (isExpandedNotifier.value) {
-      if (_ctrl.value < 1.0) _ctrl.forward();
+      if (_ctrl.value < 1.0) _ctrl.animateTo(1.0, curve: Curves.easeOutCubic);
     } else {
-      if (_ctrl.value > 0.0) _ctrl.reverse();
+      if (_ctrl.value > 0.0) _ctrl.animateBack(0.0, curve: Curves.easeOutCubic);
     }
   }
 
@@ -67,112 +67,108 @@ class _InteractiveSidebarState extends State<InteractiveSidebar>
   }
 
   void _handleDragUpdate(DragUpdateDetails details) {
-    final width = sidebarWidth * AppTheme.widthScale(context);
+    final width =
+        (sidebarWidth * AppTheme.widthScale(context)) + AppTheme.spaceLG;
     _dragValue += details.delta.dx / width;
     _ctrl.value = _dragValue.clamp(0.0, 1.0);
   }
 
   void _handleDragEnd(DragEndDetails details) {
-    if (details.primaryVelocity! > 500) {
+    _dragValue = _ctrl.value;
+    final velocity = details.primaryVelocity ?? 0;
+
+    if (velocity > 500) {
       isExpandedNotifier.value = true;
-      _ctrl.forward();
-    } else if (details.primaryVelocity! < -500) {
+      _ctrl.animateTo(1.0, curve: Curves.easeOutCubic);
+    } else if (velocity < -500) {
       isExpandedNotifier.value = false;
-      _ctrl.reverse();
+      _ctrl.animateBack(0.0, curve: Curves.easeOutCubic);
     } else if (_ctrl.value > 0.5) {
       isExpandedNotifier.value = true;
-      _ctrl.forward();
+      _ctrl.animateTo(1.0, curve: Curves.easeOutCubic);
     } else {
       isExpandedNotifier.value = false;
-      _ctrl.reverse();
+      _ctrl.animateBack(0.0, curve: Curves.easeOutCubic);
     }
-    _dragValue = _ctrl.value;
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final width = sidebarWidth * AppTheme.widthScale(context);
+    final sidebarTotalWidth = width + AppTheme.spaceLG * 2;
 
     return AnimatedBuilder(
       animation: _ctrl,
       builder: (context, child) {
         final isVisible = _ctrl.value > 0 || isExpandedNotifier.value;
-        if (!isVisible) {
-          // Detection area when closed
-          return Positioned(
-            left: 0,
-            top: 0,
-            bottom: 0,
-            width: railWidth,
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onHorizontalDragStart: _handleDragStart,
-              onHorizontalDragUpdate: _handleDragUpdate,
-              onHorizontalDragEnd: _handleDragEnd,
-            ),
-          );
-        }
+        final screenWidth = MediaQuery.of(context).size.width;
 
-        return Stack(
-          children: [
-            // Scrim
-            if (_ctrl.value > 0)
-              Positioned.fill(
-                child: GestureDetector(
-                  onTap: () => isExpandedNotifier.value = false,
-                  onHorizontalDragStart: _handleDragStart,
-                  onHorizontalDragUpdate: _handleDragUpdate,
-                  onHorizontalDragEnd: _handleDragEnd,
-                  child: FadeTransition(
-                    opacity: _fadeAnim,
-                    child: Container(color: colors.shadow.withAlpha(100)),
+        return Positioned(
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: isVisible ? screenWidth : railWidth,
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onHorizontalDragStart: _handleDragStart,
+            onHorizontalDragUpdate: _handleDragUpdate,
+            onHorizontalDragEnd: _handleDragEnd,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                // Scrim
+                if (_ctrl.value > 0)
+                  Positioned.fill(
+                    child: GestureDetector(
+                      onTap: () => isExpandedNotifier.value = false,
+                      behavior: HitTestBehavior.opaque,
+                      child: FadeTransition(
+                        opacity: _fadeAnim,
+                        child: Container(color: colors.shadow.withAlpha(100)),
+                      ),
+                    ),
                   ),
-                ),
-              ),
 
-            // Sidebar
-            Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
-              width: width + AppTheme.spaceLG * 2,
-              child: SlideTransition(
-                position: _slideAnim,
-                child: GestureDetector(
-                  onHorizontalDragStart: _handleDragStart,
-                  onHorizontalDragUpdate: _handleDragUpdate,
-                  onHorizontalDragEnd: _handleDragEnd,
-                  child: Container(
-                    width: width,
-                    margin: const EdgeInsets.all(AppTheme.spaceLG),
-                    decoration: BoxDecoration(
-                      color: colors.surface,
-                      borderRadius: BorderRadius.circular(
-                        AppTheme.radiusLG * 1.2,
-                      ),
-                      border: Border.all(
-                        color: colors.outlineVariant.withAlpha(128),
-                        width: 1.2,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: colors.shadow.withAlpha(40),
-                          blurRadius: 20,
-                          offset: const Offset(0, 8),
+                // Sidebar
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: sidebarTotalWidth,
+                  child: SlideTransition(
+                    position: _slideAnim,
+                    child: Container(
+                      width: width,
+                      margin: const EdgeInsets.all(AppTheme.spaceLG),
+                      decoration: BoxDecoration(
+                        color: colors.surface,
+                        borderRadius: BorderRadius.circular(
+                          AppTheme.radiusLG * 1.2,
                         ),
-                      ],
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: const Material(
-                      type: MaterialType.transparency,
-                      child: _SidebarContent(),
+                        border: Border.all(
+                          color: colors.outlineVariant.withAlpha(128),
+                          width: 1.2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: colors.shadow.withAlpha(40),
+                            blurRadius: 20,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: const Material(
+                        type: MaterialType.transparency,
+                        child: _SidebarContent(),
+                      ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         );
       },
     );

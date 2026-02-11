@@ -62,19 +62,15 @@ class HomePage extends StatelessWidget {
                         },
                       ),
                     ),
-              body: Stack(
+              body: Row(
                 children: [
-                  Row(
-                    children: [
-                      if (isDesktop) const NavigationRailSection(),
-                      const Expanded(child: _PageContent()),
-                    ],
-                  ),
-                  // Always include interactive sidebar so it can respond to swipes and hamburger menu
-                  const InteractiveSidebar(),
+                  if (isDesktop) const NavigationRailSection(),
+                  const Expanded(child: _PageContent()),
                 ],
               ),
             ),
+            // Always include interactive sidebar so it can respond to swipes and hamburger menu
+            const InteractiveSidebar(),
             if (!kIsWeb && PlatformService.isDesktop) ...[
               Positioned(
                 top: 0,
