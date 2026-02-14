@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:nadekodon/ui/theme/app_theme.dart';
 
@@ -21,6 +22,7 @@ class _InteractiveSidebarState extends State<InteractiveSidebar>
   late final AnimationController _ctrl;
   late final Animation<Offset> _slideAnim;
   late final Animation<double> _fadeAnim;
+  final FocusNode _focusNode = FocusNode();
 
   double _dragValue = 0;
 
@@ -44,6 +46,9 @@ class _InteractiveSidebarState extends State<InteractiveSidebar>
 
     if (isExpandedNotifier.value) {
       _ctrl.value = 1.0;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _focusNode.requestFocus();
+      });
     }
   }
 
@@ -51,14 +56,19 @@ class _InteractiveSidebarState extends State<InteractiveSidebar>
   void dispose() {
     isExpandedNotifier.removeListener(_onExpandedChanged);
     _ctrl.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
   void _onExpandedChanged() {
     if (isExpandedNotifier.value) {
       if (_ctrl.value < 1.0) _ctrl.animateTo(1.0, curve: Curves.easeOutCubic);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _focusNode.requestFocus();
+      });
     } else {
       if (_ctrl.value > 0.0) _ctrl.animateBack(0.0, curve: Curves.easeOutCubic);
+      _focusNode.unfocus();
     }
   }
 
@@ -109,64 +119,88 @@ class _InteractiveSidebarState extends State<InteractiveSidebar>
           top: 0,
           bottom: 0,
           width: isVisible ? screenWidth : railWidth,
-          child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onHorizontalDragStart: _handleDragStart,
-            onHorizontalDragUpdate: _handleDragUpdate,
-            onHorizontalDragEnd: _handleDragEnd,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                // Scrim
-                if (_ctrl.value > 0)
-                  Positioned.fill(
-                    child: GestureDetector(
-                      onTap: () => isExpandedNotifier.value = false,
-                      behavior: HitTestBehavior.opaque,
-                      child: FadeTransition(
-                        opacity: _fadeAnim,
-                        child: Container(color: colors.shadow.withAlpha(100)),
-                      ),
-                    ),
-                  ),
-
-                // Sidebar
-                Positioned(
-                  left: 0,
-                  top: 0,
-                  bottom: 0,
-                  width: sidebarTotalWidth,
-                  child: SlideTransition(
-                    position: _slideAnim,
-                    child: Container(
-                      width: width,
-                      margin: const EdgeInsets.all(AppTheme.spaceLG),
-                      decoration: BoxDecoration(
-                        color: colors.surface,
-                        borderRadius: BorderRadius.circular(
-                          AppTheme.radiusLG * 1.2,
-                        ),
-                        border: Border.all(
-                          color: colors.outlineVariant.withAlpha(128),
-                          width: 1.2,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: colors.shadow.withAlpha(40),
-                            blurRadius: 20,
-                            offset: const Offset(0, 8),
+          child: PopScope(
+            canPop: !isVisible,
+            onPopInvokedWithResult: (didPop, result) {
+              if (didPop) return;
+              if (isVisible) {
+                isExpandedNotifier.value = false;
+              }
+            },
+            child: Focus(
+              focusNode: _focusNode,
+              onKeyEvent: (node, event) {
+                if (event is KeyDownEvent &&
+                    event.logicalKey == LogicalKeyboardKey.escape) {
+                  if (isVisible) {
+                    isExpandedNotifier.value = false;
+                    return KeyEventResult.handled;
+                  }
+                }
+                return KeyEventResult.ignored;
+              },
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onHorizontalDragStart: _handleDragStart,
+                onHorizontalDragUpdate: _handleDragUpdate,
+                onHorizontalDragEnd: _handleDragEnd,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    // Scrim
+                    if (_ctrl.value > 0)
+                      Positioned.fill(
+                        child: GestureDetector(
+                          onTap: () => isExpandedNotifier.value = false,
+                          behavior: HitTestBehavior.opaque,
+                          child: FadeTransition(
+                            opacity: _fadeAnim,
+                            child: Container(
+                              color: colors.shadow.withAlpha(100),
+                            ),
                           ),
-                        ],
+                        ),
                       ),
-                      clipBehavior: Clip.antiAlias,
-                      child: const Material(
-                        type: MaterialType.transparency,
-                        child: _SidebarContent(),
+
+                    // Sidebar
+                    Positioned(
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: sidebarTotalWidth,
+                      child: SlideTransition(
+                        position: _slideAnim,
+                        child: Container(
+                          width: width,
+                          margin: const EdgeInsets.all(AppTheme.spaceLG),
+                          decoration: BoxDecoration(
+                            color: colors.surface,
+                            borderRadius: BorderRadius.circular(
+                              AppTheme.radiusLG * 1.2,
+                            ),
+                            border: Border.all(
+                              color: colors.outlineVariant.withAlpha(128),
+                              width: 1.2,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: colors.shadow.withAlpha(40),
+                                blurRadius: 20,
+                                offset: const Offset(0, 8),
+                              ),
+                            ],
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: const Material(
+                            type: MaterialType.transparency,
+                            child: _SidebarContent(),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         );
