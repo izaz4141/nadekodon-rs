@@ -7,7 +7,7 @@ import 'package:nadekodon/utils/system_service.dart';
 
 import 'package:nadekodon/src/bindings/bindings.dart';
 
-class QueryResultView extends StatelessWidget {
+class QueryResultView extends StatefulWidget {
   final TextEditingController urlController;
   final TextEditingController nameController;
   final ValueNotifier<String> selectedDir;
@@ -30,11 +30,26 @@ class QueryResultView extends StatelessWidget {
   });
 
   @override
+  State<QueryResultView> createState() => _QueryResultViewState();
+}
+
+class _QueryResultViewState extends State<QueryResultView> {
+  @override
+  void initState() {
+    super.initState();
+    final system = SystemService();
+    if (system.ytdlpVersion.value == null ||
+        system.ffmpegVersion.value == null) {
+      system.fetchVersions();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (output == null) {
+    if (widget.output == null) {
       return _buildLoading(context);
     }
-    return _buildView(context, output!);
+    return _buildView(context, widget.output!);
   }
 
   Widget _buildLoading(BuildContext context) {
@@ -64,106 +79,113 @@ class QueryResultView extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
-    if (!queryFinished.value && !urlQuery.error) {
+    final showDetails = !urlQuery.error || urlQuery.isWebpage;
+
+    if (!widget.queryFinished.value && showDetails) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        queryFinished.value = true;
-        nameController.text = urlQuery.isWebpage ? "index.html" : urlQuery.name;
+        widget.queryFinished.value = true;
+        widget.nameController.text = urlQuery.isWebpage
+            ? "index.html"
+            : urlQuery.name;
       });
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: urlQuery.error
-          ? [
-              const SizedBox(height: AppTheme.spaceSM),
-              Text(
-                "✖ URL can't be reached",
-                style: textTheme.bodySmall?.copyWith(
-                  color: Colors.red.shade600,
-                  fontWeight: FontWeight.w600,
+      children: [
+        if (urlQuery.error)
+          Padding(
+            padding: const EdgeInsets.only(top: AppTheme.spaceSM),
+            child: Text(
+              "✖ URL can't be reached",
+              style: textTheme.bodySmall?.copyWith(
+                color: Colors.red.shade600,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        if (showDetails) ...[
+          const SizedBox(height: AppTheme.spaceSM),
+          TextField(
+            controller: widget.nameController,
+            onSubmitted: (_) => widget.onDownload(),
+            decoration: InputDecoration(
+              labelText: "Filename",
+              labelStyle: textTheme.bodyMedium,
+              floatingLabelStyle: textTheme.bodySmall?.copyWith(
+                color: colors.primary,
+              ),
+              hintText: "download.bin",
+              hintStyle: textTheme.bodyMedium,
+              border: const OutlineInputBorder(
+                borderRadius: BorderRadius.all(
+                  Radius.circular(AppTheme.radiusMD),
                 ),
               ),
-            ]
-          : [
-              const SizedBox(height: AppTheme.spaceSM),
-              TextField(
-                controller: nameController,
-                onSubmitted: (_) => onDownload(),
-                decoration: InputDecoration(
-                  labelText: "Filename",
-                  labelStyle: textTheme.bodyMedium,
-                  floatingLabelStyle: textTheme.bodySmall?.copyWith(
-                    color: colors.primary,
-                  ),
-                  hintText: "download.bin",
-                  hintStyle: textTheme.bodyMedium,
-                  border: const OutlineInputBorder(
-                    borderRadius: BorderRadius.all(
-                      Radius.circular(AppTheme.radiusMD),
-                    ),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: AppTheme.spaceSM,
-                    vertical: AppTheme.spaceSM,
-                  ),
-                  suffixIcon: ValueListenableBuilder<TextEditingValue>(
-                    valueListenable: nameController,
-                    builder: (context, value, child) {
-                      if (value.text.isEmpty) {
-                        return const SizedBox.shrink(); // Hide button if empty
-                      }
-                      return IconButton(
-                        icon: const Icon(Icons.clear),
-                        tooltip: "Clear",
-                        onPressed: () => nameController.clear(),
-                      );
-                    },
-                  ),
-                ),
-                style: textTheme.bodyMedium,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: AppTheme.spaceSM,
+                vertical: AppTheme.spaceSM,
               ),
-              const SizedBox(height: AppTheme.spaceSM),
-              DirChoose(selectedDir: selectedDir),
-              const SizedBox(height: AppTheme.spaceSM),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  if (urlQuery.isWebpage)
-                    AnimatedBuilder(
-                      animation: Listenable.merge([
-                        SystemService().ytdlpVersion,
-                        SystemService().ffmpegVersion,
-                      ]),
-                      builder: (context, _) {
-                        final ytdlp = SystemService().ytdlpVersion.value;
-                        final ffmpeg = SystemService().ffmpegVersion.value;
+              suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                valueListenable: widget.nameController,
+                builder: (context, value, child) {
+                  if (value.text.isEmpty) {
+                    return const SizedBox.shrink(); // Hide button if empty
+                  }
+                  return IconButton(
+                    icon: const Icon(Icons.clear),
+                    tooltip: "Clear",
+                    onPressed: () => widget.nameController.clear(),
+                  );
+                },
+              ),
+            ),
+            style: textTheme.bodyMedium,
+          ),
+          const SizedBox(height: AppTheme.spaceSM),
+          DirChoose(selectedDir: widget.selectedDir),
+          const SizedBox(height: AppTheme.spaceSM),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              if (urlQuery.isWebpage)
+                AnimatedBuilder(
+                  animation: Listenable.merge([
+                    SystemService().ytdlpVersion,
+                    SystemService().ffmpegVersion,
+                  ]),
+                  builder: (context, _) {
+                    final ytdlp = SystemService().ytdlpVersion.value;
+                    final ffmpeg = SystemService().ffmpegVersion.value;
 
-                        return Row(
-                          children: [
-                            Text(
-                              "RETURNED WEBPAGE",
-                              style: textTheme.bodySmall?.copyWith(
-                                color: colors.error,
-                              ),
-                            ),
-                            if (ytdlp != null && ffmpeg != null) ...[
-                              const SizedBox(width: AppTheme.spaceMD),
-                              ElevatedButton(
-                                onPressed: onQueryYtdl,
-                                child: Text("YTDL", style: textTheme.bodySmall),
-                              ),
-                            ],
-                          ],
-                        );
-                      },
-                    ),
-                  Text(
-                    "Filesize: ${urlQuery.totalSize != null ? formatBytes(urlQuery.totalSize!.toInt()) : '?'}",
-                    style: textTheme.bodySmall,
-                  ),
-                ],
-              ),
+                    return Row(
+                      children: [
+                        Text(
+                          "RETURNED WEBPAGE",
+                          style: textTheme.bodySmall?.copyWith(
+                            color: colors.error,
+                          ),
+                        ),
+                        if (ytdlp != null && ffmpeg != null) ...[
+                          const SizedBox(width: AppTheme.spaceMD),
+                          ElevatedButton(
+                            onPressed: widget.onQueryYtdl,
+                            child: Text("YTDL", style: textTheme.bodySmall),
+                          ),
+                        ],
+                      ],
+                    );
+                  },
+                ),
+              if (!urlQuery.error)
+                Text(
+                  "Filesize: ${urlQuery.totalSize != null ? formatBytes(urlQuery.totalSize!.toInt()) : '?'}",
+                  style: textTheme.bodySmall,
+                ),
             ],
+          ),
+        ],
+      ],
     );
   }
 }

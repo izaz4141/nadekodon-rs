@@ -134,9 +134,9 @@ pub async fn query_url_info_internal(
                     let ct_lower = ct.to_ascii_lowercase();
                     ct_lower.contains("text/html") || ct_lower.contains("application/xhtml+xml")
                 }
-                None => false,
+                None => true,
             };
-            Ok(signals::UrlQueryOutput {
+            let output = signals::UrlQueryOutput {
                 url: info.url,
                 name: info.name,
                 total_size: info.total_size,
@@ -144,7 +144,8 @@ pub async fn query_url_info_internal(
                 content_type: info.content_type,
                 is_webpage,
                 error: false,
-            })
+            };
+            Ok(output)
         }
         Err(e) => {
             let err_str = format!("Failed to query info for {}: {:?}", url, e);
@@ -155,7 +156,7 @@ pub async fn query_url_info_internal(
                 total_size: None,
                 accept_ranges: false,
                 content_type: None,
-                is_webpage: false,
+                is_webpage: true,
                 error: true,
             })
         }
