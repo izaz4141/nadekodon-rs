@@ -8,6 +8,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:nadekodon/utils/helper.dart';
 import 'package:nadekodon/src/bindings/bindings.dart';
 import 'package:rinf/rinf.dart';
+// ignore: implementation_imports
 import 'package:flutter_local_notifications_linux/src/model/hint.dart';
 import 'package:window_manager/window_manager.dart';
 
