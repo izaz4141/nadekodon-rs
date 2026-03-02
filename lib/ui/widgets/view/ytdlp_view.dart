@@ -36,9 +36,36 @@ class _YtdlpView extends State<YtdlpView> {
   YtdlFormat? selectedVideo;
   YtdlFormat? selectedAudio;
 
+  late PageController _pageController;
+  int _currentIndex = 0;
+
   @override
   void initState() {
     super.initState();
+    _pageController = PageController();
+    if (widget.output != null && widget.output!.items.isNotEmpty) {
+      widget.nameController.text = widget.output!.items.first.name;
+    }
+  }
+
+  @override
+  void didUpdateWidget(YtdlpView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.output != oldWidget.output &&
+        widget.output != null &&
+        widget.output!.items.isNotEmpty) {
+      widget.nameController.text = widget.output!.items.first.name;
+      _currentIndex = 0;
+      if (_pageController.hasClients) {
+        _pageController.jumpToPage(0);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
   }
 
   @override
@@ -50,25 +77,13 @@ class _YtdlpView extends State<YtdlpView> {
     return _buildView(widget.output!);
   }
 
-  Widget _buildView(YtdlQueryOutput ytdlOutput) {
+  Widget _buildItemView(YtdlItem item) {
     final colors = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-
-    if (ytdlOutput.error != null) {
-      return Center(
-        child: Text(
-          ytdlOutput.error!,
-          style: textTheme.bodyMedium?.copyWith(color: colors.error),
-        ),
-      );
-    }
-
-    widget.nameController.text = ytdlOutput.name;
     final isDesktop = AppTheme.isDesktop(context);
 
     Widget buildThumbnail() => Image.network(
-      APIService.wrapImageUrl(ytdlOutput.thumbnail!),
-      fit: BoxFit.cover,
+      APIService.wrapImageUrl(item.thumbnail!),
+      fit: BoxFit.contain,
       headers: kIsWeb
           ? {'X-API-Key': SettingsManager.serverApiKey.value}
           : null,
@@ -85,60 +100,164 @@ class _YtdlpView extends State<YtdlpView> {
 
     Widget buildSelectors() => Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.start,
       children: [
-        if (ytdlOutput.videos.isNotEmpty)
-          _buildFormatSelector("Video", ytdlOutput.videos, selectedVideo, (
-            format,
-          ) {
+        if (item.videos.isNotEmpty) ...[
+          _buildFormatSelector("Video", item.videos, selectedVideo, (format) {
             setState(() => selectedVideo = format);
             widget.onVideoChanged(format);
           }),
-        const SizedBox(height: AppTheme.spaceMD),
-        if (ytdlOutput.audios.isNotEmpty)
-          _buildFormatSelector("Audio", ytdlOutput.audios, selectedAudio, (
-            format,
-          ) {
+          const SizedBox(height: AppTheme.spaceMD),
+        ],
+        if (item.audios.isNotEmpty)
+          _buildFormatSelector("Audio", item.audios, selectedAudio, (format) {
             setState(() => selectedAudio = format);
             widget.onAudioChanged(format);
           }),
       ],
     );
 
+    if (isDesktop) {
+      return IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (item.thumbnail != null) ...[
+              Expanded(flex: 2, child: SizedBox(child: buildThumbnail())),
+              SizedBox(width: AppTheme.spaceMD * AppTheme.spaceScale(context)),
+            ],
+            Expanded(
+              flex: 3,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: buildSelectors(),
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      return SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (item.thumbnail != null) ...[
+              SizedBox(
+                height: 5 * AppTheme.spaceXXL * AppTheme.spaceScale(context),
+                child: buildThumbnail(),
+              ),
+              SizedBox(height: AppTheme.spaceMD * AppTheme.spaceScale(context)),
+            ],
+            buildSelectors(),
+          ],
+        ),
+      );
+    }
+  }
+
+  Widget _buildView(YtdlQueryOutput ytdlOutput) {
+    final colors = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    if (ytdlOutput.error != null) {
+      return Center(
+        child: Text(
+          ytdlOutput.error!,
+          style: textTheme.bodyMedium?.copyWith(color: colors.error),
+        ),
+      );
+    }
+
+    final items = ytdlOutput.items;
+    if (items.isEmpty) {
+      return Center(
+        child: Text(
+          "No items found",
+          style: textTheme.bodyMedium?.copyWith(color: colors.error),
+        ),
+      );
+    }
+
+    Widget pageViewBuilder = PageView.builder(
+      controller: _pageController,
+      itemCount: items.length,
+      onPageChanged: (index) {
+        setState(() {
+          _currentIndex = index;
+          selectedVideo = null;
+          selectedAudio = null;
+          widget.onVideoChanged(null);
+          widget.onAudioChanged(null);
+          widget.nameController.text = items[index].name;
+        });
+      },
+      itemBuilder: (context, index) {
+        return _buildItemView(items[index]);
+      },
+    );
+
+    Widget pageNavigator = const SizedBox.shrink();
+    if (items.length > 1) {
+      pageNavigator = Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.chevron_left),
+            onPressed: () {
+              if (_currentIndex > 0) {
+                _pageController.previousPage(
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                );
+              }
+            },
+          ),
+          Flexible(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: List.generate(items.length, (index) {
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    margin: const EdgeInsets.symmetric(horizontal: 4.0),
+                    width: _currentIndex == index ? 12.0 : 8.0,
+                    height: 8.0,
+                    decoration: BoxDecoration(
+                      color: _currentIndex == index
+                          ? colors.primary
+                          : colors.onSurfaceVariant.withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(4.0),
+                    ),
+                  );
+                }),
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.chevron_right),
+            onPressed: () {
+              if (_currentIndex < items.length - 1) {
+                _pageController.nextPage(
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                );
+              }
+            },
+          ),
+        ],
+      );
+    }
+
     return Column(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (isDesktop)
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (ytdlOutput.thumbnail != null) ...[
-                  Expanded(flex: 2, child: SizedBox(child: buildThumbnail())),
-                  SizedBox(
-                    width: AppTheme.spaceMD * AppTheme.spaceScale(context),
-                  ),
-                ],
-                Expanded(flex: 3, child: buildSelectors()),
-              ],
-            ),
-          )
-        else
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (ytdlOutput.thumbnail != null) ...[
-                SizedBox(
-                  height: 5 * AppTheme.spaceXXL * AppTheme.spaceScale(context),
-                  child: buildThumbnail(),
-                ),
-                SizedBox(
-                  height: AppTheme.spaceMD * AppTheme.spaceScale(context),
-                ),
-              ],
-              buildSelectors(),
-            ],
-          ),
+        SizedBox(
+          height: 240,
+          width: 400 * AppTheme.widthScale(context),
+          child: pageViewBuilder,
+        ),
         SizedBox(height: AppTheme.spaceMD * AppTheme.spaceScale(context)),
         TextField(
           controller: widget.nameController,
@@ -178,6 +297,10 @@ class _YtdlpView extends State<YtdlpView> {
         ),
         SizedBox(height: AppTheme.spaceSM * AppTheme.spaceScale(context)),
         DirChoose(selectedDir: widget.selectedDir),
+        if (items.length > 1) ...[
+          SizedBox(height: AppTheme.spaceSM * AppTheme.spaceScale(context)),
+          pageNavigator,
+        ],
       ],
     );
   }
@@ -188,6 +311,10 @@ class _YtdlpView extends State<YtdlpView> {
     YtdlFormat? selectedFormat,
     void Function(YtdlFormat?) onChanged,
   ) {
+    if (selectedFormat != null && !formats.contains(selectedFormat)) {
+      selectedFormat = null;
+    }
+
     final textTheme = Theme.of(context).textTheme;
     final isDesktop = AppTheme.isDesktop(context);
 

@@ -39,11 +39,16 @@ pub struct UrlQueryOutput {
 
 #[derive(Serialize, RustSignal)]
 pub struct YtdlQueryOutput {
+    pub items: Vec<YtdlItem>,
+    pub error: Option<String>,
+}
+
+#[derive(Serialize, SignalPiece)]
+pub struct YtdlItem {
     pub name: String,
     pub thumbnail: Option<String>,
     pub videos: Vec<YtdlFormat>,
     pub audios: Vec<YtdlFormat>,
-    pub error: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, SignalPiece)]

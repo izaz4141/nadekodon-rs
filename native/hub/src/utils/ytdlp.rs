@@ -13,47 +13,55 @@ pub async fn handle_ytdl_query() {
         let result = get_ytdl_info(&url).await;
         let signal_to_send = match result {
             Ok(output) => {
-                let videos: Vec<YtdlFormat> = output
-                    .videos
+                let items: Vec<crate::signals::YtdlItem> = output
+                    .items
                     .into_iter()
-                    .map(|p| YtdlFormat {
-                        format_id: p.format_id,
-                        ext: p.ext,
-                        filesize: p.filesize,
-                        url: p.url,
-                        vcodec: p.vcodec,
-                        acodec: p.acodec,
-                        note: p.note,
+                    .map(|item| {
+                        let videos: Vec<YtdlFormat> = item
+                            .videos
+                            .into_iter()
+                            .map(|p| YtdlFormat {
+                                format_id: p.format_id,
+                                ext: p.ext,
+                                filesize: p.filesize,
+                                url: p.url,
+                                vcodec: p.vcodec,
+                                acodec: p.acodec,
+                                note: p.note,
+                            })
+                            .collect();
+                        let audios: Vec<YtdlFormat> = item
+                            .audios
+                            .into_iter()
+                            .map(|p| YtdlFormat {
+                                format_id: p.format_id,
+                                ext: p.ext,
+                                filesize: p.filesize,
+                                url: p.url,
+                                vcodec: p.vcodec,
+                                acodec: p.acodec,
+                                note: p.note,
+                            })
+                            .collect();
+
+                        crate::signals::YtdlItem {
+                            name: item.name,
+                            thumbnail: item.thumbnail,
+                            videos,
+                            audios,
+                        }
                     })
                     .collect();
-                let audios: Vec<YtdlFormat> = output
-                    .audios
-                    .into_iter()
-                    .map(|p| YtdlFormat {
-                        format_id: p.format_id,
-                        ext: p.ext,
-                        filesize: p.filesize,
-                        url: p.url,
-                        vcodec: p.vcodec,
-                        acodec: p.acodec,
-                        note: p.note,
-                    })
-                    .collect();
+
                 YtdlQueryOutput {
-                    name: output.name,
-                    thumbnail: output.thumbnail,
-                    videos,
-                    audios,
+                    items,
                     error: output.error,
                 }
             }
             Err(e) => {
                 logger::error(&format!("YT-DLP url not supported: {:?}", e));
                 YtdlQueryOutput {
-                    name: "".to_string(),
-                    thumbnail: None,
-                    videos: vec![],
-                    audios: vec![],
+                    items: vec![],
                     error: Some(e),
                 }
             }

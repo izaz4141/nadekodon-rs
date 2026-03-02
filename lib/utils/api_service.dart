@@ -440,52 +440,92 @@ class APIService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return YtdlQueryOutput(
-          name: data['name'],
-          thumbnail: data['thumbnail'],
-          videos: (data['videos'] as List)
+
+        List<YtdlItem> parsedItems = [];
+        if (data.containsKey('items') && data['items'] != null) {
+          parsedItems = (data['items'] as List)
               .map(
-                (v) => YtdlFormat(
-                  formatId: v['format_id'],
-                  ext: v['ext'],
-                  filesize: v['filesize'] != null
-                      ? Uint64.fromBigInt(BigInt.from(v['filesize']))
-                      : null,
-                  url: v['url'],
-                  vcodec: v['vcodec'],
-                  acodec: v['acodec'],
-                  note: v['note'],
+                (i) => YtdlItem(
+                  name: i['name'] ?? '',
+                  thumbnail: i['thumbnail'],
+                  videos: ((i['videos'] ?? []) as List)
+                      .map(
+                        (v) => YtdlFormat(
+                          formatId: v['format_id'],
+                          ext: v['ext'],
+                          filesize: v['filesize'] != null
+                              ? Uint64.fromBigInt(BigInt.from(v['filesize']))
+                              : null,
+                          url: v['url'],
+                          vcodec: v['vcodec'],
+                          acodec: v['acodec'],
+                          note: v['note'] ?? '',
+                        ),
+                      )
+                      .toList(),
+                  audios: ((i['audios'] ?? []) as List)
+                      .map(
+                        (a) => YtdlFormat(
+                          formatId: a['format_id'],
+                          ext: a['ext'],
+                          filesize: a['filesize'] != null
+                              ? Uint64.fromBigInt(BigInt.from(a['filesize']))
+                              : null,
+                          url: a['url'],
+                          vcodec: a['vcodec'],
+                          acodec: a['acodec'],
+                          note: a['note'] ?? '',
+                        ),
+                      )
+                      .toList(),
                 ),
               )
-              .toList(),
-          audios: (data['audios'] as List)
-              .map(
-                (a) => YtdlFormat(
-                  formatId: a['format_id'],
-                  ext: a['ext'],
-                  filesize: a['filesize'] != null
-                      ? Uint64.fromBigInt(BigInt.from(a['filesize']))
-                      : null,
-                  url: a['url'],
-                  vcodec: a['vcodec'],
-                  acodec: a['acodec'],
-                  note: a['note'],
-                ),
-              )
-              .toList(),
-          error: data['error'],
-        );
+              .toList();
+        } else {
+          parsedItems = [
+            YtdlItem(
+              name: data['name'] ?? '',
+              thumbnail: data['thumbnail'],
+              videos: ((data['videos'] ?? []) as List)
+                  .map(
+                    (v) => YtdlFormat(
+                      formatId: v['format_id'],
+                      ext: v['ext'],
+                      filesize: v['filesize'] != null
+                          ? Uint64.fromBigInt(BigInt.from(v['filesize']))
+                          : null,
+                      url: v['url'],
+                      vcodec: v['vcodec'],
+                      acodec: v['acodec'],
+                      note: v['note'] ?? '',
+                    ),
+                  )
+                  .toList(),
+              audios: ((data['audios'] ?? []) as List)
+                  .map(
+                    (a) => YtdlFormat(
+                      formatId: a['format_id'],
+                      ext: a['ext'],
+                      filesize: a['filesize'] != null
+                          ? Uint64.fromBigInt(BigInt.from(a['filesize']))
+                          : null,
+                      url: a['url'],
+                      vcodec: a['vcodec'],
+                      acodec: a['acodec'],
+                      note: a['note'] ?? '',
+                    ),
+                  )
+                  .toList(),
+            ),
+          ];
+        }
+
+        return YtdlQueryOutput(items: parsedItems, error: data['error']);
       }
     } catch (e) {
       log("Error querying YTDL: $e", isError: true);
     }
-    return YtdlQueryOutput(
-      name: "",
-      thumbnail: null,
-      videos: [],
-      audios: [],
-      error: "Connection error",
-    );
+    return YtdlQueryOutput(items: [], error: "Connection error");
   }
 
   static Future<bool> pauseDownload(String id) async {

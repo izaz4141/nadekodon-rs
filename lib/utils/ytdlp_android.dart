@@ -49,13 +49,7 @@ class YtDlpAndroid {
 
   static YtdlQueryOutput _mapToYtdlQueryOutput(Map<String, dynamic> raw) {
     if (raw.containsKey('error')) {
-      return YtdlQueryOutput(
-        name: '',
-        thumbnail: null,
-        videos: [],
-        audios: [],
-        error: raw['error'],
-      );
+      return YtdlQueryOutput(items: [], error: raw['error']);
     }
 
     final String name = raw['title'] ?? 'Unknown';
@@ -98,10 +92,14 @@ class YtDlpAndroid {
     }
 
     return YtdlQueryOutput(
-      name: name,
-      thumbnail: thumbnail,
-      videos: videos,
-      audios: audios,
+      items: [
+        YtdlItem(
+          name: name,
+          thumbnail: thumbnail,
+          videos: videos,
+          audios: audios,
+        ),
+      ],
       error: null,
     );
   }

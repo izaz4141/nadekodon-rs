@@ -38,11 +38,16 @@ pub struct UrlQueryOutput {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct YtdlQueryOutput {
+    pub items: Vec<YtdlItem>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct YtdlItem {
     pub name: String,
     pub thumbnail: Option<String>,
     pub videos: Vec<YtdlFormat>,
     pub audios: Vec<YtdlFormat>,
-    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
