@@ -532,6 +532,7 @@ class SettingsManager {
     APIService.isOnline.value = false;
     APIService.serverVersion.value = null;
     SystemService().refreshVersions();
+    await loadFromBackend();
     attachAutoSave();
     APIService.restartPolling();
   }
