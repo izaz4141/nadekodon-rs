@@ -1,6 +1,6 @@
 use crate::server::SharedState;
 use axum::{
-    extract::{Form, Query, State},
+    extract::{Form, State},
     http::StatusCode,
     response::IntoResponse,
 };
@@ -16,22 +16,10 @@ pub struct TorrentsDeleteQuery {
 
 pub async fn torrents_delete(
     State(state): State<SharedState>,
-    query: Option<Query<TorrentsDeleteQuery>>,
-    form: Option<Form<TorrentsDeleteQuery>>,
+    form: Form<TorrentsDeleteQuery>,
 ) -> impl IntoResponse {
-    let form_data = form.map(|Form(f)| f);
-    let query_data = query.map(|Query(q)| q);
-
-    let hashes_opt = form_data
-        .as_ref()
-        .and_then(|d| d.hashes.clone())
-        .or_else(|| query_data.as_ref().and_then(|d| d.hashes.clone()));
-
-    let delete_files = form_data
-        .as_ref()
-        .and_then(|d| d.delete_files)
-        .or_else(|| query_data.as_ref().and_then(|d| d.delete_files))
-        .unwrap_or(false);
+    let hashes_opt = form.hashes.clone();
+    let delete_files = form.delete_files.unwrap_or(false);
 
     let hashes_str = match hashes_opt {
         Some(h) => h,

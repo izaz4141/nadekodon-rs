@@ -4,11 +4,11 @@ mod downloader;
 mod signals;
 mod utils;
 
-extern crate nadekodon_core as core;
+extern crate nadekodon_core as ncore;
 
-use core::app_context::AppContext;
-use core::utils as cutils;
-use core::utils::types::DMSettings;
+use ncore::app_context::AppContext;
+use ncore::utils as cutils;
+use ncore::utils::types::DMSettings;
 use rinf::{dart_shutdown, write_interface};
 use tokio::spawn;
 

@@ -1,4 +1,5 @@
 extern crate nadekodon_core as core;
+
 use core::app_context::AppContext;
 use core::utils;
 use core::utils::logger;
@@ -18,8 +19,9 @@ use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
-use tokio::sync::Notify;
-use tokio::sync::RwLock;
+use tokio::sync::{Notify, RwLock};
+use tower::ServiceBuilder;
+use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
 use uuid::Uuid;
 
 static NADEKO_HOME: OnceLock<String> = OnceLock::new();
@@ -116,9 +118,18 @@ pub fn create_router(state: SharedState) -> Router {
     let qbt_router = crate::qbittorrent::get_router(state.clone());
     let nadeko_router = crate::nadeko::create_nadeko_router(state.clone());
 
+    let governor_conf = GovernorConfigBuilder::default()
+        .per_second(10)
+        .burst_size(20)
+        .finish()
+        .unwrap();
+
     Router::new()
         .nest("/api/v2", qbt_router)
         .nest("/api/nadeko", nadeko_router)
+        .layer(ServiceBuilder::new().layer(GovernorLayer::new(
+            governor_conf,
+        )))
         .with_state(state)
 }
 
@@ -133,7 +144,7 @@ pub async fn run_server(
     match tokio::net::TcpListener::bind(addr).await {
         Ok(listener) => {
             tokio::select! {
-                _ = axum::serve(listener, router)
+                _ = axum::serve(listener, router.into_make_service_with_connect_info::<SocketAddr>())
                     .with_graceful_shutdown(async move {
                         restart_signal.notified().await;
                     }) => {}

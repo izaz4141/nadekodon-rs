@@ -5,10 +5,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-extern crate nadekodon_core as core;
-use core::app_context::AppContext;
-use core::utils::security;
-use core::utils::{logger, types::DMSettings};
+extern crate nadekodon_core as ncore;
+use ncore::app_context::AppContext;
+use ncore::utils::security;
+use ncore::utils::{logger, types::DMSettings};
 
 use nadekodon_server::server;
 use nadekodon_server::server::{nadeko_home, normalize_secret};
@@ -53,7 +53,7 @@ async fn main() {
     };
     api_key = normalize_secret(&api_key).to_string();
 
-    let client = core::utils::url::build_browser_client().await;
+    let client = ncore::utils::url::build_browser_client().await;
 
     let settings = DMSettings {
         speed_limit: initial_config["speed_limit"].as_u64().unwrap_or(0),
