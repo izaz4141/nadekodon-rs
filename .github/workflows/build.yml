@@ -365,8 +365,7 @@ jobs:
           package-name: ${{ github.event.repository.name }}
           package-type: "container"
           min-versions-to-keep: 5
-          delete-only-untagged-versions: "false"
-          ignore-versions: "^v.*|^latest$"
+          delete-only-untagged-versions: "true"
 
   release:
     name: Create GitHub Release
