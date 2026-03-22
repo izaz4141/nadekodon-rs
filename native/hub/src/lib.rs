@@ -64,6 +64,8 @@ async fn main() {
     spawn(utils::ytdlp::handle_ytdl_query());
     spawn(downloader::handle_ffmpeg_results());
     spawn(utils::security::handle_password_security());
+    spawn(utils::security::handle_login());
+    spawn(utils::security::verify_pass());
 
     // Keep the main function running until Dart shutdown.
     dart_shutdown().await;

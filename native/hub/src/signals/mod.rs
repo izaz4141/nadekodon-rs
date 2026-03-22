@@ -197,6 +197,7 @@ pub struct StartServer {
     pub api_key: String,
     pub username: String,
     pub password: String,
+    pub config_path: String,
 }
 
 #[derive(Deserialize, DartSignal)]
@@ -241,4 +242,32 @@ pub struct GenerateSalt {
 pub struct SaltOutput {
     pub id: String,
     pub salt: String,
+}
+
+#[derive(Deserialize, DartSignal)]
+pub struct Login {
+    pub id: String,
+    pub iuser: String,
+    pub ipass: String,
+    pub ruser: String,
+    pub rpass: String,
+}
+
+#[derive(Serialize, RustSignal)]
+pub struct LoginResult {
+    pub id: String,
+    pub success: bool,
+}
+
+#[derive(Deserialize, DartSignal)]
+pub struct VerifyPassword {
+    pub id: String,
+    pub input: String,
+    pub reference: String,
+}
+
+#[derive(Serialize, RustSignal)]
+pub struct VerifyPasswordResult {
+    pub id: String,
+    pub success: bool,
 }

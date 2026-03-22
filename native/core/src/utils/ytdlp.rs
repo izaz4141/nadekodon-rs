@@ -52,7 +52,7 @@ pub async fn get_ytdl_info(url: &str) -> Result<YtdlQueryOutput, String> {
                 }
             }
         }
-        
+
         items.push(crate::signals::YtdlItem {
             name,
             thumbnail,
@@ -65,8 +65,5 @@ pub async fn get_ytdl_info(url: &str) -> Result<YtdlQueryOutput, String> {
         return Err("No JSON data found in yt-dlp output".to_string());
     }
 
-    Ok(YtdlQueryOutput {
-        items,
-        error: None,
-    })
+    Ok(YtdlQueryOutput { items, error: None })
 }

@@ -27,6 +27,8 @@ time = { version = "0.3.41", features = ["macros", "formatting", "parsing"] }
 openssl = { version = "0.10.74", features = ["vendored"] }
 serde = { version = "1.0.219", features = ["derive"] }
 axum = "0.8.8"
+tower_governor = { version = "0.8.0", features = ["axum"] }
+tower = "0.5.3"
 
 
 # Uncomment below to target the web.

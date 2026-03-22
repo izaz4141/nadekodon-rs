@@ -28,7 +28,10 @@ pub async fn handle_download_file(
         }
     };
 
-    if !matches!(info.state, DownloadState::Completed | DownloadState::Seeding) {
+    if !matches!(
+        info.state,
+        DownloadState::Completed | DownloadState::Seeding
+    ) {
         return (
             StatusCode::FORBIDDEN,
             "Download must be completed or seeding to download",
@@ -49,7 +52,10 @@ pub async fn handle_download_file(
             }
             Err(e) => {
                 logger::error(&format!("Failed to create temp file: {}", e));
-                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create temp file")
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to create temp file",
+                )
                     .into_response();
             }
         };
@@ -116,7 +122,10 @@ pub async fn handle_download_file(
         let zip_filename = format!("{}.zip", filename);
 
         let mut headers = HeaderMap::new();
-        headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("application/zip"));
+        headers.insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/zip"),
+        );
         headers.insert(
             header::CONTENT_DISPOSITION,
             HeaderValue::from_str(&format!("attachment; filename=\"{}\"", zip_filename)).unwrap(),
@@ -125,7 +134,7 @@ pub async fn handle_download_file(
             header::CONTENT_LENGTH,
             HeaderValue::from_str(&content_length.to_string()).unwrap(),
         );
-        
+
         (headers, body).into_response()
     } else {
         let file = match File::open(&path).await {
@@ -139,7 +148,10 @@ pub async fn handle_download_file(
         let content_length = match file.metadata().await {
             Ok(m) => m.len(),
             Err(e) => {
-                logger::error(&format!("Failed to get metadata for file {:?}: {}", path, e));
+                logger::error(&format!(
+                    "Failed to get metadata for file {:?}: {}",
+                    path, e
+                ));
                 return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get metadata")
                     .into_response();
             }

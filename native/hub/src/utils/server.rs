@@ -1,12 +1,17 @@
-extern crate nadekodon_core as core;
-use core::app_context::AppContext;
-use core::utils::security;
+extern crate nadekodon_core as ncore;
 use nadekodon_server::{
     nadeko::create_nadeko_router,
     qbittorrent::get_router,
-    server::{AppState, SharedState, check_api_key, run_server},
+    server::{
+        AppState, SharedState, check_api_key, global_rate_limit_config, load_config, run_server,
+    },
 };
-use tokio::sync::{Notify, RwLock};
+use ncore::app_context::AppContext;
+use ncore::utils::security;
+use tokio::{
+    spawn,
+    sync::{Notify, RwLock},
+};
 
 use crate::signals::{NewApiKey, RequestAddDownload, RequestNewApiKey, StartServer};
 use crate::utils::logger;
@@ -17,6 +22,8 @@ use axum::{
 use rinf::{DartSignal, RustSignal};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::time::Duration;
+use tower_governor::GovernorLayer;
 use uuid::Uuid;
 
 pub async fn handle_api_key_generation() {
@@ -37,18 +44,24 @@ async fn handle_add_download(
 
 pub async fn start_server_listener(context: Arc<AppContext>) {
     let mut current_server: Option<(tokio::task::JoinHandle<()>, Arc<tokio::sync::Notify>)> = None;
+    let mut cleanup_handle: Option<tokio::task::JoinHandle<()>> = None;
     let receiver = StartServer::get_dart_signal_receiver();
 
     while let Some(signal_pack) = receiver.recv().await {
         let msg = signal_pack.message;
         logger::debug(&format!("Starting server on port {}", msg.port));
 
+        if let Some(handle) = cleanup_handle.take() {
+            handle.abort();
+        }
+
         if let Some((old_handle, old_notify)) = current_server.take() {
             old_notify.notify_one();
             let _ = old_handle.await;
         }
 
-        let config_val = nadekodon_server::server::load_config();
+        let config_path = msg.config_path;
+        let config_val = load_config(&config_path);
         let salt = config_val["salt"]
             .as_str()
             .map(|s| s.to_string())
@@ -77,11 +90,27 @@ pub async fn start_server_listener(context: Arc<AppContext>) {
             username: Arc::new(RwLock::new(msg.username)),
             password: Arc::new(RwLock::new(password)),
             config,
+            config_path,
             restart_signal: restart_signal.clone(),
             shutdown_signal: shutdown_signal.clone(),
             shutdown_requested: shutdown_requested.clone(),
             version: Arc::new(RwLock::new(None)),
         });
+
+        let governor_conf = global_rate_limit_config();
+        let governor_limiter = governor_conf.limiter().clone();
+
+        cleanup_handle = Some(spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_secs(60)).await;
+                // logger::debug(&format!(
+                //     "Rate limiting storage size: {}",
+                //     governor_limiter.len()
+                // ));
+                governor_limiter.retain_recent();
+            }
+        }));
+
         let qbt_router = get_router(state.clone());
         let nadeko_router = create_nadeko_router(state.clone());
         let ext_router = Router::new()
@@ -92,11 +121,12 @@ pub async fn start_server_listener(context: Arc<AppContext>) {
             .nest("/api/v2", qbt_router)
             .nest("/api/nadeko", nadeko_router)
             .nest("/api/nadeko", ext_router)
+            .layer(GovernorLayer::new(governor_conf))
             .with_state(state);
 
         let rs_clone = restart_signal.clone();
         let ss_clone = shutdown_signal.clone();
-        let new_handle = tokio::spawn(async move {
+        let new_handle = spawn(async move {
             run_server(router, msg.port, rs_clone, ss_clone).await;
         });
         current_server = Some((new_handle, restart_signal));

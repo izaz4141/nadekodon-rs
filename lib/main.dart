@@ -47,6 +47,7 @@ Future<void> main() async {
           apiKey: SettingsManager.serverApiKey.value,
           username: SettingsManager.username.value,
           password: SettingsManager.password.value,
+          configPath: SettingsManager.configPath,
         ).sendSignalToRust();
       }
 

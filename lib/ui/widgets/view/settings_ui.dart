@@ -18,7 +18,14 @@ class SettingsUI extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionHeader(title: 'UI Settings', icon: Icons.palette_rounded),
+        SectionHeader(
+          title: 'UI Settings',
+          leading: Icon(
+            Icons.palette_rounded,
+            color: colors.onPrimaryContainer,
+            size: AppTheme.iconMD * AppTheme.iconScale(context),
+          ),
+        ),
         ValueListenableBuilder<ThemeMode>(
           valueListenable: SettingsManager.themeMode,
           builder: (context, themeMode, _) {

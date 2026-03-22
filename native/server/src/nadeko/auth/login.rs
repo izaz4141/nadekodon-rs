@@ -1,4 +1,4 @@
-use crate::server::SharedState;
+use crate::server::{SharedState, secure_compare, build_api_cookie};
 use axum::{
     extract::{Json, State},
     http::StatusCode,
@@ -21,7 +21,7 @@ pub async fn handle_login(
 ) -> impl IntoResponse {
     let mut authorized = false;
     if let Some(cookie) = jar.get("nadeko_api_key")
-        && cookie.value() == state.api_key.read().await.clone()
+        && secure_compare(cookie.value(), &state.api_key.read().await.clone())
     {
         authorized = true;
     }
@@ -45,17 +45,7 @@ pub async fn handle_login(
             .into_response();
     }
 
-    let cookie = axum_extra::extract::cookie::Cookie::build((
-        "nadeko_api_key",
-        state.api_key.read().await.clone(),
-    ))
-    .path("/")
-    .secure(true)
-    .http_only(true)
-    .same_site(axum_extra::extract::cookie::SameSite::Lax)
-    .build();
-
-    let jar = jar.add(cookie);
+    let jar = jar.add(build_api_cookie(&state.api_key.read().await));
 
     (
         jar,

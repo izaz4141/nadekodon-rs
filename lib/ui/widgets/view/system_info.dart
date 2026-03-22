@@ -32,12 +32,17 @@ class _SystemInfoState extends State<SystemInfo> {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final colors = Theme.of(context).colorScheme;
 
     return Column(
       children: [
-        const SectionHeader(
+        SectionHeader(
           title: 'System Info',
-          icon: Icons.info_outline_rounded,
+          leading: Icon(
+            Icons.info_outline_rounded,
+            color: colors.onPrimaryContainer,
+            size: AppTheme.iconMD * AppTheme.iconScale(context),
+          ),
         ),
         if (_deviceData.isEmpty)
           const Padding(

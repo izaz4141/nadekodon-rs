@@ -199,7 +199,9 @@ class APIService {
       } else {
         isOnline.value = false;
         serverVersion.value = null;
-        log("Server status check failed: ${response.statusCode}");
+        log(
+          "Server status check failed: ${response.statusCode} ${response.body}",
+        );
       }
     } catch (e) {
       // Don't log typical connection refused errors as they spam when server is off
@@ -705,5 +707,68 @@ class APIService {
     SettingsManager.serverHost.removeListener(restartPolling);
     SettingsManager.serverPort.removeListener(restartPolling);
     SettingsManager.serverApiKey.removeListener(restartPolling);
+  }
+
+  static Future<bool> changeCredentials({
+    required String currentPassword,
+    String? newUsername,
+    String? newPassword,
+    bool? requireLogin,
+    int? serverPort,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/nadeko/auth/change-credentials'),
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': SettingsManager.serverApiKey.value,
+        },
+        body: jsonEncode({
+          'current_password': currentPassword,
+          if (newUsername != null) 'new_username': newUsername,
+          if (newPassword != null) 'new_password': newPassword,
+          if (requireLogin != null) 'require_login': requireLogin,
+          if (serverPort != null) 'server_port': serverPort,
+        }),
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          await SettingsManager.loadFromBackend();
+          return true;
+        }
+      }
+      log(
+        'Change credentials failed: ${response.statusCode} ${response.body}',
+        isError: true,
+      );
+    } catch (e) {
+      log("Change credentials error: $e", isError: true);
+    }
+    return false;
+  }
+
+  static Future<bool> verifyPassword(String password) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/nadeko/auth/verify-password'),
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': SettingsManager.serverApiKey.value,
+        },
+        body: jsonEncode({'password': password}),
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['valid'] == true;
+      }
+      log(
+        'Verify password failed: ${response.statusCode} ${response.body}',
+        isError: true,
+      );
+    } catch (e) {
+      log("Verify password error: $e", isError: true);
+    }
+    return false;
   }
 }

@@ -1,5 +1,5 @@
 use crate::server::SharedState;
-use axum::{extract::State, response::IntoResponse, Json};
+use axum::{Json, extract::State, response::IntoResponse};
 use serde_json::json;
 
 pub async fn handle_status(State(state): State<SharedState>) -> impl IntoResponse {

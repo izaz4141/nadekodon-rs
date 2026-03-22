@@ -18,9 +18,13 @@ class SettingsMisc extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionHeader(
+        SectionHeader(
           title: 'Misc',
-          icon: Icons.miscellaneous_services_rounded,
+          leading: Icon(
+            Icons.miscellaneous_services_rounded,
+            color: colors.onPrimaryContainer,
+            size: AppTheme.iconMD * AppTheme.iconScale(context),
+          ),
         ),
         ValueListenableBuilder<bool>(
           valueListenable: SettingsManager.checkNightly,

@@ -6,7 +6,7 @@ services:
     container_name: nadekodon
     ports:
       - "80:80" # Web UI (HTTP) - Also serves API via reverse proxy
-      - "8080:8080" # Direct API access (bypasses web UI) (not needed)
+      # - "8080:8080" # Direct API access (bypasses web UI) (not needed)
     environment:
       - NADEKO_HOME=/home/nadeko # Base data folder for downloads and config
       - NADEKO_SERVER_PORT=8080 # Internal API server port (inside container)
@@ -16,4 +16,5 @@ services:
     volumes:
       - ./data/downloads:/home/nadeko/downloads # Downloaded files storage
       - ./data/config:/home/nadeko/config # Application configuration (settings.json, etc.)
+      - ./data/logs:/home/nadeko/logs # Server logs
     restart: unless-stopped

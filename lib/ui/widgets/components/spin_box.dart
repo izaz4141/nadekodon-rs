@@ -13,6 +13,7 @@ class SpinBox extends StatefulWidget {
     required this.max,
     this.step = 1,
     this.width = AppTheme.spaceXXL * 2.5,
+    this.enabled = true,
   });
 
   final String title;
@@ -22,6 +23,7 @@ class SpinBox extends StatefulWidget {
   final int max;
   final int step;
   final double width;
+  final bool enabled;
 
   @override
   State<SpinBox> createState() => _SpinBoxState();
@@ -119,7 +121,7 @@ class _SpinBoxState extends State<SpinBox> {
             child: IconButton(
               icon: const Icon(Icons.remove),
               iconSize: AppTheme.iconMD * AppTheme.iconScale(context),
-              onPressed: _decrement,
+              onPressed: widget.enabled ? _decrement : null,
             ),
           ),
           SizedBox(
@@ -130,6 +132,7 @@ class _SpinBoxState extends State<SpinBox> {
               keyboardType: TextInputType.number,
               textAlign: TextAlign.center,
               style: textTheme.bodyMedium,
+              readOnly: !widget.enabled,
               decoration: InputDecoration(
                 border: OutlineInputBorder(),
                 contentPadding: EdgeInsets.symmetric(
@@ -138,7 +141,7 @@ class _SpinBoxState extends State<SpinBox> {
                 ),
                 isDense: true,
               ),
-              onChanged: (value) {
+              onChanged: widget.enabled ? (value) {
                 // Update the value as the user types
                 final intValue = int.tryParse(value);
                 if (intValue != null &&
@@ -146,11 +149,11 @@ class _SpinBoxState extends State<SpinBox> {
                     intValue <= widget.max) {
                   widget.valueListenable.value = intValue;
                 }
-              },
-              onSubmitted: (value) {
+              } : null,
+              onSubmitted: widget.enabled ? (value) {
                 _saveValue();
                 _focusNode.unfocus();
-              },
+              } : null,
             ),
           ),
           Padding(
@@ -159,8 +162,8 @@ class _SpinBoxState extends State<SpinBox> {
             ),
             child: IconButton(
               icon: const Icon(Icons.add),
-              iconSize: AppTheme.iconMD * AppTheme.spaceScale(context),
-              onPressed: _increment,
+              iconSize: AppTheme.iconMD * AppTheme.iconScale(context),
+              onPressed: widget.enabled ? _increment : null,
             ),
           ),
         ],

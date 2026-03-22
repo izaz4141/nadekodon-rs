@@ -16,7 +16,7 @@ use info::*;
 use misc::*;
 use properties::*;
 
-use crate::server::SharedState;
+use crate::server::{SharedState, auth_rate_limit_config, secure_compare};
 use axum::{
     Form, Router,
     extract::State,
@@ -27,6 +27,7 @@ use axum::{
 use axum_extra::extract::cookie::{Cookie, CookieJar};
 use nadekodon_core::utils::security;
 use serde::Deserialize;
+use tower_governor::GovernorLayer;
 
 #[derive(Deserialize)]
 struct AuthQuery {
@@ -35,6 +36,10 @@ struct AuthQuery {
 }
 
 pub fn get_router(state: SharedState) -> Router<SharedState> {
+    let login_router = Router::new()
+        .route("/auth/login", post(login))
+        .layer(GovernorLayer::new(auth_rate_limit_config()));
+
     let auth_router = Router::new()
         .route("/app/version", get(app_version))
         .route("/app/webapiVersion", get(webapi_version))
@@ -52,9 +57,7 @@ pub fn get_router(state: SharedState) -> Router<SharedState> {
         .route("/torrents/setForceStart", post(torrents_set_force_start))
         .layer(axum::middleware::from_fn_with_state(state, auth_middleware));
 
-    Router::new()
-        .route("/auth/login", post(login))
-        .merge(auth_router)
+    Router::new().merge(login_router).merge(auth_router)
 }
 
 async fn login(
@@ -85,7 +88,7 @@ async fn auth_middleware(
     next: axum::middleware::Next,
 ) -> impl IntoResponse {
     if let Some(cookie) = jar.get("SID")
-        && cookie.value() == state.api_key.read().await.clone()
+        && secure_compare(cookie.value(), &state.api_key.read().await.clone())
     {
         return next.run(req).await;
     }

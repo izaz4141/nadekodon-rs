@@ -104,10 +104,10 @@ If you prefer to compile the application yourself, follow these steps. Prerequis
 
 #### Docker
 
-Build and run the standalone server for browser extension integration:
+Use the docker-compose.yml and run the docker container:
 ```sh
-docker build -t nadekodon-server .
-docker run -p 8080:8080 nadekodon-server
+curl -o docker-compose.yml https://raw.githubusercontent.com/izaz4141/nadekodon-rs/refs/heads/main/docker-compose.yml
+docker compose up -d
 ```
 
 ## Notes

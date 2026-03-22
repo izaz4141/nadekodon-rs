@@ -1,7 +1,9 @@
 extern crate nadekodon_core as core;
-use crate::signals::{GenerateSalt, HashPassword, HashingOutput, SaltOutput};
+use crate::signals::{
+    self, GenerateSalt, HashPassword, HashingOutput, LoginResult, SaltOutput, VerifyPasswordResult,
+};
 use crate::utils::logger;
-use core::utils::security::{generate_salt, hash_password};
+use core::utils::security::{generate_salt, hash_password, validate_password};
 use rinf::{DartSignal, RustSignal};
 
 pub async fn handle_password_security() {
@@ -34,5 +36,35 @@ pub async fn handle_password_security() {
                 .send_signal_to_dart();
             }
         }
+    }
+}
+
+pub async fn handle_login() {
+    let receiver = signals::Login::get_dart_signal_receiver();
+    while let Some(signal_pack) = receiver.recv().await {
+        let msg = signal_pack.message;
+
+        let success =
+            validate_password(&msg.rpass, &msg.ipass).unwrap_or(false) & (msg.iuser == msg.ruser);
+
+        LoginResult {
+            id: msg.id.clone(),
+            success,
+        }
+        .send_signal_to_dart();
+    }
+}
+
+pub async fn verify_pass() {
+    let receiver = signals::VerifyPassword::get_dart_signal_receiver();
+    while let Some(signal_pack) = receiver.recv().await {
+        let msg = signal_pack.message;
+        let success = validate_password(&msg.reference, &msg.input).unwrap_or(false);
+
+        VerifyPasswordResult {
+            id: msg.id.clone(),
+            success: success,
+        }
+        .send_signal_to_dart();
     }
 }

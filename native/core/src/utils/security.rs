@@ -25,15 +25,8 @@ pub fn hash_password(password: &str, salt: &str) -> Result<String> {
 }
 
 pub fn validate_password(stored_hash: &str, input_password: &str) -> Result<bool> {
-    let parsed_hash = match PasswordHash::new(stored_hash) {
-        Ok(h) => h,
-        Err(_) => {
-            if input_password == stored_hash {
-                return Ok(true);
-            }
-            return Err(anyhow::anyhow!("Invalid password hash format"));
-        }
-    };
+    let parsed_hash = PasswordHash::new(stored_hash)
+        .map_err(|e| anyhow::anyhow!("Invalid password hash format: {}", e))?;
 
     let argon2 = Argon2::default();
 

@@ -21,9 +21,13 @@ class SettingsDM extends StatelessWidget {
 
     return Column(
       children: [
-        const SectionHeader(
+        SectionHeader(
           title: 'DM Settings',
-          icon: Icons.downloading_rounded,
+          leading: Icon(
+            Icons.downloading_rounded,
+            color: colors.onPrimaryContainer,
+            size: AppTheme.iconMD * AppTheme.iconScale(context),
+          ),
         ),
         ValueListenableBuilder<String>(
           valueListenable: SettingsManager.downloadFolder,

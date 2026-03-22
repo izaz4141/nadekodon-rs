@@ -107,7 +107,7 @@ class SettingsManager {
       serverPort.value =
           data['server_port'] ?? (_defaults['server_port'] ?? 8080);
       await _applyFromJson(data);
-      log(configPath);
+      await _saveAll();
     } else {
       isFirstRun = true;
       downloadFolder.value = defaultDownloadFolder;
@@ -144,8 +144,8 @@ class SettingsManager {
     if (encodedPassword != null && encodedPassword.isNotEmpty) {
       password.value = encodedPassword;
     } else {
-      password.value = _defaults['password'] ?? await _hashPassword('admin');
-      if (password.value.isEmpty) password.value = await _hashPassword('admin');
+      password.value = _defaults['password'] ?? await hashPassword('admin');
+      if (password.value.isEmpty) password.value = await hashPassword('admin');
     }
 
     // Speed Scheduler
@@ -201,7 +201,7 @@ class SettingsManager {
     'server_api_key': serverApiKey.value,
     'salt': salt.value,
     'username': username.value,
-    'password': await _hashPassword(password.value),
+    'password': await hashPassword(password.value),
     'speed_limit': speedLimit.value,
     'speed_mode': speedMode.value.index,
     'speed_schedule': speedSchedule.value.map((e) => e.toJson()).toList(),
@@ -219,6 +219,25 @@ class SettingsManager {
     'accounts': accounts.value.map((e) => e.toJson()).toList(),
   };
 
+  static Future<void> reloadConfig() async {
+    if (PlatformService().isRemote) return await loadFromBackend();
+
+    final configDir = await _ioService.getConfigDir();
+    configPath = '$configDir/config.json';
+    final configExists = await _ioService.fileExists(configPath);
+
+    if (configExists) {
+      final Map<String, dynamic> data = jsonDecode(
+        await _ioService.readFile(configPath),
+      );
+      serverHost.value =
+          data['server_host'] ?? (_defaults['server_host'] ?? '127.0.0.1');
+      serverPort.value =
+          data['server_port'] ?? (_defaults['server_port'] ?? 8080);
+      await _applyFromJson(data);
+    }
+  }
+
   static Future<void> _saveAll() async {
     if (kIsWeb) {
       await _saveToBackend();
@@ -231,7 +250,7 @@ class SettingsManager {
     );
   }
 
-  static Future<void> _saveChanged(String key, dynamic value) async {
+  static Future<void> saveChanged(String key, dynamic value) async {
     if (PlatformService().isRemote) {
       if (key != 'accounts') {
         await _saveToBackend();
@@ -253,7 +272,7 @@ class SettingsManager {
     }
 
     if (key == 'password') {
-      data[key] = await _hashPassword(value);
+      data[key] = await hashPassword(value);
     } else {
       data[key] = value;
     }
@@ -268,7 +287,7 @@ class SettingsManager {
 
     void add(ValueNotifier n, String key, [dynamic Function()? getValue]) {
       void listener() =>
-          _saveChanged(key, getValue != null ? getValue() : n.value);
+          saveChanged(key, getValue != null ? getValue() : n.value);
       n.addListener(listener);
       _autoSaveListeners[n] = listener;
     }
@@ -276,10 +295,6 @@ class SettingsManager {
     add(retreatToTray, 'retreat_to_tray');
     add(downloadFolder, 'download_folder');
     add(serverHost, 'server_host');
-    add(serverPort, 'server_port');
-    add(serverApiKey, 'server_api_key');
-    add(username, 'username');
-    add(password, 'password');
     add(salt, 'salt');
     add(speedLimit, 'speed_limit');
     add(speedMode, 'speed_mode', () => speedMode.value.index);
@@ -298,7 +313,6 @@ class SettingsManager {
     add(useDynamicColor, 'use_dynamic_color');
     add(customColor, 'custom_color');
     add(checkNightly, 'check_nightly');
-    add(requireLogin, 'require_login');
     add(
       accounts,
       'accounts',
@@ -431,6 +445,7 @@ class SettingsManager {
       apiKey: serverApiKey.value,
       username: username.value,
       password: password.value,
+      configPath: configPath,
     ).sendSignalToRust();
   }
 
@@ -450,7 +465,7 @@ class SettingsManager {
     }
   }
 
-  static Future<String> _hashPassword(String plainText) async {
+  static Future<String> hashPassword(String plainText) async {
     if (plainText.isEmpty) return '';
     try {
       if (PlatformService().isRemote) {

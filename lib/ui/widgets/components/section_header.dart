@@ -3,13 +3,13 @@ import 'package:nadekodon/ui/theme/app_theme.dart';
 
 class SectionHeader extends StatelessWidget {
   final String title;
-  final IconData icon;
+  final Widget? leading;
   final Widget? trailing;
 
   const SectionHeader({
     super.key,
     required this.title,
-    required this.icon,
+    this.leading,
     this.trailing,
   });
 
@@ -36,12 +36,10 @@ class SectionHeader extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(
-              icon,
-              color: colors.onPrimaryContainer,
-              size: AppTheme.iconMD * AppTheme.iconScale(context),
-            ),
-            SizedBox(width: AppTheme.spaceMD * AppTheme.spaceScale(context)),
+            if (leading != null) ...[
+              leading!,
+              SizedBox(width: AppTheme.spaceMD * AppTheme.spaceScale(context)),
+            ],
             Text(
               title,
               style: textTheme.titleMedium?.copyWith(

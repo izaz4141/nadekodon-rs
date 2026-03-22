@@ -1,4 +1,4 @@
-use crate::server::{SharedState, nadeko_home, save_config};
+use crate::server::{SharedState, nadeko_home, normalize_secret};
 use axum::{Json, extract::State, response::IntoResponse};
 use nadekodon_core::utils::types::DMSettings;
 use serde_json::Value;
@@ -12,9 +12,6 @@ pub async fn handle_update_settings(
     State(state): State<SharedState>,
     Json(new_config): Json<Value>,
 ) -> impl IntoResponse {
-    let api_key = new_config["server_api_key"].clone().to_string();
-    let username = new_config["username"].clone().to_string();
-    let password = new_config["password"].clone().to_string();
     let dm_settings = DMSettings {
         speed_limit: new_config["speed_limit"].as_u64().unwrap_or(0),
         concurrency_limit: new_config["concurrency_limit"].as_u64().unwrap_or(3) as u8,
@@ -28,10 +25,69 @@ pub async fn handle_update_settings(
     if let Err(e) = state.context.dm().await.update_settings(dm_settings).await {
         nadekodon_core::utils::logger::error(&format!("Error in updating DMSettings: {:?}", e));
     }
-    save_config(&new_config);
-    *state.api_key.write().await = crate::server::normalize_secret(&api_key).to_string();
-    *state.username.write().await = crate::server::normalize_secret(&username).to_string();
-    *state.password.write().await = crate::server::normalize_secret(&password).to_string();
-    *state.config.write().await = new_config;
+
+    let mut cfg = state.config.write().await;
+    if let Some(v) = new_config.get("server_api_key").filter(|v| !v.is_null()) {
+        cfg["server_api_key"] = v.clone();
+        *state.api_key.write().await = normalize_secret(&v.as_str().unwrap_or("")).to_string();
+    }
+    if let Some(v) = new_config.get("download_folder").filter(|v| !v.is_null()) {
+        cfg["download_folder"] = v.clone();
+    }
+    if let Some(v) = new_config.get("speed_limit").filter(|v| !v.is_null()) {
+        cfg["speed_limit"] = v.clone();
+    }
+    if let Some(v) = new_config.get("speed_mode").filter(|v| !v.is_null()) {
+        cfg["speed_mode"] = v.clone();
+    }
+    if let Some(v) = new_config.get("speed_schedule").filter(|v| !v.is_null()) {
+        cfg["speed_schedule"] = v.clone();
+    }
+    if let Some(v) = new_config.get("download_threads").filter(|v| !v.is_null()) {
+        cfg["download_threads"] = v.clone();
+    }
+    if let Some(v) = new_config.get("concurrency_limit").filter(|v| !v.is_null()) {
+        cfg["concurrency_limit"] = v.clone();
+    }
+    if let Some(v) = new_config.get("download_timeout").filter(|v| !v.is_null()) {
+        cfg["download_timeout"] = v.clone();
+    }
+    if let Some(v) = new_config.get("download_retries").filter(|v| !v.is_null()) {
+        cfg["download_retries"] = v.clone();
+    }
+    if let Some(v) = new_config.get("seeding_ratio").filter(|v| !v.is_null()) {
+        cfg["seeding_ratio"] = v.clone();
+    }
+    if let Some(v) = new_config.get("seeding_time").filter(|v| !v.is_null()) {
+        cfg["seeding_time"] = v.clone();
+    }
+    if let Some(v) = new_config.get("theme_mode").filter(|v| !v.is_null()) {
+        cfg["theme_mode"] = v.clone();
+    }
+    if let Some(v) = new_config.get("use_dynamic_color").filter(|v| !v.is_null()) {
+        cfg["use_dynamic_color"] = v.clone();
+    }
+    if let Some(v) = new_config.get("custom_color").filter(|v| !v.is_null()) {
+        cfg["custom_color"] = v.clone();
+    }
+    if let Some(v) = new_config.get("check_nightly").filter(|v| !v.is_null()) {
+        cfg["check_nightly"] = v.clone();
+    }
+    if let Some(v) = new_config.get("require_login").filter(|v| !v.is_null()) {
+        cfg["require_login"] = v.clone();
+    }
+    if let Some(v) = new_config.get("retreat_to_tray").filter(|v| !v.is_null()) {
+        cfg["retreat_to_tray"] = v.clone();
+    }
+    if let Some(v) = new_config.get("download_dir").filter(|v| !v.is_null()) {
+        cfg["download_dir"] = v.clone();
+    }
+
+    let cfg_clone = cfg.clone();
+    drop(cfg);
+
+    state.save_config(&cfg_clone);
+    *state.config.write().await = cfg_clone;
+
     axum::http::StatusCode::OK
 }

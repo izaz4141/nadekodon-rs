@@ -11,6 +11,7 @@ class ListTextField extends StatefulWidget {
   final Function(String)? onConfirm;
   final String? autofillHints;
   final TextInputType? keyboardType;
+  final bool enabled;
 
   const ListTextField({
     super.key,
@@ -21,6 +22,7 @@ class ListTextField extends StatefulWidget {
     this.onConfirm,
     this.autofillHints,
     this.keyboardType,
+    this.enabled = true,
   });
 
   @override
@@ -77,45 +79,60 @@ class _ListTextFieldState extends State<ListTextField> {
                     Radius.circular(AppTheme.radiusSM),
                   ),
                 ),
-                suffixIcon: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (widget.isObscured)
-                      IconButton(
-                        icon: Icon(
-                          obscureText ? Icons.visibility_off : Icons.visibility,
-                        ),
-                        iconSize: AppTheme.iconSM * AppTheme.iconScale(context),
-                        onPressed: () =>
-                            _obscureNotifier.value = !_obscureNotifier.value,
-                      ),
-                    if (widget.onConfirm != null)
-                      IconButton(
-                        icon: const Icon(Icons.check, color: Colors.green),
-                        iconSize: AppTheme.iconSM * AppTheme.iconScale(context),
-                        onPressed: () {
-                          widget.onConfirm!(_controller.text);
-                          FocusScope.of(context).unfocus();
-                        },
-                      ),
-                  ],
-                ),
+                suffixIcon: widget.enabled
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (widget.isObscured)
+                            IconButton(
+                              icon: Icon(
+                                obscureText
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
+                              ),
+                              iconSize:
+                                  AppTheme.iconSM * AppTheme.iconScale(context),
+                              onPressed: () => _obscureNotifier.value =
+                                  !_obscureNotifier.value,
+                            ),
+                          if (widget.onConfirm != null)
+                            IconButton(
+                              icon: const Icon(
+                                Icons.check,
+                                color: Colors.green,
+                              ),
+                              iconSize:
+                                  AppTheme.iconSM * AppTheme.iconScale(context),
+                              onPressed: () {
+                                widget.onConfirm!(_controller.text);
+                                FocusScope.of(context).unfocus();
+                              },
+                            ),
+                        ],
+                      )
+                    : null,
               ),
+              enabled: widget.enabled,
               textInputAction: (widget.onConfirm == null)
                   ? TextInputAction.next
                   : TextInputAction.done,
-              onSubmitted: (val) {
-                if (widget.onConfirm != null) {
-                  widget.onConfirm!(val);
-                }
-              },
-              onChanged: (newValue) {
-                if (widget.onConfirm == null &&
-                    widget.valueListenable is ValueNotifier<String>) {
-                  (widget.valueListenable as ValueNotifier<String>).value =
-                      newValue;
-                }
-              },
+              onSubmitted: widget.enabled
+                  ? (val) {
+                      if (widget.onConfirm != null) {
+                        widget.onConfirm!(val);
+                      }
+                    }
+                  : null,
+              onChanged: widget.enabled
+                  ? (newValue) {
+                      if (widget.onConfirm == null &&
+                          widget.valueListenable is ValueNotifier<String>) {
+                        (widget.valueListenable as ValueNotifier<String>)
+                                .value =
+                            newValue;
+                      }
+                    }
+                  : null,
             );
           },
         ),

@@ -10,13 +10,18 @@ class SystemDeps extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final colors = Theme.of(context).colorScheme;
     final system = SystemService();
 
     return Column(
       children: [
-        const SectionHeader(
+        SectionHeader(
           title: 'Dependencies',
-          icon: Icons.extension_rounded,
+          leading: Icon(
+            Icons.extension_rounded,
+            color: colors.onPrimaryContainer,
+            size: AppTheme.iconMD * AppTheme.iconScale(context),
+          ),
         ),
         AnimatedBuilder(
           animation: Listenable.merge([
