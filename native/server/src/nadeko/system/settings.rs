@@ -5,7 +5,14 @@ use serde_json::Value;
 
 pub async fn handle_get_settings(State(state): State<SharedState>) -> impl IntoResponse {
     let config = state.config.read().await.clone();
-    Json(config)
+    let mut settings = config;
+    if let Value::Object(map) = &mut settings {
+        map.remove("require_login");
+        map.remove("username");
+        map.remove("password");
+        map.remove("salt");
+    }
+    Json(settings)
 }
 
 pub async fn handle_update_settings(
@@ -72,9 +79,6 @@ pub async fn handle_update_settings(
     }
     if let Some(v) = new_config.get("check_nightly").filter(|v| !v.is_null()) {
         cfg["check_nightly"] = v.clone();
-    }
-    if let Some(v) = new_config.get("require_login").filter(|v| !v.is_null()) {
-        cfg["require_login"] = v.clone();
     }
     if let Some(v) = new_config.get("retreat_to_tray").filter(|v| !v.is_null()) {
         cfg["retreat_to_tray"] = v.clone();

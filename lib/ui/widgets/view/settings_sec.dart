@@ -61,14 +61,9 @@ class _SettingsSecState extends State<SettingsSec> {
         currentPassword: SettingsManager.password.value,
         newUsername: _localUsername.value,
         newPassword: _localPassword.value.isEmpty ? null : _localPassword.value,
-        requireLogin: _localRequireLogin.value,
         serverPort: _localServerPort.value,
       );
     } else {
-      await SettingsManager.saveChanged(
-        'require_login',
-        _localRequireLogin.value,
-      );
       await SettingsManager.saveChanged('server_port', _localServerPort.value);
       await SettingsManager.saveChanged('username', _localUsername.value);
       if (_localPassword.value.isNotEmpty) {
@@ -76,6 +71,11 @@ class _SettingsSecState extends State<SettingsSec> {
       }
       success = true;
     }
+
+    await SettingsManager.saveChanged(
+      'require_login',
+      _localRequireLogin.value,
+    );
 
     setState(() {
       _isSaving = false;

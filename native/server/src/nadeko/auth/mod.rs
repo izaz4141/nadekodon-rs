@@ -31,7 +31,8 @@ pub fn create_auth_router(state: SharedState) -> Router<SharedState> {
         .route("/generate-api", get(handle_generate_api))
         .route("/change-credentials", post(handle_change_credentials))
         .route("/verify-password", post(handle_verify_password))
-        .layer(middleware::from_fn_with_state(state.clone(), check_api_key));
+        .layer(middleware::from_fn_with_state(state.clone(), check_api_key))
+        .layer(GovernorLayer::new(auth_rate_limit_config()));
 
     public_router.merge(protected_router).with_state(state)
 }

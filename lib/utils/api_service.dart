@@ -713,7 +713,6 @@ class APIService {
     required String currentPassword,
     String? newUsername,
     String? newPassword,
-    bool? requireLogin,
     int? serverPort,
   }) async {
     try {
@@ -727,7 +726,6 @@ class APIService {
           'current_password': currentPassword,
           if (newUsername != null) 'new_username': newUsername,
           if (newPassword != null) 'new_password': newPassword,
-          if (requireLogin != null) 'require_login': requireLogin,
           if (serverPort != null) 'server_port': serverPort,
         }),
       );

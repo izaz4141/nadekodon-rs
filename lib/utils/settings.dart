@@ -184,7 +184,9 @@ class SettingsManager {
         json['custom_color'] ?? _defaults['custom_color'] ?? 0xFFFF4081;
     checkNightly.value =
         json['check_nightly'] ?? _defaults['check_nightly'] ?? false;
-    requireLogin.value = json['require_login'] ?? (kIsWeb ? true : false);
+    if (json.containsKey('require_login')) {
+      requireLogin.value = json['require_login'] ?? (kIsWeb ? true : false);
+    }
 
     if (json['accounts'] != null) {
       accounts.value = (json['accounts'] as List)
@@ -509,6 +511,7 @@ class SettingsManager {
     if (PlatformService().isRemote) {
       jsonMap.remove('server_host');
       jsonMap.remove('server_port');
+      jsonMap.remove('require_login');
     }
     final success = await APIService.saveSettings(jsonMap);
     if (!success) {

@@ -1,4 +1,4 @@
-use crate::server::{SharedState, normalize_secret, build_api_cookie};
+use crate::server::{SharedState, build_api_cookie, normalize_secret};
 use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
 use axum_extra::extract::CookieJar;
 use nadekodon_core::utils::security;
@@ -9,7 +9,6 @@ pub struct ChangeCredentialsRequest {
     current_password: String,
     new_username: Option<String>,
     new_password: Option<String>,
-    require_login: Option<bool>,
     server_port: Option<u16>,
 }
 
@@ -64,9 +63,6 @@ pub async fn handle_change_credentials(
     cfg["username"] = serde_json::json!(new_username);
     cfg["password"] = serde_json::json!(new_password_hash);
 
-    if let Some(require_login) = payload.require_login {
-        cfg["require_login"] = serde_json::json!(require_login);
-    }
     if let Some(server_port) = payload.server_port {
         cfg["server_port"] = serde_json::json!(server_port);
     }
