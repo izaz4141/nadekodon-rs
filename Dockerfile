@@ -62,7 +62,7 @@ FROM debian:bookworm-slim
 
 WORKDIR /app
 
-# Install minimal runtime dependencies and download yt-dlp
+# Install deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     nginx \
@@ -70,10 +70,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libssl3 \
     curl \
+    gosu \
     && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o /usr/local/bin/yt-dlp \
     && chmod a+rx /usr/local/bin/yt-dlp \
     && apt-get purge -y --auto-remove curl \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /var/cache/apt/archives/*
 
 # Copy tools from fetcher
 COPY --from=tool-fetcher /tools/ffmpeg /usr/local/bin/ffmpeg
@@ -91,15 +93,15 @@ COPY assets ./assets
 # Copy nginx configuration template
 COPY nginx.conf /etc/nginx/nginx.conf.template
 
-# Create data directories
-ENV NADEKO_HOME=/home/nadeko
-RUN mkdir -p ${NADEKO_HOME}/config ${NADEKO_HOME}/downloads
+# Create nadeko user and entrypoint script
+RUN groupadd -g 1000 nadeko && useradd -r -u 1000 -g nadeko nadeko
 
-# Create entrypoint script
 COPY <<'EOF' /entrypoint.sh
 #!/bin/bash
 set -e
 
+export PUID=${PUID:-1000}
+export PGID=${PGID:-1000}
 export NADEKO_HOME=${NADEKO_HOME:-/home/nadeko}
 export NADEKO_SERVER_HOST=${NADEKO_SERVER_HOST:-0.0.0.0}
 export NADEKO_SERVER_PORT=${NADEKO_SERVER_PORT:-8080}
@@ -107,8 +109,14 @@ export NADEKO_SERVER_API_KEY=${NADEKO_SERVER_API_KEY:-${NADEKO_API_KEY:-}}
 export NADEKO_USERNAME=${NADEKO_USERNAME:-admin}
 export NADEKO_PASSWORD=${NADEKO_PASSWORD:-admin}
 
+# Create group and user with configurable PUID/PGID
+groupmod -g "$PGID" nadeko 2>/dev/null || groupadd -g "$PGID" nadeko
+usermod -u "$PUID" -g "$PGID" nadeko 2>/dev/null || useradd -r -u "$PUID" -g "$PGID" -s /bin/bash nadeko
+
+# Ensure data directories exist and have correct ownership
 mkdir -p "$NADEKO_HOME/config"
 mkdir -p "$NADEKO_HOME/downloads"
+chown -R nadeko:nadeko "$NADEKO_HOME"
 
 echo "Starting Nadeko~don..."
 echo "NADEKO_HOME: $NADEKO_HOME"
@@ -117,28 +125,27 @@ echo "API Server: $NADEKO_SERVER_HOST:$NADEKO_SERVER_PORT"
 # Inject environment variables into nginx config
 envsubst '${NADEKO_SERVER_PORT}' < /etc/nginx/nginx.conf.template > /etc/nginx/sites-available/default
 
-# Start Rust backend server in background
+# Run all services as non-root user using gosu
 cd /app
-/usr/local/bin/nadekodon-server &
+
+echo "Starting API server..."
+gosu nadeko /usr/local/bin/nadekodon-server &
 SERVER_PID=$!
 
-# Give server time to start
 sleep 2
 
-# Start Nginx in background
-echo "Serving UI and Proxy on port 80..."
-nginx -g "daemon off;" &
+echo "Serving UI and Proxy on port 3000..."
+gosu nadeko nginx -g "daemon off;" &
 NGINX_PID=$!
 
 echo "Nadeko~don is ready!"
-echo "URL: http://localhost:80"
+echo "URL: http://localhost:3000"
 
-# Handle shutdown
 trap "kill $SERVER_PID $NGINX_PID 2>/dev/null" EXIT
 wait
 EOF
 RUN chmod +x /entrypoint.sh
 
-EXPOSE 80 8080
+EXPOSE 3000 8080
 
 ENTRYPOINT ["/entrypoint.sh"]
