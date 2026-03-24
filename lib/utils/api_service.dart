@@ -87,6 +87,7 @@ class APIService {
         await SettingsManager.loadFromBackend();
 
         if (returnedApiKey is String && returnedApiKey.isNotEmpty) {
+          SettingsManager.username.value = username;
           SettingsManager.serverApiKey.value = returnedApiKey;
           SettingsManager.attachAutoSave();
           return true;
