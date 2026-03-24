@@ -185,7 +185,7 @@ pub async fn run_server(
     restart_signal: Arc<Notify>,
     shutdown_signal: Arc<Notify>,
 ) {
-    let host = env::var("NADEKO_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
+    let host = env::var("NADEKO_SERVER_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
     let addr: SocketAddr = match host.parse() {
         Ok(ip) => SocketAddr::new(ip, port),
         Err(_) => SocketAddr::from(([127, 0, 0, 1], port)),
