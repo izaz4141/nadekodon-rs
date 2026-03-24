@@ -130,22 +130,24 @@ class SettingsManager {
     if (serverApiKey.value.isEmpty) {
       regenerateApiKey();
     }
-    salt.value = json['salt'] ?? '';
-    if (salt.value.isEmpty) {
-      await _generateSalt();
+
+    if (json.containsKey('salt')) {
+      salt.value = json['salt'] ?? '';
+      if (salt.value.isEmpty) {
+        await _generateSalt();
+      }
     }
-    username.value = json['username'] ?? _defaults['username'] ?? 'admin';
-    if (username.value.isEmpty && _defaults['username'] == "") {
-      // Only fallback to admin if both are truly empty/missing
-      if (username.value.isEmpty) username.value = 'admin';
+    if (json.containsKey('username')) {
+      username.value = json['username'] ?? _defaults['username'] ?? 'admin';
     }
 
-    final encodedPassword = json['password'] as String?;
-    if (encodedPassword != null && encodedPassword.isNotEmpty) {
-      password.value = encodedPassword;
-    } else {
-      password.value = _defaults['password'] ?? await hashPassword('admin');
-      if (password.value.isEmpty) password.value = await hashPassword('admin');
+    if (json.containsKey('password')) {
+      final encodedPassword = json['password'] as String?;
+      if (encodedPassword != null && encodedPassword.isNotEmpty) {
+        password.value = encodedPassword;
+      } else {
+        password.value = await hashPassword(_defaults['password']);
+      }
     }
 
     // Speed Scheduler
