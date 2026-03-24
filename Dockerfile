@@ -119,15 +119,15 @@ mkdir -p "$NADEKO_HOME/downloads"
 mkdir -p "$NADEKO_HOME/logs"
 chown -R nadeko:nadeko "$NADEKO_HOME"
 
-mkdir -p /var/lib/nginx/body /var/lib/nginx/proxy /var/lib/nginx/fastcgi /var/lib/nginx/uwsgi /var/lib/nginx/scgi /var/log/nginx
-chown -R nadeko:nadeko /var/lib/nginx /var/log/nginx
+mkdir -p /var/lib/nginx/body /var/lib/nginx/proxy /var/lib/nginx/fastcgi /var/lib/nginx/uwsgi /var/lib/nginx/scgi /var/log/nginx /var/cache/nginx
+chown -R nadeko:nadeko /var/lib/nginx /var/log/nginx /var/cache/nginx
 
 echo "Starting Nadeko~don..."
 echo "NADEKO_HOME: $NADEKO_HOME"
 echo "API Server: $NADEKO_SERVER_HOST:$NADEKO_SERVER_PORT"
 
 # Inject environment variables into nginx config
-envsubst '${NADEKO_SERVER_PORT}' < /etc/nginx/nginx.conf.template > /etc/nginx/sites-available/default
+envsubst '${NADEKO_SERVER_PORT}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
 
 # Run all services as non-root user using gosu
 cd /app
