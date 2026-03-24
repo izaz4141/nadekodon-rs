@@ -116,7 +116,11 @@ usermod -u "$PUID" -g "$PGID" nadeko 2>/dev/null || useradd -r -u "$PUID" -g "$P
 # Ensure data directories exist and have correct ownership
 mkdir -p "$NADEKO_HOME/config"
 mkdir -p "$NADEKO_HOME/downloads"
+mkdir -p "$NADEKO_HOME/logs"
 chown -R nadeko:nadeko "$NADEKO_HOME"
+
+mkdir -p /var/lib/nginx/body /var/lib/nginx/proxy /var/lib/nginx/fastcgi /var/lib/nginx/uwsgi /var/lib/nginx/scgi /var/log/nginx
+chown -R nadeko:nadeko /var/lib/nginx /var/log/nginx
 
 echo "Starting Nadeko~don..."
 echo "NADEKO_HOME: $NADEKO_HOME"
