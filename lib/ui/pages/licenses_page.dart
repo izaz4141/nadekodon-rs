@@ -7,14 +7,14 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/utils/logger.dart';
 
-class LicensesDialog extends StatefulWidget {
-  const LicensesDialog({super.key});
+class LicensesPage extends StatefulWidget {
+  const LicensesPage({super.key});
 
   @override
-  State<LicensesDialog> createState() => _LicensesDialogState();
+  State<LicensesPage> createState() => _LicensesPageState();
 }
 
-class _LicensesDialogState extends State<LicensesDialog> {
+class _LicensesPageState extends State<LicensesPage> {
   final Map<String, List<LicenseEntry>> _packageLicenses = {};
   final List<String> _packages = [];
   bool _isLoading = true;
@@ -211,6 +211,7 @@ class _LicensesDialogState extends State<LicensesDialog> {
                   const SizedBox(height: AppTheme.spaceSM),
                   Expanded(
                     child: Container(
+                      width: double.infinity,
                       decoration: BoxDecoration(
                         color: colors.surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(AppTheme.radiusSM),
@@ -247,32 +248,6 @@ class _LicensesDialogState extends State<LicensesDialog> {
             ),
     );
 
-    Widget titleWidget;
-    if (!isDesktop && _viewingDetail) {
-      titleWidget = Row(
-        children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () {
-              setState(() {
-                _viewingDetail = false;
-              });
-            },
-          ),
-          const SizedBox(width: AppTheme.spaceSM),
-          Expanded(
-            child: Text(
-              'License',
-              style: textTheme.titleLarge,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      );
-    } else {
-      titleWidget = Text('Licenses', style: textTheme.titleLarge);
-    }
-
     return PopScope(
       canPop: isDesktop || !_viewingDetail,
       onPopInvokedWithResult: (didPop, result) {
@@ -283,18 +258,9 @@ class _LicensesDialogState extends State<LicensesDialog> {
           });
         }
       },
-      child: AlertDialog(
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(child: titleWidget),
-            IconButton(
-              icon: const Icon(Icons.close),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-          ],
-        ),
-        content: SizedBox(
+      child: Scaffold(
+        appBar: AppBar(title: Text('Licenses', style: textTheme.titleMedium)),
+        body: SizedBox(
           width: double.maxFinite,
           height: double.maxFinite,
           child: _isLoading

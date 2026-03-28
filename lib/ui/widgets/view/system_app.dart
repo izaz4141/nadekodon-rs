@@ -5,7 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/ui/widgets/app_snackbar.dart';
 import 'package:nadekodon/ui/pages/logs_page.dart';
-import 'package:nadekodon/ui/widgets/dialog/licenses_dialog.dart';
+import 'package:nadekodon/ui/pages/licenses_page.dart';
 import 'package:nadekodon/ui/widgets/dialog/app_update.dart';
 import 'package:nadekodon/utils/settings.dart';
 import 'package:nadekodon/utils/updater.dart';
@@ -181,9 +181,9 @@ class _SystemAppState extends State<SystemApp> {
             ),
             child: ElevatedButton.icon(
               onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (context) => const LicensesDialog(),
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const LicensesPage()),
                 );
               },
               icon: Icon(
