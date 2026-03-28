@@ -3,14 +3,20 @@ FROM ghcr.io/cirruslabs/flutter:latest AS flutter-build
 
 WORKDIR /app
 
+# Install Rust for rinf gen
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
 COPY pubspec*.yaml ./
 RUN flutter pub get
 
 COPY lib ./lib
+COPY native ./native
 COPY web ./web
 COPY assets ./assets
 COPY analysis_options.yaml ./
 
+RUN cargo install rinf_cli --version 8.7.2 && rinf gen
 RUN flutter build web --wasm
 
 # Stage 2: Build Rust server
