@@ -37,6 +37,8 @@ RUN cargo build --release -p nadekodon-server && \
 # Stage 3: Fetch static tools
 FROM alpine:latest AS tool-fetcher
 
+WORKDIR /tools
+
 RUN apk add --no-cache curl xz ffmpeg
 
 RUN cp /usr/bin/ffmpeg /tools/ffmpeg && \
