@@ -13,7 +13,7 @@ COPY analysis_options.yaml ./
 
 RUN flutter build web --wasm
 
-# Stage 2: Build Rust server (static binary)
+# Stage 2: Build Rust server
 FROM rust:alpine AS rust-build
 
 WORKDIR /app
@@ -22,10 +22,7 @@ RUN apk add --no-cache \
     pkgconf \
     openssl-dev \
     perl \
-    make \
-    musl-dev
-
-ENV RUSTFLAGS="-C target-feature=+crt-static"
+    make
 
 COPY Cargo.toml Cargo.lock ./
 COPY native/server ./native/server
@@ -56,6 +53,7 @@ RUN apk add --no-cache \
     gettext \
     gosu \
     curl \
+    gcompat \
     && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o /usr/local/bin/yt-dlp \
     && chmod a+rx /usr/local/bin/yt-dlp
 
