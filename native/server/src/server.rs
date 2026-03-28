@@ -28,8 +28,6 @@ use tower_governor::{
     governor::{GovernorConfig, GovernorConfigBuilder},
     key_extractor::SmartIpKeyExtractor,
 };
-use tower_http::trace::TraceLayer;
-use tracing_appender::non_blocking::WorkerGuard;
 use uuid::Uuid;
 
 static NADEKO_HOME: OnceLock<String> = OnceLock::new();
@@ -174,7 +172,6 @@ pub fn create_router(
     Router::new()
         .nest("/api/v2", qbt_router)
         .nest("/api/nadeko", nadeko_router)
-        .layer(TraceLayer::new_for_http())
         .layer(GovernorLayer::new(governor_conf))
         .with_state(state)
 }
@@ -207,7 +204,7 @@ pub async fn run_server(
     }
 }
 
-pub async fn run_server_loop(state: SharedState, _guard: WorkerGuard) {
+pub async fn run_server_loop(state: SharedState) {
     loop {
         let governor_conf = global_rate_limit_config();
         let governor_limiter = governor_conf.limiter().clone();

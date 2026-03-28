@@ -3,9 +3,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::RwLock;
-use tracing_appender::non_blocking;
-use tracing_appender::rolling::{RollingFileAppender, Rotation};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
 use uuid::Uuid;
 
 extern crate nadekodon_core as ncore;
@@ -139,29 +137,5 @@ async fn main() {
         state_clone.shutdown_requested.store(true, Ordering::SeqCst);
     });
 
-    let logs_dir = server::get_logs_dir();
-    std::fs::create_dir_all(&logs_dir).ok();
-
-    let file_appender = RollingFileAppender::builder()
-        .rotation(Rotation::DAILY)
-        .max_log_files(7)
-        .filename_prefix("trace")
-        .build(&logs_dir)
-        .expect("Failed to create trace log appender");
-
-    let (non_blocking, guard) = non_blocking(file_appender);
-
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_writer(non_blocking)
-                .with_ansi(false),
-        )
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("nadekodon_server=debug")),
-        )
-        .init();
-
-    server::run_server_loop(state, guard).await;
+    server::run_server_loop(state).await;
 }
