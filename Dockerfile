@@ -3,98 +3,72 @@ FROM ghcr.io/cirruslabs/flutter:latest AS flutter-build
 
 WORKDIR /app
 
-# Install minimal Rust for rinf CLI
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
-
-# Copy pub dependencies
 COPY pubspec*.yaml ./
 RUN flutter pub get
 
-# Copy source code and native code (rinf gen needs native/)
 COPY lib ./lib
 COPY web ./web
 COPY assets ./assets
-COPY native ./native
 COPY analysis_options.yaml ./
 
-# Generate Rinf signals
-RUN cargo install rinf_cli --version 8.7.2 && rinf gen
-
-# Build Flutter web
 RUN flutter build web --wasm
 
-# Stage 2: Build Rust server
-FROM rust:slim-bookworm AS rust-build
+# Stage 2: Build Rust server (static binary)
+FROM rust:alpine AS rust-build
 
 WORKDIR /app
 
-# Install build dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    pkg-config libssl-dev perl make \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache \
+    pkg-config \
+    openssl-dev \
+    perl \
+    make \
+    musl-dev
 
-# Copy workspace Cargo files
+ENV RUSTFLAGS="-C target-feature=+crt-static"
+
 COPY Cargo.toml Cargo.lock ./
-COPY native native
+COPY native/server ./native/server
+COPY native/core ./native/core
 
-# Build Rust server (release) and strip symbols
 RUN cargo build --release -p nadekodon-server && \
     strip /app/target/release/nadekodon-server
 
 # Stage 3: Fetch static tools
-FROM debian:bookworm-slim AS tool-fetcher
+FROM alpine:latest AS tool-fetcher
 
-WORKDIR /tools
+RUN apk add --no-cache curl xz ffmpeg
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl xz-utils ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-# Download static ffmpeg
-# Using a specific version for reproducibility, but latest is also fine.
-RUN curl -L https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz -o ffmpeg.tar.xz \
-    && tar xvf ffmpeg.tar.xz --strip-components=1 \
-    && chmod a+rx ffmpeg ffprobe
+RUN cp /usr/bin/ffmpeg /tools/ffmpeg && \
+    cp /usr/bin/ffprobe /tools/ffprobe
 
 # Stage 4: Final image
-FROM debian:bookworm-slim
+FROM alpine:latest
 
 WORKDIR /app
 
-# Install deps
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apk add --no-cache \
     bash \
     nginx \
-    gettext-base \
     ca-certificates \
-    libssl3 \
-    curl \
+    gettext \
     gosu \
+    curl \
     && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o /usr/local/bin/yt-dlp \
-    && chmod a+rx /usr/local/bin/yt-dlp \
-    && apt-get purge -y --auto-remove curl \
-    && rm -rf /var/lib/apt/lists/* \
-    && rm -rf /var/cache/apt/archives/*
+    && chmod a+rx /usr/local/bin/yt-dlp
 
-# Copy tools from fetcher
 COPY --from=tool-fetcher /tools/ffmpeg /usr/local/bin/ffmpeg
 COPY --from=tool-fetcher /tools/ffprobe /usr/local/bin/ffprobe
 
-# Copy Flutter web build
 COPY --from=flutter-build /app/build/web ./web
 
-# Copy Rust server binary
 COPY --from=rust-build /app/target/release/nadekodon-server /usr/local/bin/nadekodon-server
 
-# Copy assets for the server
 COPY assets ./assets
-
-# Copy nginx configuration template
 COPY nginx.conf /etc/nginx/nginx.conf.template
 
-# Create nadeko user and entrypoint script
-RUN groupadd -g 1000 nadeko && useradd -r -u 1000 -g nadeko nadeko
+RUN addgroup -g 1000 nadeko && \
+    adduser -u 1000 -G nadeko -D -s /bin/bash nadeko
 
 COPY <<'EOF' /entrypoint.sh
 #!/bin/bash
@@ -110,8 +84,8 @@ export NADEKO_USERNAME=${NADEKO_USERNAME:-admin}
 export NADEKO_PASSWORD=${NADEKO_PASSWORD:-admin}
 
 # Create group and user with configurable PUID/PGID
-groupmod -g "$PGID" nadeko 2>/dev/null || groupadd -g "$PGID" nadeko
-usermod -u "$PUID" -g "$PGID" nadeko 2>/dev/null || useradd -r -u "$PUID" -g "$PGID" -s /bin/bash nadeko
+addgroup -g "$PGID" nadeko 2>/dev/null || true
+adduser -u "$PUID" -G "$PGID" -D -s /bin/bash nadeko 2>/dev/null || true
 
 # Ensure data directories exist and have correct ownership
 mkdir -p "$NADEKO_HOME/config"
