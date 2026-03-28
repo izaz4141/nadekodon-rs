@@ -1,9 +1,10 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 
 class LogService {
-  static final List<LogEntry> logs = [];
+  static final ValueNotifier<List<LogEntry>> logs = ValueNotifier([]);
   static File? _logFile;
 
   static Future<void> init() async {
@@ -12,14 +13,45 @@ class LogService {
 
     if (await _logFile!.exists()) {
       final lines = await _logFile!.readAsLines();
+      final regex = RegExp(r'\[(DEBUG|WARNING|ERROR|STDOUT)\]\[(.*?)\] (.*)');
+      final loadedLogs = <LogEntry>[];
+      
       for (final line in lines) {
-        recordLog(line, saveToFile: false);
+        final match = regex.firstMatch(line);
+        if (match != null) {
+          final levelStr = match.group(1);
+          final timestampStr = match.group(2);
+          final message = match.group(3);
+          
+          LogLevel level;
+          switch (levelStr) {
+            case 'DEBUG':
+              level = LogLevel.debug;
+            case 'WARNING':
+              level = LogLevel.warning;
+            case 'ERROR':
+              level = LogLevel.error;
+            default:
+              level = LogLevel.stdout;
+          }
+          
+          DateTime timestamp;
+          try {
+            timestamp = DateFormat('yy/MM/dd|HH:mm:ss').parse(timestampStr!);
+          } catch (e) {
+            timestamp = DateTime.now();
+          }
+          
+          loadedLogs.add(LogEntry(level: level, timestamp: timestamp, message: message!));
+        }
       }
+      
+      logs.value = loadedLogs;
     }
   }
 
   static void recordLog(String line, {bool saveToFile = true}) {
-    final regex = RegExp(r'\[(DEBUG|ERROR|STDOUT)\]\[(.*?)\] (.*)');
+    final regex = RegExp(r'\[(DEBUG|WARNING|ERROR|STDOUT)\]\[(.*?)\] (.*)');
     final match = regex.firstMatch(line);
 
     if (match != null) {
@@ -31,6 +63,9 @@ class LogService {
       switch (levelStr) {
         case 'DEBUG':
           level = LogLevel.debug;
+          break;
+        case 'WARNING':
+          level = LogLevel.warning;
           break;
         case 'ERROR':
           level = LogLevel.error;
@@ -46,20 +81,20 @@ class LogService {
         timestamp = DateTime.now();
       }
 
-      logs.add(LogEntry(level: level, timestamp: timestamp, message: message!));
+      final newEntry = LogEntry(level: level, timestamp: timestamp, message: message!);
+      logs.value = [...logs.value, newEntry];
 
       if (saveToFile && level == LogLevel.error && _logFile != null) {
         _saveErrorLog(line);
       }
     } else {
       // If the log doesn't match the format, treat it as STDOUT
-      logs.add(
-        LogEntry(
-          level: LogLevel.stdout,
-          timestamp: DateTime.now(),
-          message: line,
-        ),
+      final newEntry = LogEntry(
+        level: LogLevel.stdout,
+        timestamp: DateTime.now(),
+        message: line,
       );
+      logs.value = [...logs.value, newEntry];
     }
   }
 
@@ -76,13 +111,12 @@ class LogService {
       lines.add(line);
       await _logFile!.writeAsString(lines.join('\n'), flush: true);
     } catch (e) {
-      logs.add(
-        LogEntry(
-          level: LogLevel.error,
-          timestamp: DateTime.now(),
-          message: 'Failed to save log: $e',
-        ),
+      final newEntry = LogEntry(
+        level: LogLevel.error,
+        timestamp: DateTime.now(),
+        message: 'Failed to save log: $e',
       );
+      logs.value = [...logs.value, newEntry];
     }
   }
 
@@ -98,20 +132,19 @@ class LogService {
       } else {
         await file.create(recursive: true);
       }
-      logs.clear();
+      logs.value = [];
     } catch (e) {
-      logs.add(
-        LogEntry(
-          level: LogLevel.error,
-          timestamp: DateTime.now(),
-          message: 'Failed to clear log: $e',
-        ),
+      final newEntry = LogEntry(
+        level: LogLevel.error,
+        timestamp: DateTime.now(),
+        message: 'Failed to clear log: $e',
       );
+      logs.value = [...logs.value, newEntry];
     }
   }
 }
 
-enum LogLevel { debug, error, stdout }
+enum LogLevel { debug, warning, error, stdout }
 
 class LogEntry {
   final LogLevel level;
