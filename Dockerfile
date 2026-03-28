@@ -19,7 +19,7 @@ FROM rust:alpine AS rust-build
 WORKDIR /app
 
 RUN apk add --no-cache \
-    pkg-config \
+    pkgconf \
     openssl-dev \
     perl \
     make \
