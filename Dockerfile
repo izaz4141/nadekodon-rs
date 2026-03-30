@@ -37,17 +37,7 @@ COPY native/core ./native/core
 RUN cargo build --release -p nadekodon-server && \
     strip /app/target/release/nadekodon-server
 
-# Stage 3: Fetch static tools
-FROM alpine:latest AS tool-fetcher
-
-WORKDIR /tools
-
-RUN apk add --no-cache curl xz ffmpeg
-
-RUN cp /usr/bin/ffmpeg /tools/ffmpeg && \
-    cp /usr/bin/ffprobe /tools/ffprobe
-
-# Stage 4: Final image
+# Stage 3: Final image
 FROM alpine:latest
 
 WORKDIR /app
@@ -60,14 +50,12 @@ RUN apk add --no-cache \
     gosu \
     curl \
     gcompat \
-    && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o /usr/local/bin/yt-dlp \
+    ffmpeg \
+    python3 \
+    && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
     && chmod a+rx /usr/local/bin/yt-dlp
 
-COPY --from=tool-fetcher /tools/ffmpeg /usr/local/bin/ffmpeg
-COPY --from=tool-fetcher /tools/ffprobe /usr/local/bin/ffprobe
-
 COPY --from=flutter-build /app/build/web ./web
-
 COPY --from=rust-build /app/target/release/nadekodon-server /usr/local/bin/nadekodon-server
 
 COPY assets ./assets
