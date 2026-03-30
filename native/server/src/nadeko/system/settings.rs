@@ -1,8 +1,25 @@
 use crate::server::{SharedState, nadeko_home, normalize_secret};
 use axum::{Json, extract::State, response::IntoResponse};
 use nadekodon_core::utils::types::DMSettings;
+use serde::Serialize;
 use serde_json::Value;
+use utoipa::ToSchema;
 
+#[derive(Serialize, ToSchema)]
+pub struct SettingsResponse {
+    #[serde(flatten)]
+    pub settings: Value,
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/nadeko/system/settings",
+    tags = ["nadeko.system"],
+    security(("ApiKeyAuth" = [])),
+    responses(
+        (status = 200, description = "Current settings", body = SettingsResponse)
+    )
+)]
 pub async fn handle_get_settings(State(state): State<SharedState>) -> impl IntoResponse {
     let config = state.config.read().await.clone();
     let mut settings = config;
@@ -15,6 +32,16 @@ pub async fn handle_get_settings(State(state): State<SharedState>) -> impl IntoR
     Json(settings)
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/nadeko/system/settings",
+    tags = ["nadeko.system"],
+    security(("ApiKeyAuth" = [])),
+    request_body = Value,
+    responses(
+        (status = 200, description = "Settings updated successfully")
+    )
+)]
 pub async fn handle_update_settings(
     State(state): State<SharedState>,
     Json(new_config): Json<Value>,

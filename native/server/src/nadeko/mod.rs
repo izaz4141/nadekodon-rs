@@ -1,8 +1,8 @@
-mod auth;
-mod download;
-mod system;
-mod utils;
-mod version;
+pub mod auth;
+pub mod download;
+pub mod system;
+pub mod utils;
+pub mod version;
 
 pub use auth::*;
 pub use download::*;

@@ -1,6 +1,6 @@
-mod img;
-mod query_url;
-mod query_ytdl;
+pub mod img;
+pub mod query_url;
+pub mod query_ytdl;
 
 pub use img::*;
 pub use query_url::*;

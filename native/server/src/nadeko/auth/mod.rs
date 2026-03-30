@@ -1,9 +1,9 @@
-mod api;
-mod change_credentials;
-mod hash;
-mod login;
-mod salt;
-mod verify_password;
+pub mod api;
+pub mod change_credentials;
+pub mod hash;
+pub mod login;
+pub mod salt;
+pub mod verify_password;
 
 pub use api::*;
 pub use change_credentials::*;

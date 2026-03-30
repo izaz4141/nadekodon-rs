@@ -3,27 +3,33 @@ use axum::{
     extract::{Query, State},
     response::IntoResponse,
 };
-use percent_encoding::percent_decode_str;
 use reqwest::Url;
-use std::collections::HashMap;
+use serde::Deserialize;
+use utoipa::IntoParams;
 
+#[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct ProxyImageQuery {
+    pub url: String,
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/nadeko/utils/img",
+    tags = ["nadeko.utils"],
+    security(("ApiKeyAuth" = [])),
+    params(ProxyImageQuery),
+    responses(
+        (status = 200, description = "Proxied image", body = Vec<u8>),
+        (status = 400, description = "Invalid request"),
+        (status = 502, description = "Failed to fetch image")
+    )
+)]
 pub async fn handle_proxy_image(
     State(state): State<SharedState>,
-    Query(params): Query<HashMap<String, String>>,
+    Query(params): Query<ProxyImageQuery>,
 ) -> impl IntoResponse {
-    let encoded_url = match params.get("url") {
-        Some(url) => url.clone(),
-        None => {
-            return (axum::http::StatusCode::BAD_REQUEST, "Missing url parameter").into_response();
-        }
-    };
-
-    let decoded_url = match percent_decode_str(&encoded_url).decode_utf8() {
-        Ok(url) => url.into_owned(),
-        Err(_) => {
-            return (axum::http::StatusCode::BAD_REQUEST, "Invalid URL encoding").into_response();
-        }
-    };
+    let decoded_url = params.url;
 
     let parsed_url = match Url::parse(&decoded_url) {
         Ok(url) => url,

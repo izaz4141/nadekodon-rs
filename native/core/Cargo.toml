@@ -17,6 +17,7 @@ anyhow = "1.0.99"
 openssl = { version = "0.10.74", features = ["vendored"] }
 indexmap = { version = "2.2.6", features = ["serde"] }
 serde_json = "1.0"
+utoipa = { version = "5.4.0", features = ["macros"] }
 sqlx = { version = "0.8.6", features = ["sqlite", "runtime-tokio"] }
 librqbit = "8.1.1"
 hex = "0.4.3"

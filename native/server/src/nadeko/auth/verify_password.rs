@@ -1,28 +1,40 @@
 use crate::server::SharedState;
-use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
+use axum::{
+    extract::State,
+    http::StatusCode,
+    http::header::{HeaderMap, HeaderName},
+    response::IntoResponse,
+};
 use nadekodon_core::utils::security;
-use serde::Deserialize;
 
-#[derive(Deserialize)]
-pub struct VerifyPasswordRequest {
-    password: String,
-}
+const X_PASSWORD: HeaderName = HeaderName::from_static("x-password");
 
+#[utoipa::path(
+    post,
+    path = "/api/nadeko/auth/verify-password",
+    tags = ["nadeko.auth"],
+    security(("ApiKeyAuth" = [])),
+    responses(
+        (status = 200, description = "Password verified successfully"),
+        (status = 401, description = "Invalid password")
+    )
+)]
 pub async fn handle_verify_password(
     State(state): State<SharedState>,
-    Json(payload): Json<VerifyPasswordRequest>,
+    headers: HeaderMap,
 ) -> impl IntoResponse {
     let current_hash = state.password.read().await;
 
-    let is_valid = security::validate_password(&current_hash, &payload.password).unwrap_or(false);
+    let password = headers
+        .get(X_PASSWORD)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default();
+
+    let is_valid = security::validate_password(&current_hash, password).unwrap_or(false);
 
     if is_valid {
-        (StatusCode::OK, Json(serde_json::json!({ "valid": true }))).into_response()
+        (StatusCode::OK,).into_response()
     } else {
-        (
-            StatusCode::UNAUTHORIZED,
-            Json(serde_json::json!({ "valid": false, "error": "Invalid password" })),
-        )
-            .into_response()
+        (StatusCode::UNAUTHORIZED,).into_response()
     }
 }

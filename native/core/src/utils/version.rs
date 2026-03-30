@@ -3,8 +3,9 @@ use semver::Version;
 use serde::Serialize;
 use serde_json::{Value, json};
 use tokio::process::Command;
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct VersionInfo {
     pub version: String,
     pub tag_name: String,

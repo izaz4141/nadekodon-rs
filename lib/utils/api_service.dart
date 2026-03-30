@@ -71,14 +71,11 @@ class APIService {
     required String password,
   }) async {
     try {
-      late final Map<String, dynamic> body;
-
-      body = {'username': username, 'password': password};
+      final credentials = base64Encode(utf8.encode('$username:$password'));
 
       final response = await http.post(
         Uri.parse('$baseUrl/api/nadeko/auth/login'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(body),
+        headers: {'Authorization': 'Basic $credentials'},
       );
 
       if (response.statusCode == 200) {
@@ -112,13 +109,12 @@ class APIService {
     required String password,
   }) async {
     try {
-      final body = {'username': username, 'password': password};
+      final credentials = base64Encode(utf8.encode('$username:$password'));
       final response = await http.post(
         Uri.parse(
           '${host.contains('://') ? host : 'http://$host'}:$port/api/nadeko/auth/login',
         ),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(body),
+        headers: {'Authorization': 'Basic $credentials'},
       );
 
       if (response.statusCode == 200) {
@@ -376,7 +372,7 @@ class APIService {
         },
     };
 
-    return _sendAction('download/do', payload);
+    return _sendAction('download/create', payload);
   }
 
   static Future<UrlQueryOutput?> queryUrl({
@@ -722,20 +718,17 @@ class APIService {
         headers: {
           'Content-Type': 'application/json',
           'X-API-Key': SettingsManager.serverApiKey.value,
+          'X-Password': currentPassword,
         },
         body: jsonEncode({
-          'current_password': currentPassword,
           if (newUsername != null) 'new_username': newUsername,
           if (newPassword != null) 'new_password': newPassword,
           if (serverPort != null) 'server_port': serverPort,
         }),
       );
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true) {
-          await SettingsManager.loadFromBackend();
-          return true;
-        }
+        await SettingsManager.loadFromBackend();
+        return true;
       }
       log(
         'Change credentials failed: ${response.statusCode} ${response.body}',
@@ -752,14 +745,12 @@ class APIService {
       final response = await http.post(
         Uri.parse('$baseUrl/api/nadeko/auth/verify-password'),
         headers: {
-          'Content-Type': 'application/json',
           'X-API-Key': SettingsManager.serverApiKey.value,
+          'X-Password': password,
         },
-        body: jsonEncode({'password': password}),
       );
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data['valid'] == true;
+        return true;
       }
       log(
         'Verify password failed: ${response.statusCode} ${response.body}',

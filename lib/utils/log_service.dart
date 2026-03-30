@@ -15,14 +15,14 @@ class LogService {
       final lines = await _logFile!.readAsLines();
       final regex = RegExp(r'\[(DEBUG|WARNING|ERROR|STDOUT)\]\[(.*?)\] (.*)');
       final loadedLogs = <LogEntry>[];
-      
+
       for (final line in lines) {
         final match = regex.firstMatch(line);
         if (match != null) {
           final levelStr = match.group(1);
           final timestampStr = match.group(2);
           final message = match.group(3);
-          
+
           LogLevel level;
           switch (levelStr) {
             case 'DEBUG':
@@ -34,18 +34,20 @@ class LogService {
             default:
               level = LogLevel.stdout;
           }
-          
+
           DateTime timestamp;
           try {
             timestamp = DateFormat('yy/MM/dd|HH:mm:ss').parse(timestampStr!);
           } catch (e) {
             timestamp = DateTime.now();
           }
-          
-          loadedLogs.add(LogEntry(level: level, timestamp: timestamp, message: message!));
+
+          loadedLogs.add(
+            LogEntry(level: level, timestamp: timestamp, message: message!),
+          );
         }
       }
-      
+
       logs.value = loadedLogs;
     }
   }
@@ -81,7 +83,11 @@ class LogService {
         timestamp = DateTime.now();
       }
 
-      final newEntry = LogEntry(level: level, timestamp: timestamp, message: message!);
+      final newEntry = LogEntry(
+        level: level,
+        timestamp: timestamp,
+        message: message!,
+      );
       logs.value = [...logs.value, newEntry];
 
       if (saveToFile && level == LogLevel.error && _logFile != null) {

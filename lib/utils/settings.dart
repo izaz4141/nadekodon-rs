@@ -122,11 +122,11 @@ class SettingsManager {
 
   static Future<void> _applyFromJson(Map<String, dynamic> json) async {
     retreatToTray.value =
-        json['retreat_to_tray'] ?? _defaults['retreat_to_tray'] ?? true;
+        json['retreat_to_tray'] ?? _defaults['retreat_to_tray'];
     downloadFolder.value = json['download_folder'] ?? '';
 
     serverApiKey.value =
-        json['server_api_key'] ?? (_defaults['server_api_key'] ?? '');
+        json['server_api_key'] ?? (_defaults['server_api_key']);
     if (serverApiKey.value.isEmpty) {
       regenerateApiKey();
     }
@@ -138,23 +138,21 @@ class SettingsManager {
       }
     }
     if (json.containsKey('username')) {
-      username.value = json['username'] ?? _defaults['username'] ?? 'admin';
+      username.value = json['username'] ?? _defaults['username'];
     }
 
-    if (json.containsKey('password')) {
-      final encodedPassword = json['password'] as String?;
-      if (encodedPassword != null && encodedPassword.isNotEmpty) {
-        password.value = encodedPassword;
-      } else {
-        password.value = await hashPassword(_defaults['password']);
-      }
+    final encodedPassword = json['password'] as String?;
+    if (encodedPassword != null && encodedPassword.isNotEmpty) {
+      password.value = encodedPassword;
+    } else {
+      password.value = await hashPassword(_defaults['password']);
     }
 
     // Speed Scheduler
-    speedLimit.value = (json['speed_limit'] ?? _defaults['speed_limit'] ?? 0.0)
+    speedLimit.value = (json['speed_limit'] ?? _defaults['speed_limit'])
         .toDouble();
     speedMode.value =
-        SpeedMode.values[json['speed_mode'] ?? _defaults['speed_mode'] ?? 0];
+        SpeedMode.values[json['speed_mode'] ?? _defaults['speed_mode']];
     if (json['speed_schedule'] != null) {
       speedSchedule.value = (json['speed_schedule'] as List)
           .map((e) => ScheduleRule.fromJson(e))
@@ -162,17 +160,17 @@ class SettingsManager {
     }
 
     downloadThreads.value =
-        json['download_threads'] ?? _defaults['download_threads'] ?? 8;
+        json['download_threads'] ?? _defaults['download_threads'];
     concurrencyLimit.value =
-        json['concurrency_limit'] ?? _defaults['concurrency_limit'] ?? 3;
+        json['concurrency_limit'] ?? _defaults['concurrency_limit'];
     downloadTimeout.value =
-        json['download_timeout'] ?? _defaults['download_timeout'] ?? 30;
+        json['download_timeout'] ?? _defaults['download_timeout'];
     downloadRetries.value =
-        json['download_retries'] ?? _defaults['download_retries'] ?? 5;
+        json['download_retries'] ?? _defaults['download_retries'];
 
-    seedingRatio.value =
-        (json['seeding_ratio'] ?? _defaults['seeding_ratio'] ?? 1.0).toDouble();
-    seedingTime.value = json['seeding_time'] ?? _defaults['seeding_time'] ?? 30;
+    seedingRatio.value = (json['seeding_ratio'] ?? _defaults['seeding_ratio'])
+        .toDouble();
+    seedingTime.value = json['seeding_time'] ?? _defaults['seeding_time'];
 
     // Theme Settings
     if (json['theme_mode'] != null) {
@@ -181,13 +179,11 @@ class SettingsManager {
       themeMode.value = ThemeMode.values[_defaults['theme_mode']];
     }
     useDynamicColor.value =
-        json['use_dynamic_color'] ?? _defaults['use_dynamic_color'] ?? true;
-    customColor.value =
-        json['custom_color'] ?? _defaults['custom_color'] ?? 0xFFFF4081;
-    checkNightly.value =
-        json['check_nightly'] ?? _defaults['check_nightly'] ?? false;
+        json['use_dynamic_color'] ?? _defaults['use_dynamic_color'];
+    customColor.value = json['custom_color'] ?? _defaults['custom_color'];
+    checkNightly.value = json['check_nightly'] ?? _defaults['check_nightly'];
     if (json.containsKey('require_login')) {
-      requireLogin.value = json['require_login'] ?? (kIsWeb ? true : false);
+      requireLogin.value = json['require_login'] ?? false;
     }
 
     if (json['accounts'] != null) {
@@ -392,10 +388,8 @@ class SettingsManager {
   static Future<void> applyDefaultSettings() async {
     retreatToTray.value = _defaults['retreat_to_tray'] ?? true;
     // downloadFolder is usually not reset to default from asset as it's environment dependent
-    username.value = _defaults['username'] ?? 'admin';
-    if (username.value.isEmpty) username.value = 'admin';
-    password.value = _defaults['password'] ?? 'admin';
-    if (password.value.isEmpty) password.value = 'admin';
+    username.value = _defaults['username'];
+    password.value = await hashPassword(_defaults['password']);
 
     if (salt.value.isEmpty) {
       await _generateSalt();

@@ -1,6 +1,7 @@
 extern crate nadekodon_core as ncore;
 use nadekodon_server::{
-    nadeko::create_nadeko_router,
+    docs::create_docs_router,
+    nadeko::{create_nadeko_router, system::handle_status},
     qbittorrent::get_router,
     server::{
         AppState, SharedState, check_api_key, global_rate_limit_config, load_config, run_server,
@@ -8,21 +9,26 @@ use nadekodon_server::{
 };
 use ncore::app_context::AppContext;
 use ncore::utils::security;
-use tokio::{
-    spawn,
-    sync::{Notify, RwLock},
-};
 
 use crate::signals::{NewApiKey, RequestAddDownload, RequestNewApiKey, StartServer};
 use crate::utils::logger;
 use axum::Router;
 use axum::{
-    Json, extract::State, http::StatusCode, middleware, response::IntoResponse, routing::post,
+    Json,
+    extract::State,
+    http::StatusCode,
+    middleware,
+    response::IntoResponse,
+    routing::{get, post},
 };
 use rinf::{DartSignal, RustSignal};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
+use tokio::{
+    spawn,
+    sync::{Notify, RwLock},
+};
 use tower_governor::GovernorLayer;
 use uuid::Uuid;
 
@@ -113,15 +119,18 @@ pub async fn start_server_listener(context: Arc<AppContext>) {
 
         let qbt_router = get_router(state.clone());
         let nadeko_router = create_nadeko_router(state.clone());
+        let docs_router = create_docs_router(state.clone());
         let ext_router = Router::new()
-            .route("/download/add", post(handle_add_download))
+            .route("/api/nadeko/download/add", post(handle_add_download))
             .layer(middleware::from_fn_with_state(state.clone(), check_api_key))
             .with_state(state.clone());
         let router = Router::new()
             .nest("/api/v2", qbt_router)
             .nest("/api/nadeko", nadeko_router)
-            .nest("/api/nadeko", ext_router)
+            .merge(ext_router)
+            .merge(docs_router)
             .layer(GovernorLayer::new(governor_conf))
+            .route("/api/nadeko/system/status", get(handle_status))
             .with_state(state);
 
         let rs_clone = restart_signal.clone();

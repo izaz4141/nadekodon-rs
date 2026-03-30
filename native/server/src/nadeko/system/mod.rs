@@ -1,21 +1,19 @@
-mod restart;
-mod settings;
-mod status;
+pub mod restart;
+pub mod settings;
+pub mod status;
 
 pub use restart::*;
 pub use settings::*;
 pub use status::*;
 
 use crate::server::{SharedState, check_api_key};
-use axum::middleware;
 use axum::{
-    Router,
+    Router, middleware,
     routing::{get, post},
 };
 
 pub fn create_system_router(state: SharedState) -> Router<SharedState> {
     Router::new()
-        .route("/status", get(handle_status))
         .route("/restart", post(handle_restart))
         .route(
             "/settings",

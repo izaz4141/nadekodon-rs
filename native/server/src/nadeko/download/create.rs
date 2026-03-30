@@ -1,10 +1,21 @@
 use crate::server::SharedState;
 use axum::{Json, extract::State, response::IntoResponse};
-use nadekodon_core::signals;
+use nadekodon_core::signals::DoDownload;
 
-pub async fn handle_do_download(
+#[utoipa::path(
+    post,
+    path = "/api/nadeko/download/create",
+    tags = ["nadeko.download"],
+    security(("ApiKeyAuth" = [])),
+    request_body = DoDownload,
+    responses(
+        (status = 200, description = "Download started"),
+        (status = 500, description = "Server error")
+    )
+)]
+pub async fn handle_create_download(
     State(state): State<SharedState>,
-    Json(payload): Json<signals::DoDownload>,
+    Json(payload): Json<DoDownload>,
 ) -> impl IntoResponse {
     match nadekodon_core::downloader::spawn_download_worker_internal(
         &state.context.dm().await,

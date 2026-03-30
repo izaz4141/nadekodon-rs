@@ -3,34 +3,44 @@ use axum::{
     extract::{Json, Query, State},
     response::IntoResponse,
 };
-use std::collections::HashMap;
+use nadekodon_core::utils::version::VersionInfo;
+use serde::Deserialize;
+use utoipa::IntoParams;
 
+#[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct VersionLatestQuery {
+    pub owner: String,
+    pub repo: String,
+    #[serde(default)]
+    pub nightly: bool,
+    #[serde(default = "default_true")]
+    pub atomic: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/nadeko/version/latest",
+    tags = ["nadeko.version"],
+    security(("ApiKeyAuth" = [])),
+    params(VersionLatestQuery),
+    responses(
+        (status = 200, description = "Latest version info", body = VersionInfo),
+        (status = 400, description = "Invalid request")
+    )
+)]
 pub async fn handle_version_latest(
     State(state): State<SharedState>,
-    Query(params): Query<HashMap<String, String>>,
+    Query(params): Query<VersionLatestQuery>,
 ) -> impl IntoResponse {
-    let repo_owner = match params.get("owner") {
-        Some(v) => v.clone(),
-        None => {
-            return (
-                axum::http::StatusCode::BAD_REQUEST,
-                "Missing owner parameter".to_string(),
-            )
-                .into_response();
-        }
-    };
-    let repo_name = match params.get("repo") {
-        Some(v) => v.clone(),
-        None => {
-            return (
-                axum::http::StatusCode::BAD_REQUEST,
-                "Missing repo parameter".to_string(),
-            )
-                .into_response();
-        }
-    };
-    let check_nightly = params.get("nightly").map(|v| v == "true").unwrap_or(false);
-    let use_atom = params.get("atomic").map(|v| v == "true").unwrap_or(true);
+    let repo_owner = params.owner;
+    let repo_name = params.repo;
+    let check_nightly = params.nightly;
+    let use_atom = params.atomic;
 
     match nadekodon_core::utils::version::get_latest_version(
         &state.context.dm().await.client,

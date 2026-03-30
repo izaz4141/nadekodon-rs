@@ -1,9 +1,8 @@
-extern crate nadekodon_core as core;
+extern crate nadekodon_core as ncore;
 
-use core::app_context::AppContext;
-use core::utils;
-use core::utils::logger;
-use subtle::ConstantTimeEq;
+use ncore::app_context::AppContext;
+use ncore::utils;
+use ncore::utils::logger;
 
 use axum::{
     Router,
@@ -12,6 +11,7 @@ use axum::{
     http::{Request, StatusCode},
     middleware::Next,
     response::IntoResponse,
+    routing::get,
 };
 use axum_extra::extract::{CookieJar, cookie::Cookie};
 use governor::{clock::QuantaInstant, middleware::NoOpMiddleware};
@@ -21,6 +21,7 @@ use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
+use subtle::ConstantTimeEq;
 use time::Duration as TimeDuration;
 use tokio::sync::{Notify, RwLock};
 use tower_governor::{
@@ -168,11 +169,17 @@ pub fn create_router(
 ) -> Router {
     let qbt_router = crate::qbittorrent::get_router(state.clone());
     let nadeko_router = crate::nadeko::create_nadeko_router(state.clone());
+    let docs_router = crate::docs::create_docs_router(state.clone());
 
     Router::new()
         .nest("/api/v2", qbt_router)
         .nest("/api/nadeko", nadeko_router)
+        .merge(docs_router)
         .layer(GovernorLayer::new(governor_conf))
+        .route(
+            "/api/nadeko/system/status",
+            get(crate::nadeko::system::handle_status),
+        )
         .with_state(state)
 }
 

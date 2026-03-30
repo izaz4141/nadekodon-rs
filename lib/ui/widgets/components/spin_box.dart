@@ -141,19 +141,23 @@ class _SpinBoxState extends State<SpinBox> {
                 ),
                 isDense: true,
               ),
-              onChanged: widget.enabled ? (value) {
-                // Update the value as the user types
-                final intValue = int.tryParse(value);
-                if (intValue != null &&
-                    intValue >= widget.min &&
-                    intValue <= widget.max) {
-                  widget.valueListenable.value = intValue;
-                }
-              } : null,
-              onSubmitted: widget.enabled ? (value) {
-                _saveValue();
-                _focusNode.unfocus();
-              } : null,
+              onChanged: widget.enabled
+                  ? (value) {
+                      // Update the value as the user types
+                      final intValue = int.tryParse(value);
+                      if (intValue != null &&
+                          intValue >= widget.min &&
+                          intValue <= widget.max) {
+                        widget.valueListenable.value = intValue;
+                      }
+                    }
+                  : null,
+              onSubmitted: widget.enabled
+                  ? (value) {
+                      _saveValue();
+                      _focusNode.unfocus();
+                    }
+                  : null,
             ),
           ),
           Padding(

@@ -1,13 +1,25 @@
 use crate::server::SharedState;
 use axum::{Json, extract::State, response::IntoResponse};
 use serde::Deserialize;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct IdRequest {
-    id: String,
+    pub id: String,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/nadeko/download/pause",
+    tags = ["nadeko.download"],
+    security(("ApiKeyAuth" = [])),
+    request_body = IdRequest,
+    responses(
+        (status = 200, description = "Download paused"),
+        (status = 400, description = "Invalid ID")
+    )
+)]
 pub async fn handle_pause_download(
     State(state): State<SharedState>,
     Json(payload): Json<IdRequest>,

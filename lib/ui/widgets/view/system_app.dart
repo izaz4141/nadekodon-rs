@@ -157,45 +157,68 @@ class _SystemAppState extends State<SystemApp> {
             ),
           ),
           SizedBox(height: AppTheme.spaceSM),
-          Padding(
-            padding: EdgeInsets.symmetric(
-              vertical: AppTheme.spaceSM * AppTheme.spaceScale(context),
-            ),
-            child: ElevatedButton.icon(
-              onPressed: () {
-                Navigator.push(
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            spacing: AppTheme.spaceMD * AppTheme.spaceScale(context),
+            children: [
+              _buildActionButton(
+                context,
+                icon: Icons.article_outlined,
+                label: 'Logs',
+                tooltip: 'View application logs',
+                onPressed: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => const LogsPage()),
-                );
-              },
-              icon: Icon(
-                Icons.article_outlined,
-                size: AppTheme.iconMD * AppTheme.iconScale(context),
+                ),
               ),
-              label: Text('View Logs', style: textTheme.bodyMedium),
-            ),
+              _buildActionButton(
+                context,
+                icon: Icons.description_outlined,
+                label: 'Licenses',
+                tooltip: 'View dependencies licenses',
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const LicensesPage()),
+                ),
+              ),
+            ],
           ),
+          SizedBox(height: AppTheme.spaceSM),
           Padding(
             padding: EdgeInsets.symmetric(
               vertical: AppTheme.spaceSM * AppTheme.spaceScale(context),
             ),
-            child: ElevatedButton.icon(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const LicensesPage()),
-                );
-              },
-              icon: Icon(
-                Icons.description_outlined,
-                size: AppTheme.iconMD * AppTheme.iconScale(context),
-              ),
-              label: Text('Licenses', style: textTheme.bodyMedium),
+            child: _buildActionButton(
+              context,
+              icon: Icons.api,
+              label: 'Docs',
+              tooltip: 'Open API documentation',
+              onPressed: () =>
+                  launchUrl(Uri.parse('${APIService.baseUrl}/api/docs')),
             ),
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildActionButton(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+    String? tooltip,
+  }) {
+    final button = ElevatedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: AppTheme.iconMD * AppTheme.iconScale(context)),
+      label: Text(label, style: Theme.of(context).textTheme.bodyMedium),
+    );
+
+    if (tooltip != null) {
+      return Tooltip(message: tooltip, child: button);
+    }
+    return button;
   }
 
   Widget _buildVersionInfo(BuildContext context, TextTheme textTheme) {

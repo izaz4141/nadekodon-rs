@@ -1,6 +1,6 @@
-mod compare;
-mod current;
-mod latest;
+pub mod compare;
+pub mod current;
+pub mod latest;
 
 pub use compare::*;
 pub use current::*;

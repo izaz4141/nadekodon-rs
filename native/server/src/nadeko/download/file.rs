@@ -6,15 +6,36 @@ use axum::{
     response::IntoResponse,
 };
 use nadekodon_core::utils::{logger, types::DownloadState};
+use serde::Deserialize;
 use std::path::PathBuf;
 use tokio::fs::File;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
+#[derive(Deserialize, ToSchema, IntoParams)]
+#[into_params(parameter_in = Path)]
+pub struct DownloadFilePath {
+    pub id: String,
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/nadeko/download/file/{id}",
+    tags = ["nadeko.download"],
+    security(("ApiKeyAuth" = [])),
+    params(DownloadFilePath),
+    responses(
+        (status = 200, description = "File downloaded", body = Vec<u8>),
+        (status = 400, description = "Invalid ID"),
+        (status = 403, description = "Download not completed"),
+        (status = 404, description = "File not found")
+    )
+)]
 pub async fn handle_download_file(
     State(state): State<SharedState>,
-    Path(id): Path<String>,
+    Path(payload): Path<DownloadFilePath>,
 ) -> impl IntoResponse {
-    let uuid = match Uuid::parse_str(&id) {
+    let uuid = match Uuid::parse_str(&payload.id) {
         Ok(u) => u,
         Err(_) => return (StatusCode::BAD_REQUEST, "Invalid ID").into_response(),
     };
@@ -23,7 +44,10 @@ pub async fn handle_download_file(
     let info = match dm.info(uuid).await {
         Ok(info) => info,
         Err(e) => {
-            logger::error(&format!("Failed to get download info for {}: {}", id, e));
+            logger::error(&format!(
+                "Failed to get download info for {}: {}",
+                payload.id, e
+            ));
             return (StatusCode::NOT_FOUND, "Download not found").into_response();
         }
     };

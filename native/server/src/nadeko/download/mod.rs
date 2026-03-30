@@ -1,17 +1,17 @@
-mod cancel;
-mod delete;
-mod details;
-mod r#do;
-mod file;
-mod list;
-mod pause;
-mod resume;
-mod update_url;
+pub mod cancel;
+pub mod create;
+pub mod delete;
+pub mod details;
+pub mod file;
+pub mod list;
+pub mod pause;
+pub mod resume;
+pub mod update_url;
 
 pub use cancel::handle_cancel_download;
+pub use create::handle_create_download;
 pub use delete::*;
 pub use details::*;
-pub use r#do::handle_do_download;
 pub use file::handle_download_file;
 pub use list::*;
 pub use pause::handle_pause_download;
@@ -29,7 +29,7 @@ pub fn create_download_router(state: SharedState) -> Router<SharedState> {
     Router::new()
         .route("/list", post(handle_get_download_list))
         .route("/details/{id}", get(handle_get_download_details))
-        .route("/do", post(handle_do_download))
+        .route("/create", post(handle_create_download))
         .route("/pause", post(handle_pause_download))
         .route("/resume", post(handle_resume_download))
         .route("/cancel", post(handle_cancel_download))
