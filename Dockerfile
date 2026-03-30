@@ -118,6 +118,9 @@ wait
 EOF
 RUN chmod +x /entrypoint.sh
 
+HEALTHCHECK --interval=60s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8080/api/nadeko/system/status || exit 1
+
 EXPOSE 3000 8080
 
 ENTRYPOINT ["/entrypoint.sh"]
