@@ -28,7 +28,8 @@ RUN apk add --no-cache \
     pkgconf \
     openssl-dev \
     perl \
-    make
+    make \
+    curl
 
 COPY Cargo.toml Cargo.lock ./
 COPY native/server ./native/server
