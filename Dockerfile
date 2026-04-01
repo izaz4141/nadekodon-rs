@@ -48,7 +48,7 @@ RUN apk add --no-cache \
     nginx \
     ca-certificates \
     gettext \
-    gosu \
+    su-exec \
     curl \
     gcompat \
     ffmpeg \
@@ -62,53 +62,80 @@ COPY --from=rust-build /app/target/release/nadekodon-server /usr/local/bin/nadek
 COPY assets ./assets
 COPY nginx.conf /etc/nginx/nginx.conf.template
 
-RUN addgroup -g 1000 nadeko && \
-    adduser -u 1000 -G nadeko -D -s /bin/bash nadeko
-
 COPY <<'EOF' /entrypoint.sh
 #!/bin/bash
 set -e
 
-export PUID=${PUID:-1000}
-export PGID=${PGID:-1000}
 export NADEKO_HOME=${NADEKO_HOME:-/home/nadeko}
 export NADEKO_SERVER_HOST=${NADEKO_SERVER_HOST:-0.0.0.0}
 export NADEKO_SERVER_PORT=${NADEKO_SERVER_PORT:-8080}
-export NADEKO_SERVER_API_KEY=${NADEKO_SERVER_API_KEY:-${NADEKO_API_KEY:-}}
+export NADEKO_SERVER_API_KEY=${NADEKO_SERVER_API_KEY:-}
 export NADEKO_USERNAME=${NADEKO_USERNAME:-admin}
 export NADEKO_PASSWORD=${NADEKO_PASSWORD:-admin}
 
-# Create group and user with configurable PUID/PGID
-addgroup -g "$PGID" nadeko 2>/dev/null || true
-adduser -u "$PUID" -G "$PGID" -D -s /bin/bash nadeko 2>/dev/null || true
+CURRENT_UID=$(id -u)
+CURRENT_GID=$(id -g)
 
-# Ensure data directories exist and have correct ownership
+if [ -z "$NADEKO_SERVER_API_KEY" ]; then
+    echo "ERROR: NADEKO_SERVER_API_KEY is not set!" >&2
+    echo "Please set NADEKO_SERVER_API_KEY environment variable." >&2
+    exit 1
+fi
+
+is_root() { [ "$CURRENT_UID" -eq 0 ]; }
+
+RUN_AS=""
+if is_root; then
+    if [ -n "$PUID" ]; then
+        GID=${PGID:-$PUID}
+        addgroup -g "$GID" nadeko 2>/dev/null || true
+        adduser -u "$PUID" -G nadeko -D -s /bin/bash nadeko 2>/dev/null || true
+        RUN_AS="su-exec nadeko"
+    elif [ -n "$PGID" ] && [ "$PGID" -ne 0 ]; then
+        addgroup -g "$PGID" nadeko 2>/dev/null || true
+    fi
+fi
+
+if ! is_root; then
+    echo "Running as non-root user (UID=$CURRENT_UID, GID=$CURRENT_GID)"
+fi
+
 mkdir -p "$NADEKO_HOME/config"
 mkdir -p "$NADEKO_HOME/downloads"
 mkdir -p "$NADEKO_HOME/logs"
-chown -R nadeko:nadeko "$NADEKO_HOME"
+if [ -n "$RUN_AS" ]; then
+    chown -R nadeko:nadeko "$NADEKO_HOME" || { echo "ERROR: Failed to chown $NADEKO_HOME" >&2; exit 1; }
+elif [ -n "$PGID" ] && [ "$PGID" -ne 0 ]; then
+    chown -R :nadeko "$NADEKO_HOME" || { echo "ERROR: Failed to chown $NADEKO_HOME" >&2; exit 1; }
+elif ! is_root; then
+    chown -R "$CURRENT_UID:$CURRENT_GID" "$NADEKO_HOME" || { echo "ERROR: Failed to chown $NADEKO_HOME" >&2; exit 1; }
+fi
 
 mkdir -p /var/lib/nginx/body /var/lib/nginx/proxy /var/lib/nginx/fastcgi /var/lib/nginx/uwsgi /var/lib/nginx/scgi /var/log/nginx /var/cache/nginx
-chown -R nadeko:nadeko /var/lib/nginx /var/log/nginx /var/cache/nginx
+if [ -n "$RUN_AS" ]; then
+    chown -R nadeko:nadeko /var/lib/nginx /var/log/nginx /var/cache/nginx || { echo "ERROR: Failed to chown nginx directories" >&2; exit 1; }
+elif [ -n "$PGID" ] && [ "$PGID" -ne 0 ]; then
+    chown -R :nadeko /var/lib/nginx /var/log/nginx /var/cache/nginx || { echo "ERROR: Failed to chown nginx directories" >&2; exit 1; }
+elif ! is_root; then
+    chown -R "$CURRENT_UID:$CURRENT_GID" /var/lib/nginx /var/log/nginx /var/cache/nginx || { echo "ERROR: Failed to chown nginx directories" >&2; exit 1; }
+fi
 
 echo "Starting Nadeko~don..."
 echo "NADEKO_HOME: $NADEKO_HOME"
 echo "API Server: $NADEKO_SERVER_HOST:$NADEKO_SERVER_PORT"
 
-# Inject environment variables into nginx config
 envsubst '${NADEKO_SERVER_PORT}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
 
-# Run all services as non-root user using gosu
 cd /app
 
 echo "Starting API server..."
-gosu nadeko /usr/local/bin/nadekodon-server &
+$RUN_AS /usr/local/bin/nadekodon-server &
 SERVER_PID=$!
 
 sleep 2
 
 echo "Serving UI and Proxy on port 3000..."
-gosu nadeko nginx -g "daemon off;" &
+$RUN_AS nginx -g "daemon off;" &
 NGINX_PID=$!
 
 echo "Nadeko~don is ready!"
@@ -120,7 +147,7 @@ EOF
 RUN chmod +x /entrypoint.sh
 
 HEALTHCHECK --interval=60s --timeout=10s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8080/api/nadeko/system/status || exit 1
+    CMD curl -f -s http://localhost:8080/api/nadeko/system/status || exit 1
 
 EXPOSE 3000 8080
 
