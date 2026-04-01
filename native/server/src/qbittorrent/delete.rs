@@ -5,18 +5,32 @@ use axum::{
     response::IntoResponse,
 };
 use nadekodon_core::utils::logger;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Deserialize, Debug)]
+// Not Actually Query, but form (because arr stack sent form to this route)
+#[derive(Deserialize, Debug, Serialize, ToSchema)]
 pub struct TorrentsDeleteQuery {
-    hashes: Option<String>,
+    pub hashes: Option<String>,
     #[serde(rename = "deleteFiles")]
-    delete_files: Option<bool>,
+    pub delete_files: Option<bool>,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/qbittorrent/torrents/delete",
+    tag = "qbit.torrents",
+    security(("SIDCookie" = [])),
+    request_body = TorrentsDeleteQuery,
+    responses(
+        (status = 200, description = "Torrent deleted"),
+        (status = 400, description = "Missing required field"),
+        (status = 404, description = "Torrent not found")
+    )
+)]
 pub async fn torrents_delete(
     State(state): State<SharedState>,
-    form: Form<TorrentsDeleteQuery>,
+    Form(form): Form<TorrentsDeleteQuery>,
 ) -> impl IntoResponse {
     let hashes_opt = form.hashes.clone();
     let delete_files = form.delete_files.unwrap_or(false);

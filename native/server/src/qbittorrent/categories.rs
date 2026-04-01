@@ -4,12 +4,26 @@ use nadekodon_core::utils::logger;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use utoipa::ToSchema;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, ToSchema)]
 pub struct TorrentsSetCategoryForm {
-    hashes: String,
-    category: String,
+    pub hashes: String,
+    pub category: String,
 }
+
+#[utoipa::path(
+    post,
+    path = "/api/qbittorrent/torrents/setCategory",
+    tag = "qbit.torrents",
+    security(("SIDCookie" = [])),
+    request_body = TorrentsSetCategoryForm,
+    responses(
+        (status = 200, description = "Category set"),
+        (status = 400, description = "Failed to set category"),
+        (status = 404, description = "Torrent not found")
+    )
+)]
 pub async fn torrents_set_category(
     State(state): State<SharedState>,
     Form(query): Form<TorrentsSetCategoryForm>,
@@ -76,13 +90,25 @@ pub async fn torrents_set_category(
     (StatusCode::OK, "Ok.").into_response()
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, ToSchema)]
 pub struct TorrentsCreateCategoryForm {
-    category: String,
+    pub category: String,
     #[serde(rename = "savePath")]
-    save_path: Option<String>,
+    pub save_path: Option<String>,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/qbittorrent/torrents/createCategory",
+    tag = "qbit.torrents",
+    security(("SIDCookie" = [])),
+    request_body = TorrentsCreateCategoryForm,
+    responses(
+        (status = 200, description = "Category created"),
+        (status = 400, description = "Invalid category name"),
+        (status = 409, description = "Category already exists")
+    )
+)]
 pub async fn torrents_create_category(
     State(state): State<SharedState>,
     Form(query): Form<TorrentsCreateCategoryForm>,
@@ -108,13 +134,22 @@ pub async fn torrents_create_category(
     }
 }
 
-#[derive(Serialize)]
-struct CategoryResponse {
+#[derive(Serialize, ToSchema)]
+pub struct CategoryResponse {
     name: String,
     #[serde(rename = "savePath")]
     save_path: Option<String>,
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/qbittorrent/torrents/categories",
+    tag = "qbit.torrents",
+    security(("SIDCookie" = [])),
+    responses(
+        (status = 200, description = "List of categories", body = HashMap<String, CategoryResponse>)
+    )
+)]
 pub async fn torrents_categories(State(state): State<SharedState>) -> impl IntoResponse {
     let categories = state.context.dm().await.categories.read().await.clone();
 

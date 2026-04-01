@@ -7,13 +7,15 @@ use axum::{
 };
 use nadekodon_core::utils::helper;
 use serde::{Deserialize, Serialize};
+use utoipa::{IntoParams, ToSchema};
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct TorrentsPropertiesQuery {
-    hash: String,
+    pub hash: String,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, ToSchema, Clone)]
 pub struct TorrentsPropertiesResponse {
     pub save_path: String,
     pub creation_date: i64,
@@ -51,6 +53,18 @@ pub struct TorrentsPropertiesResponse {
     #[serde(rename = "isPrivate")] // qBittorrent uses camelCase for this specific field
     pub is_private: bool,
 }
+
+#[utoipa::path(
+    get,
+    path = "/api/qbittorrent/torrents/properties",
+    tag = "qbit.torrents",
+    security(("SIDCookie" = [])),
+    params(TorrentsPropertiesQuery),
+    responses(
+        (status = 200, description = "Torrent properties", body = TorrentsPropertiesResponse),
+        (status = 404, description = "Torrent not found")
+    )
+)]
 pub async fn torrents_properties(
     State(state): State<SharedState>,
     Query(query): Query<TorrentsPropertiesQuery>,

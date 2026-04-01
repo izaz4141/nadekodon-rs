@@ -5,8 +5,11 @@ use http_body_util::BodyExt;
 use librqbit::AddTorrent;
 use multer::Multipart;
 use nadekodon_core::utils::{logger, url::resolve_torrent_info};
+use serde::Serialize;
 use std::path::PathBuf;
+use utoipa::ToSchema;
 
+#[derive(Serialize, ToSchema)]
 pub struct TorrentsAddMultipart {
     pub urls: Vec<String>,
     pub torrents: Vec<Vec<u8>>,
@@ -338,6 +341,17 @@ impl TorrentsAddMultipart {
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/qbittorrent/torrents/add",
+    tag = "qbit.torrents",
+    security(("SIDCookie" = [])),
+    request_body = TorrentsAddMultipart,
+    responses(
+        (status = 200, description = "Torrent added successfully"),
+        (status = 400, description = "Invalid request")
+    )
+)]
 pub async fn torrents_add(
     State(state): State<SharedState>,
     req: axum::http::Request<axum::body::Body>,

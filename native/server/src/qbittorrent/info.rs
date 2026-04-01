@@ -7,20 +7,23 @@ use axum::{
 use nadekodon_core::utils::helper;
 use nadekodon_core::utils::types::DownloadState;
 use serde::{Deserialize, Serialize};
+use utoipa::{IntoParams, ToSchema};
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct TorrentsInfoQuery {
-    filter: Option<String>,
-    category: Option<String>,
-    tag: Option<String>,
-    sort: Option<String>,
-    reverse: Option<bool>,
-    limit: Option<usize>,
-    offset: Option<isize>,
-    hashes: Option<String>,
+    pub filter: Option<String>,
+    pub category: Option<String>,
+    pub tag: Option<String>,
+    pub sort: Option<String>,
+    pub reverse: Option<bool>,
+    pub limit: Option<usize>,
+    pub offset: Option<isize>,
+    pub hashes: Option<String>,
 }
-#[derive(Serialize, Clone)]
-struct TorrentsInfoResponse {
+
+#[derive(Serialize, ToSchema, Clone)]
+pub struct TorrentsInfoResponse {
     added_on: u64,
     amount_left: u64,
     category: String,
@@ -45,6 +48,17 @@ struct TorrentsInfoResponse {
     uploaded: u64,
     upspeed: u64,
 }
+
+#[utoipa::path(
+    get,
+    path = "/api/qbittorrent/torrents/info",
+    tag = "qbit.torrents",
+    security(("SIDCookie" = [])),
+    params(TorrentsInfoQuery),
+    responses(
+        (status = 200, description = "Torrent info list", body = Vec<TorrentsInfoResponse>)
+    )
+)]
 pub async fn torrents_info(
     State(state): State<SharedState>,
     Query(query): Query<TorrentsInfoQuery>,

@@ -21,5 +21,13 @@ impl Modify for SecurityModifier {
                 "API key authentication. Accepts X-API-Key header or nadeko_api_key cookie",
             ))),
         );
+
+        components.add_security_scheme(
+            "SIDCookie",
+            SecurityScheme::ApiKey(ApiKey::Cookie(ApiKeyValue::with_description(
+                "SID",
+                "Session cookie for qbittorrent api route",
+            ))),
+        );
     }
 }

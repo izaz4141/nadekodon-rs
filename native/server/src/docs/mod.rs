@@ -36,6 +36,21 @@ use security::SecurityModifier;
         crate::nadeko::version::latest::handle_version_latest,
         crate::nadeko::version::current::handle_version_current,
         crate::nadeko::version::compare::handle_compare_versions,
+        crate::qbittorrent::auth_login,
+        crate::qbittorrent::app::app_version,
+        crate::qbittorrent::app::app_webapi_version,
+        crate::qbittorrent::app::app_preferences,
+        crate::qbittorrent::add::torrents_add,
+        crate::qbittorrent::info::torrents_info,
+        crate::qbittorrent::properties::torrents_properties,
+        crate::qbittorrent::files::torrents_files,
+        crate::qbittorrent::delete::torrents_delete,
+        crate::qbittorrent::categories::torrents_set_category,
+        crate::qbittorrent::categories::torrents_create_category,
+        crate::qbittorrent::categories::torrents_categories,
+        crate::qbittorrent::misc::torrents_set_share_limits,
+        crate::qbittorrent::misc::torrents_top_prio,
+        crate::qbittorrent::misc::torrents_set_force_start,
     ),
     components(
         schemas(
@@ -72,13 +87,26 @@ use security::SecurityModifier;
             nadekodon_core::signals::YtdlItem,
             nadekodon_core::signals::YtdlFormat,
             nadekodon_core::signals::PartInfo,
+            crate::qbittorrent::AuthQuery,
+            crate::qbittorrent::app::PreferencesResponse,
+            crate::qbittorrent::add::TorrentsAddMultipart,
+            crate::qbittorrent::info::TorrentsInfoResponse,
+            crate::qbittorrent::properties::TorrentsPropertiesResponse,
+            crate::qbittorrent::files::TorrentFileResponse,
+            crate::qbittorrent::delete::TorrentsDeleteQuery,
+            crate::qbittorrent::categories::TorrentsSetCategoryForm,
+            crate::qbittorrent::categories::TorrentsCreateCategoryForm,
+            crate::qbittorrent::categories::CategoryResponse,
+            crate::qbittorrent::misc::TorrentsSetShareLimitsForm,
+            crate::qbittorrent::misc::TorrentsTopPrioForm,
+            crate::qbittorrent::misc::TorrentsSetForceStartForm,
         )
     ),
     modifiers(&SecurityModifier),
     security(
-        (),
         ("BasicAuth" = []),
-        ("ApiKeyAuth" = [])
+        ("ApiKeyAuth" = []),
+        ("SIDCookie" = [])
     )
 )]
 pub struct ApiDoc;

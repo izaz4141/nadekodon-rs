@@ -2,16 +2,9 @@ use crate::server::SharedState;
 use axum::{Json, extract::State};
 use serde::Serialize;
 use std::collections::HashMap;
+use utoipa::ToSchema;
 
-pub async fn app_version() -> &'static str {
-    "v4.6.1"
-}
-
-pub async fn webapi_version() -> &'static str {
-    "2.8.3"
-}
-
-#[derive(Serialize, Clone)]
+#[derive(Serialize, ToSchema, Clone)]
 pub struct PreferencesResponse {
     pub locale: String,
     pub create_subfolder_enabled: bool,
@@ -161,7 +154,40 @@ pub struct PreferencesResponse {
     pub utp_tcp_mixed_mode: i32,
 }
 
-pub async fn preferences(State(state): State<SharedState>) -> Json<PreferencesResponse> {
+#[utoipa::path(
+    get,
+    path = "/api/qbittorrent/app/version",
+    tag = "qbit.app",
+    responses(
+        (status = 200, description = "Application version", body = String)
+    )
+)]
+pub async fn app_version() -> &'static str {
+    "v4.6.1"
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/qbittorrent/app/webapiVersion",
+    tag = "qbit.app",
+    responses(
+        (status = 200, description = "Web API version", body = String)
+    )
+)]
+pub async fn app_webapi_version() -> &'static str {
+    "2.8.3"
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/qbittorrent/app/preferences",
+    tag = "qbit.app",
+    security(("SIDCookie" = [])),
+    responses(
+        (status = 200, description = "Application preferences", body = PreferencesResponse)
+    )
+)]
+pub async fn app_preferences(State(state): State<SharedState>) -> Json<PreferencesResponse> {
     let dm = state.context.dm().await;
     let settings = dm.settings.read().await;
 

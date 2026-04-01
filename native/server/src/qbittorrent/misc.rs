@@ -1,18 +1,29 @@
 use crate::server::SharedState;
 use axum::{Form, extract::State, http::StatusCode, response::IntoResponse};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize, ToSchema)]
 pub struct TorrentsSetShareLimitsForm {
-    hashes: String,
+    pub hashes: String,
     #[serde(rename = "ratioLimit")]
-    ratio_limit: Option<f32>,
+    pub ratio_limit: Option<f32>,
     #[serde(rename = "seedingTimeLimit")]
-    seeding_time_limit: Option<i64>,
+    pub seeding_time_limit: Option<i64>,
     #[serde(rename = "inactiveSeedingTimeLimit")]
-    _inactive_seeding_time_limit: Option<i64>,
+    pub _inactive_seeding_time_limit: Option<i64>,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/qbittorrent/torrents/setShareLimits",
+    tag = "qbit.torrents",
+    security(("SIDCookie" = [])),
+    request_body = TorrentsSetShareLimitsForm,
+    responses(
+        (status = 200, description = "Share limits set")
+    )
+)]
 pub async fn torrents_set_share_limits(
     State(state): State<SharedState>,
     Form(query): Form<TorrentsSetShareLimitsForm>,
@@ -57,11 +68,21 @@ pub async fn torrents_set_share_limits(
     (StatusCode::OK, "Ok.").into_response()
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize, ToSchema)]
 pub struct TorrentsTopPrioForm {
-    hashes: String,
+    pub hashes: String,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/qbittorrent/torrents/topPrio",
+    tag = "qbit.torrents",
+    security(("SIDCookie" = [])),
+    request_body = TorrentsTopPrioForm,
+    responses(
+        (status = 200, description = "Priority set")
+    )
+)]
 pub async fn torrents_top_prio(
     State(state): State<SharedState>,
     Form(query): Form<TorrentsTopPrioForm>,
@@ -77,12 +98,22 @@ pub async fn torrents_top_prio(
     (StatusCode::OK, "Ok.").into_response()
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize, ToSchema)]
 pub struct TorrentsSetForceStartForm {
-    _hashes: String,
-    _value: Option<bool>,
+    pub _hashes: String,
+    pub _value: Option<bool>,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/qbittorrent/torrents/setForceStart",
+    tag = "qbit.torrents",
+    security(("SIDCookie" = [])),
+    request_body = TorrentsSetForceStartForm,
+    responses(
+        (status = 200, description = "Force start set")
+    )
+)]
 pub async fn torrents_set_force_start(
     State(_state): State<SharedState>,
     Form(_query): Form<TorrentsSetForceStartForm>,

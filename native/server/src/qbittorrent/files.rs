@@ -7,13 +7,15 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use utoipa::{IntoParams, ToSchema};
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct TorrentsFilesQuery {
-    hash: String,
-    indexes: Option<String>,
+    pub hash: String,
+    pub indexes: Option<String>,
 }
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct TorrentFileResponse {
     pub index: usize,
     pub name: String,
@@ -24,6 +26,19 @@ pub struct TorrentFileResponse {
     pub piece_range: [usize; 2],
     pub availability: f32,
 }
+
+#[utoipa::path(
+    get,
+    path = "/api/qbittorrent/torrents/files",
+    tag = "qbit.torrents",
+    security(("SIDCookie" = [])),
+    params(TorrentsFilesQuery),
+    responses(
+        (status = 200, description = "Torrent files", body = Vec<TorrentFileResponse>),
+        (status = 400, description = "Invalid hash"),
+        (status = 404, description = "Torrent not found")
+    )
+)]
 pub async fn torrents_files(
     State(state): State<SharedState>,
     Query(query): Query<TorrentsFilesQuery>,
