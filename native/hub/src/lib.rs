@@ -55,6 +55,7 @@ async fn main() {
     spawn(downloader::query_url_info(rclient.clone()));
     spawn(downloader::spawn_download_worker(dm.clone()));
     spawn(downloader::get_download_list(dm.clone()));
+    spawn(downloader::listen_worker_events(dm.clone()));
     spawn(downloader::get_download_details(dm.clone()));
     spawn(downloader::pause_download(dm.clone()));
     spawn(downloader::resume_download(dm.clone()));

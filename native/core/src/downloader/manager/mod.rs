@@ -43,3 +43,9 @@ impl std::fmt::Debug for DownloadManager {
             .finish()
     }
 }
+
+impl DownloadManager {
+    pub fn subscribe(&self) -> broadcast::Receiver<WorkerEvent> {
+        self.broadcast_tx.subscribe()
+    }
+}

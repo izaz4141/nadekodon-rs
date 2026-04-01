@@ -5,7 +5,7 @@ use crate::signals;
 use crate::utils::logger;
 use core::downloader;
 use core::signals as csignals;
-use core::utils::types::{DownloadInfo, DownloadState, DownloadType};
+use core::utils::types::{DownloadInfo, DownloadState, DownloadType, WorkerEvent};
 
 use reqwest::Client;
 use rinf::{DartSignal, RustSignal};
@@ -407,5 +407,22 @@ pub async fn handle_init_torrent_persistence(manager: Arc<downloader::DownloadMa
     while let Some(signal) = receiver.recv().await {
         let persistence_path = std::path::PathBuf::from(signal.message.path);
         manager.init_torrent_session(persistence_path).await;
+    }
+}
+
+pub async fn listen_worker_events(manager: Arc<downloader::DownloadManager>) {
+    let mut rx = manager.subscribe();
+    while let Ok(event) = rx.recv().await {
+        match &event {
+            WorkerEvent::Completed(id) => {
+                logger::debug(&format!("Worker {:?} finished: Completed", id));
+            }
+            WorkerEvent::Cancelled(id) => {
+                logger::debug(&format!("Worker {:?} finished: Cancelled", id));
+            }
+            WorkerEvent::Error(id, msg) => {
+                logger::error(&format!("Worker {:?} finished: Error - {}", id, msg));
+            }
+        }
     }
 }

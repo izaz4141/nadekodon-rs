@@ -16,3 +16,11 @@ pub fn debug(message: &str) {
 pub fn error(message: &str) {
     _log("ERROR", message);
 }
+
+pub fn info(message: &str) {
+    _log("INFO", message);
+}
+
+pub fn warn(message: &str) {
+    _log("WARN", message);
+}
