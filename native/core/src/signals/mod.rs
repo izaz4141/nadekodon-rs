@@ -200,12 +200,39 @@ pub struct StartServer {
     pub password: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct RequestNewApiKey {}
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+pub struct RequestNewApiKey {
+    pub master_key: Option<String>,
+}
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct NewApiKey {
-    pub key: String,
+    pub encrypted_api_key: String,
+    pub decrypted_api_key: String,
+    pub master_key: String,
+}
+
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+pub struct DecryptRequest {
+    pub encrypted_key: String,
+    pub master_key: String,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct DecryptResponse {
+    pub decrypted_key: String,
+}
+
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+pub struct EncryptRequest {
+    pub plain_key: String,
+    pub master_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct EncryptResponse {
+    pub encrypted_key: String,
+    pub master_key: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

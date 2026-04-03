@@ -1,4 +1,4 @@
-use crate::server::{SharedState, build_api_cookie, normalize_secret};
+use crate::server::{SharedState, build_api_cookie, normalize_secret, get_master_key};
 use axum::Json;
 use axum::extract::State;
 use axum::response::IntoResponse;
@@ -7,6 +7,7 @@ use serde::Serialize;
 use serde_json::json;
 use utoipa::ToSchema;
 use uuid::Uuid;
+use nadekodon_core::utils::encryption;
 
 #[derive(Serialize, ToSchema)]
 pub struct ApiKeyResponse {
@@ -28,9 +29,11 @@ pub async fn handle_generate_api(
 ) -> impl IntoResponse {
     let key = Uuid::new_v4().to_string();
     let jar = jar.add(build_api_cookie(&key));
+    let master_key = get_master_key();
+    let encrypted_key = encryption::encrypt(&key, &master_key).unwrap_or_else(|_| key.clone());
     {
         let mut cfg = state.config.write().await;
-        cfg["server_api_key"] = json!(key.clone());
+        cfg["server_api_key"] = json!(encrypted_key);
         state.save_config(&cfg.clone());
     }
     *state.api_key.write().await = normalize_secret(&key).to_string();

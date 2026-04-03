@@ -51,6 +51,8 @@ async fn main() {
         db_done_signal.clone(),
     ));
     spawn(utils::server::handle_api_key_generation());
+    spawn(utils::server::handle_decrypt_request());
+    spawn(utils::server::handle_encrypt_request());
     spawn(utils::server::start_server_listener(context.clone()));
     spawn(downloader::query_url_info(rclient.clone()));
     spawn(downloader::spawn_download_worker(dm.clone()));

@@ -5,6 +5,7 @@ import 'package:synchronized/synchronized.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'io_service_base.dart';
+import 'package:nadekodon/utils/platform_service.dart';
 
 class NativeIOService implements IOService {
   final Map<String, Lock> _fileLocks = {};
@@ -85,6 +86,12 @@ class NativeIOService implements IOService {
   @override
   Future<String?> getDirectoryPath() async {
     return await FilePicker.platform.getDirectoryPath();
+  }
+
+  @override
+  Future<void> setPermissions(String path, String mode) async {
+    if (!PlatformService.isLinux) return;
+    await Process.run('chmod', [mode, path]);
   }
 }
 

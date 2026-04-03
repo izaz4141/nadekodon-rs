@@ -1,6 +1,7 @@
 extern crate nadekodon_core as core;
 use crate::signals::{
-    self, GenerateSalt, HashPassword, HashingOutput, LoginResult, SaltOutput, VerifyPasswordResult,
+    GenerateSalt, HashPassword, HashingOutput, Login, LoginResult, SaltOutput, VerifyPassword,
+    VerifyPasswordResult,
 };
 use crate::utils::logger;
 use core::utils::security::{generate_salt, hash_password, validate_password};
@@ -40,7 +41,7 @@ pub async fn handle_password_security() {
 }
 
 pub async fn handle_login() {
-    let receiver = signals::Login::get_dart_signal_receiver();
+    let receiver = Login::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
         let msg = signal_pack.message;
 
@@ -56,7 +57,7 @@ pub async fn handle_login() {
 }
 
 pub async fn verify_pass() {
-    let receiver = signals::VerifyPassword::get_dart_signal_receiver();
+    let receiver = VerifyPassword::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
         let msg = signal_pack.message;
         let success = validate_password(&msg.reference, &msg.input).unwrap_or(false);

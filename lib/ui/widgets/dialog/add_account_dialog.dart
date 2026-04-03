@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:nadekodon/models/account.dart';
 import 'package:nadekodon/utils/api_service.dart';
 import 'package:nadekodon/utils/settings.dart';
+import 'package:nadekodon/utils/helper.dart';
 // ignore: unused_import
 import 'package:nadekodon/ui/theme/app_theme.dart';
 
@@ -246,18 +247,28 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
     }
   }
 
-  void _saveAccount() {
+  void _saveAccount() async {
     if (!_connectionSuccess || _retrievedApiKey == null) return;
+
+    final masterKey = await getMasterKey();
+    if (masterKey == null) return;
+
+    final encrypted = await SettingsManager.encryptKey(
+      _retrievedApiKey!,
+      masterKey,
+    );
 
     final account = Account(
       host: '$_protocol${_hostCtrl.text}',
       port: int.parse(_portCtrl.text),
       apiKey: _retrievedApiKey!,
+      encryptedApiKey: encrypted ?? _retrievedApiKey!,
       username: _usernameCtrl.text,
       label: _labelCtrl.text.isEmpty ? _hostCtrl.text : _labelCtrl.text,
     );
-
     SettingsManager.addAccount(account);
+
+    if (!mounted) return;
     Navigator.pop(context);
   }
 }

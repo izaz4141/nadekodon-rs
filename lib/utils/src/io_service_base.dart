@@ -14,4 +14,5 @@ abstract class IOService {
   Future<Uint8List> readFileBytes(String path);
   Future<void> writeFileBytes(String path, Uint8List bytes);
   Future<String?> getDirectoryPath();
+  Future<void> setPermissions(String path, String mode);
 }

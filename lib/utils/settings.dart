@@ -11,9 +11,11 @@ import 'package:nadekodon/utils/speed_scheduler.dart';
 import 'package:nadekodon/utils/io_service.dart';
 import 'package:nadekodon/utils/api_service.dart';
 import 'package:nadekodon/utils/system_service.dart';
+import 'package:nadekodon/utils/helper.dart';
 import 'package:nadekodon/models/account.dart';
 
 class SettingsManager {
+  static const String masterKeyFile = 'master.key';
   static late IOService _ioService;
   static late String configPath;
   static bool isFirstRun = false;
@@ -25,6 +27,8 @@ class SettingsManager {
   static final serverHost = ValueNotifier<String>('127.0.0.1');
   static final serverPort = ValueNotifier<int>(8080);
   static final serverApiKey = ValueNotifier<String>('');
+  static final encryptedServerApiKey = ValueNotifier<String>('');
+  static final hashedPassword = ValueNotifier<String>('');
   static final username = ValueNotifier<String>('');
   static final password = ValueNotifier<String>('');
   static final salt = ValueNotifier<String>('');
@@ -125,10 +129,46 @@ class SettingsManager {
         json['retreat_to_tray'] ?? _defaults['retreat_to_tray'];
     downloadFolder.value = json['download_folder'] ?? '';
 
-    serverApiKey.value =
-        json['server_api_key'] ?? (_defaults['server_api_key']);
-    if (serverApiKey.value.isEmpty) {
-      regenerateApiKey();
+    final isRemote = PlatformService().isRemote;
+    final storedApiKey = json['server_api_key'] as String? ?? '';
+
+    if (!isRemote) {
+      if (storedApiKey.isEmpty) {
+        await regenerateApiKey();
+      } else {
+        final configDir = await _ioService.getConfigDir();
+        final masterKeyPath = '$configDir/$masterKeyFile';
+        final masterKeyExists = await _ioService.fileExists(masterKeyPath);
+        String? masterKey;
+        if (masterKeyExists) {
+          final encoded = await _ioService.readFile(masterKeyPath);
+          masterKey = await d0(encoded);
+        }
+        if (masterKey != null) {
+          if (storedApiKey.startsWith('NDK:')) {
+            final decrypted = await decryptKey(storedApiKey, masterKey);
+            if (decrypted != null) {
+              serverApiKey.value = decrypted;
+              encryptedServerApiKey.value = storedApiKey;
+            } else {
+              await regenerateApiKey();
+            }
+          } else if (storedApiKey.isNotEmpty) {
+            final encrypted = await encryptKey(storedApiKey, masterKey);
+            if (encrypted != null) {
+              serverApiKey.value = storedApiKey;
+              encryptedServerApiKey.value = encrypted;
+              saveChanged('server_api_key', encrypted);
+            } else {
+              await regenerateApiKey();
+            }
+          } else {
+            await regenerateApiKey();
+          }
+        } else {
+          await regenerateApiKey();
+        }
+      }
     }
 
     if (json.containsKey('salt')) {
@@ -144,8 +184,10 @@ class SettingsManager {
     final encodedPassword = json['password'] as String?;
     if (encodedPassword != null && encodedPassword.isNotEmpty) {
       password.value = encodedPassword;
+      hashedPassword.value = encodedPassword;
     } else {
       password.value = await hashPassword(_defaults['password']);
+      hashedPassword.value = password.value;
     }
 
     // Speed Scheduler
@@ -187,9 +229,11 @@ class SettingsManager {
     }
 
     if (json['accounts'] != null) {
-      accounts.value = (json['accounts'] as List)
-          .map((e) => Account.fromJson(e))
-          .toList();
+      final accountList = <Account>[];
+      for (final accJson in json['accounts']) {
+        accountList.add(await Account.fromJson(accJson));
+      }
+      accounts.value = accountList;
     }
   }
 
@@ -198,10 +242,10 @@ class SettingsManager {
     'download_folder': downloadFolder.value,
     'server_host': serverHost.value,
     'server_port': serverPort.value,
-    'server_api_key': serverApiKey.value,
+    'server_api_key': encryptedServerApiKey.value,
     'salt': salt.value,
     'username': username.value,
-    'password': await hashPassword(password.value),
+    'password': hashedPassword.value,
     'speed_limit': speedLimit.value,
     'speed_mode': speedMode.value.index,
     'speed_schedule': speedSchedule.value.map((e) => e.toJson()).toList(),
@@ -272,7 +316,9 @@ class SettingsManager {
     }
 
     if (key == 'password') {
-      data[key] = await hashPassword(value);
+      final hashed = await hashPassword(value);
+      hashedPassword.value = hashed;
+      data[key] = hashed;
     } else {
       data[key] = value;
     }
@@ -423,14 +469,80 @@ class SettingsManager {
     return _ioService.getTorrentPersistencePath();
   }
 
+  static Future<String?> decryptKey(
+    String encryptedKey,
+    String masterKey,
+  ) async {
+    final id = DateTime.now().microsecondsSinceEpoch.toString();
+    final stream = DecryptResponse.rustSignalStream.where(
+      (signal) => signal.message.id == id,
+    );
+    DecryptRequest(
+      id: id,
+      encryptedKey: encryptedKey,
+      masterKey: masterKey,
+    ).sendSignalToRust();
+    try {
+      final signal = await stream.first;
+      return signal.message.decryptedKey.isNotEmpty
+          ? signal.message.decryptedKey
+          : null;
+    } catch (e) {
+      log('Failed to decrypt API key: $e', isError: true);
+      return null;
+    }
+  }
+
+  static Future<String?> encryptKey(
+    String plainKey,
+    String? existingMasterKey,
+  ) async {
+    final id = DateTime.now().microsecondsSinceEpoch.toString();
+    final stream = EncryptResponse.rustSignalStream.where(
+      (signal) => signal.message.id == id,
+    );
+    EncryptRequest(
+      id: id,
+      plainKey: plainKey,
+      masterKey: existingMasterKey,
+    ).sendSignalToRust();
+    try {
+      final signal = await stream.first;
+      return signal.message.encryptedKey.isNotEmpty
+          ? signal.message.encryptedKey
+          : null;
+    } catch (e) {
+      log('Failed to encrypt key: $e', isError: true);
+      return null;
+    }
+  }
+
   static Future<void> regenerateApiKey() async {
     if (PlatformService().isRemote) {
       await APIService.regenerateApiKey();
       return;
     }
-    RequestNewApiKey().sendSignalToRust();
-    final signal = await NewApiKey.rustSignalStream.first;
-    serverApiKey.value = signal.message.key;
+    final configDir = await _ioService.getConfigDir();
+    final masterKeyPath = '$configDir/$masterKeyFile';
+    final masterKeyExists = await _ioService.fileExists(masterKeyPath);
+    String? existingMasterKey;
+    if (masterKeyExists) {
+      final encoded = await _ioService.readFile(masterKeyPath);
+      existingMasterKey = await d0(encoded);
+    }
+    final id = DateTime.now().microsecondsSinceEpoch.toString();
+    final stream = NewApiKey.rustSignalStream.where(
+      (signal) => signal.message.id == id,
+    );
+    RequestNewApiKey(id: id, masterKey: existingMasterKey).sendSignalToRust();
+    final signal = await stream.first;
+
+    final encodedKey = await x0(signal.message.masterKey);
+    await _ioService.writeFile(masterKeyPath, encodedKey);
+    await _ioService.setPermissions(masterKeyPath, '0600');
+    serverApiKey.value = signal.message.decryptedApiKey;
+    encryptedServerApiKey.value = signal.message.encryptedApiKey;
+    saveChanged('server_api_key', signal.message.encryptedApiKey);
   }
 
   static Future<void> restartServer() async {
@@ -516,12 +628,10 @@ class SettingsManager {
   }
 
   static void addAccount(Account account) {
-    // Check if account already exists with same host and port
     final index = accounts.value.indexWhere(
       (a) => a.host == account.host && a.port == account.port,
     );
     if (index != -1) {
-      // Update existing
       final newAccounts = List<Account>.from(accounts.value);
       newAccounts[index] = account;
       accounts.value = newAccounts;
@@ -542,7 +652,16 @@ class SettingsManager {
     serverHost.value = account.host;
     serverPort.value = account.port;
     username.value = account.username;
-    serverApiKey.value = account.apiKey;
+
+    final masterKey = await getMasterKey();
+    if (masterKey != null && account.apiKey.startsWith('NDK:')) {
+      final decrypted = await decryptKey(account.apiKey, masterKey);
+      serverApiKey.value = decrypted ?? account.apiKey;
+    } else {
+      serverApiKey.value = account.apiKey;
+    }
+    encryptedServerApiKey.value = account.encryptedApiKey;
+
     APIService.isOnline.value = false;
     APIService.serverVersion.value = null;
     SystemService().refreshVersions();

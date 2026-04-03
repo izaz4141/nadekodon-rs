@@ -1,5 +1,7 @@
 pub mod api;
 pub mod change_credentials;
+pub mod decrypt;
+pub mod encrypt;
 pub mod hash;
 pub mod login;
 pub mod salt;
@@ -7,6 +9,8 @@ pub mod verify_password;
 
 pub use api::*;
 pub use change_credentials::*;
+pub use decrypt::*;
+pub use encrypt::*;
 pub use hash::*;
 pub use login::*;
 pub use salt::*;
@@ -31,6 +35,8 @@ pub fn create_auth_router(state: SharedState) -> Router<SharedState> {
         .route("/generate-api", get(handle_generate_api))
         .route("/change-credentials", post(handle_change_credentials))
         .route("/verify-password", post(handle_verify_password))
+        .route("/decrypt", post(handle_decrypt))
+        .route("/encrypt", post(handle_encrypt))
         .layer(middleware::from_fn_with_state(state.clone(), check_api_key))
         .layer(GovernorLayer::new(auth_rate_limit_config()));
 

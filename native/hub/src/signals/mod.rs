@@ -201,23 +201,57 @@ pub struct StartServer {
 }
 
 #[derive(Deserialize, DartSignal)]
-pub struct RequestNewApiKey {}
+pub struct RequestNewApiKey {
+    pub id: String,
+    pub master_key: Option<String>,
+}
 
 #[derive(Serialize, RustSignal)]
 pub struct NewApiKey {
-    pub key: String,
-}
-#[derive(Serialize, RustSignal)]
-pub struct RequestFfmpeg {
     pub id: String,
-    pub args: Vec<String>,
+    pub encrypted_api_key: String,
+    pub decrypted_api_key: String,
+    pub master_key: String,
 }
+
+#[derive(Deserialize, DartSignal)]
+pub struct DecryptRequest {
+    pub id: String,
+    pub encrypted_key: String,
+    pub master_key: String,
+}
+
+#[derive(Serialize, RustSignal)]
+pub struct DecryptResponse {
+    pub id: String,
+    pub decrypted_key: String,
+}
+
+#[derive(Deserialize, DartSignal)]
+pub struct EncryptRequest {
+    pub id: String,
+    pub plain_key: String,
+    pub master_key: Option<String>,
+}
+
+#[derive(Serialize, RustSignal)]
+pub struct EncryptResponse {
+    pub id: String,
+    pub encrypted_key: String,
+    pub master_key: String,
+}
+
+// #[derive(Serialize, RustSignal)]
+// pub struct RequestFfmpeg {
+//     pub id: String,
+//     pub args: Vec<String>,
+// }
 
 #[derive(Deserialize, DartSignal)]
 pub struct FfmpegResult {
     pub id: String,
-    pub success: bool,
-    pub log: String,
+    // pub success: bool,
+    // pub log: String,
 }
 
 #[derive(Deserialize, DartSignal)]
@@ -270,4 +304,30 @@ pub struct VerifyPassword {
 pub struct VerifyPasswordResult {
     pub id: String,
     pub success: bool,
+}
+
+#[derive(Deserialize, DartSignal)]
+pub struct CreateTaggingRequest {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+}
+
+#[derive(Serialize, RustSignal)]
+pub struct CreateTaggingResponse {
+    pub id: String,
+    pub success: String,
+}
+
+#[derive(Deserialize, DartSignal)]
+pub struct PutTaggingRequest {
+    pub id: String,
+    pub name: String,
+    pub tag: String,
+}
+
+#[derive(Serialize, RustSignal)]
+pub struct PutTaggingResponse {
+    pub id: String,
+    pub success: String,
 }

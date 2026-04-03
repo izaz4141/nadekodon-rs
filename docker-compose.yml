@@ -12,7 +12,8 @@ services:
       - PGID=1000 # Group ID for file ownership (match your host group)
       - NADEKO_HOME=/home/nadeko # Base data folder for downloads and config
       - NADEKO_SERVER_PORT=8080 # Internal API server port (inside container)
-      - NADEKO_SERVER_API_KEY=admin_key # API authentication key (required) - CHANGE IN PRODUCTION
+      - NADEKO_SERVER_API_KEY=api_key # API authentication key (required) - CHANGE IN PRODUCTION
+      - NADEKO_SERVER_MASTER_KEY=master_key # 64-character hex-encoded master key (required) `openssl rand -hex 32` - CHANGE IN PRODUCTION
       - NADEKO_USERNAME=admin # Web UI login username - CHANGE IN PRODUCTION
       - NADEKO_PASSWORD=admin # Web UI login password - CHANGE IN PRODUCTION
     volumes:

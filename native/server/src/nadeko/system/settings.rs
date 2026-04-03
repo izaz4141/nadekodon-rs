@@ -1,4 +1,4 @@
-use crate::server::{SharedState, nadeko_home, normalize_secret};
+use crate::server::{SharedState, nadeko_home};
 use axum::{Json, extract::State, response::IntoResponse};
 use nadekodon_core::utils::types::DMSettings;
 use serde::Serialize;
@@ -28,6 +28,8 @@ pub async fn handle_get_settings(State(state): State<SharedState>) -> impl IntoR
         map.remove("username");
         map.remove("password");
         map.remove("salt");
+        map.remove("server_api_key");
+        map.remove("accounts");
     }
     Json(settings)
 }
@@ -61,10 +63,6 @@ pub async fn handle_update_settings(
     }
 
     let mut cfg = state.config.write().await;
-    if let Some(v) = new_config.get("server_api_key").filter(|v| !v.is_null()) {
-        cfg["server_api_key"] = v.clone();
-        *state.api_key.write().await = normalize_secret(&v.as_str().unwrap_or("")).to_string();
-    }
     if let Some(v) = new_config.get("download_folder").filter(|v| !v.is_null()) {
         cfg["download_folder"] = v.clone();
     }

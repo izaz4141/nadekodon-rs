@@ -70,6 +70,9 @@ class WasmIOService implements IOService {
   Future<String?> getDirectoryPath() async {
     throw UnsupportedError('Directory picker is not supported in WASM.');
   }
+
+  @override
+  Future<void> setPermissions(String path, String mode) async {}
 }
 
 IOService getIOService() => WasmIOService();

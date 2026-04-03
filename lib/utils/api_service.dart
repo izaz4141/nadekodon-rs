@@ -4,6 +4,8 @@ import 'package:http/http.dart' as http;
 
 import 'package:flutter/foundation.dart';
 import 'package:nadekodon/src/bindings/bindings.dart';
+import 'package:nadekodon/utils/helper.dart';
+import 'package:nadekodon/models/account.dart';
 import 'package:nadekodon/utils/settings.dart';
 import 'package:nadekodon/utils/logger.dart';
 import 'package:nadekodon/utils/system_service.dart';
@@ -143,6 +145,34 @@ class APIService {
 
         if (returnedApiKey is String && returnedApiKey.isNotEmpty) {
           SettingsManager.serverApiKey.value = returnedApiKey;
+          if (!kIsWeb) {
+            final masterKey = await getMasterKey();
+            final encrypted = await SettingsManager.encryptKey(
+              returnedApiKey,
+              masterKey,
+            );
+            if (encrypted != null) {
+              SettingsManager.encryptedServerApiKey.value = encrypted;
+              final index = SettingsManager.accounts.value.indexWhere(
+                (a) =>
+                    a.host == SettingsManager.serverHost.value &&
+                    a.port == SettingsManager.serverPort.value &&
+                    a.username == SettingsManager.username.value,
+              );
+              if (index != -1) {
+                final currentAccount = SettingsManager.accounts.value[index];
+                final updatedAccount = Account(
+                  host: currentAccount.host,
+                  port: currentAccount.port,
+                  apiKey: returnedApiKey,
+                  encryptedApiKey: encrypted,
+                  username: currentAccount.username,
+                  label: currentAccount.label,
+                );
+                SettingsManager.addAccount(updatedAccount);
+              }
+            }
+          }
           return true;
         }
       }
@@ -760,5 +790,45 @@ class APIService {
       log("Verify password error: $e", isError: true);
     }
     return false;
+  }
+
+  static Future<String?> encrypt(String plainText) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/nadeko/auth/encrypt'),
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': SettingsManager.serverApiKey.value,
+        },
+        body: jsonEncode({'plain_key': plainText}),
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['encrypted_key'] as String?;
+      }
+    } catch (e) {
+      log("Encrypt error: $e", isError: true);
+    }
+    return null;
+  }
+
+  static Future<String?> decrypt(String encryptedText) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/nadeko/auth/decrypt'),
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': SettingsManager.serverApiKey.value,
+        },
+        body: jsonEncode({'encrypted_key': encryptedText}),
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['decrypted_key'] as String?;
+      }
+    } catch (e) {
+      log("Decrypt error: $e", isError: true);
+    }
+    return null;
   }
 }

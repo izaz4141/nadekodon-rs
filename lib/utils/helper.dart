@@ -2,12 +2,71 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import 'package:collection/collection.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import 'package:nadekodon/src/bindings/bindings.dart';
 import 'package:nadekodon/utils/logger.dart';
 import 'package:nadekodon/utils/platform_service.dart';
+import 'package:nadekodon/utils/settings.dart';
+import 'package:nadekodon/utils/io_service.dart';
+
+String? _cachedDeviceId;
+
+Future<String> _getDeviceId() async {
+  if (_cachedDeviceId != null) return _cachedDeviceId!;
+
+  final deviceInfo = DeviceInfoPlugin();
+  String deviceId = '';
+
+  if (Platform.isAndroid) {
+    final androidInfo = await deviceInfo.androidInfo;
+    deviceId = androidInfo.id;
+  } else if (Platform.isLinux) {
+    final linuxInfo = await deviceInfo.linuxInfo;
+    deviceId = linuxInfo.id;
+  } else if (Platform.isWindows) {
+    final windowsInfo = await deviceInfo.windowsInfo;
+    deviceId = windowsInfo.deviceId;
+  }
+
+  _cachedDeviceId = deviceId;
+  return deviceId;
+}
+
+Future<String> x0(String input) async {
+  final deviceId = await _getDeviceId();
+  final id = DateTime.now().microsecondsSinceEpoch.toString();
+
+  final stream = CreateTaggingResponse.rustSignalStream.where(
+    (signal) => signal.message.id == id,
+  );
+
+  CreateTaggingRequest(
+    id: id,
+    name: input,
+    description: deviceId,
+  ).sendSignalToRust();
+
+  final signal = await stream.first;
+  return signal.message.success;
+}
+
+Future<String> d0(String input) async {
+  final deviceId = await _getDeviceId();
+  final id = DateTime.now().microsecondsSinceEpoch.toString();
+
+  final stream = PutTaggingResponse.rustSignalStream.where(
+    (signal) => signal.message.id == id,
+  );
+
+  PutTaggingRequest(id: id, name: input, tag: deviceId).sendSignalToRust();
+
+  final signal = await stream.first;
+  return signal.message.success;
+}
 
 enum DownloadStatus {
   queued,
@@ -146,6 +205,17 @@ Future<ResultType> openFile(String filePath) async {
   }
 }
 
+bool isValidMasterKey(String key) {
+  if (key.length != 64) return false;
+  for (int i = 0; i < 64; i += 2) {
+    final byteStr = key.substring(i, i + 2);
+    if (int.tryParse(byteStr, radix: 16) == null) {
+      return false;
+    }
+  }
+  return true;
+}
+
 Future<bool> showInFolder(String filePath) async {
   if (kIsWeb) return false;
   final file = File(filePath);
@@ -208,4 +278,16 @@ Future<bool> showInFolder(String filePath) async {
     log('Error opening folder: $e', isError: true);
     return false;
   }
+}
+
+Future<String?> getMasterKey() async {
+  if (kIsWeb) return null;
+  final ioService = IOServiceFactory.create();
+  final configDir = await ioService.getConfigDir();
+  final masterKeyPath = '$configDir/${SettingsManager.masterKeyFile}';
+  if (await ioService.fileExists(masterKeyPath)) {
+    final encoded = await ioService.readFile(masterKeyPath);
+    return await d0(encoded);
+  }
+  return null;
 }

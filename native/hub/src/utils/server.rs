@@ -1,4 +1,5 @@
 extern crate nadekodon_core as ncore;
+use nadekodon_core::utils::encryption;
 use nadekodon_server::{
     docs::create_docs_router,
     nadeko::{create_nadeko_router, system::handle_status},
@@ -10,7 +11,10 @@ use nadekodon_server::{
 use ncore::app_context::AppContext;
 use ncore::utils::security;
 
-use crate::signals::{NewApiKey, RequestAddDownload, RequestNewApiKey, StartServer};
+use crate::signals::{
+    DecryptRequest, DecryptResponse, EncryptRequest, EncryptResponse, NewApiKey,
+    RequestAddDownload, RequestNewApiKey, StartServer,
+};
 use crate::utils::logger;
 use axum::Router;
 use axum::{
@@ -34,9 +38,85 @@ use uuid::Uuid;
 
 pub async fn handle_api_key_generation() {
     let receiver = RequestNewApiKey::get_dart_signal_receiver();
-    while let Some(_) = receiver.recv().await {
-        let key = Uuid::new_v4().to_string();
-        NewApiKey { key }.send_signal_to_dart();
+    while let Some(signal_pack) = receiver.recv().await {
+        let msg = signal_pack.message;
+        let master_key = match &msg.master_key {
+            Some(key) if encryption::is_valid_master_key(key) => key.clone(),
+            _ => {
+                logger::warn("Invalid master key provided, generating new one");
+                encryption::generate_master_key()
+            }
+        };
+        let api_key = Uuid::new_v4().to_string();
+        let encrypted_api_key = match encryption::encrypt(&api_key, &master_key) {
+            Ok(encrypted) => encrypted,
+            Err(e) => {
+                logger::error(&format!("Encryption failed: {}", e));
+                NewApiKey {
+                    id: msg.id,
+                    encrypted_api_key: String::new(),
+                    decrypted_api_key: String::new(),
+                    master_key: String::new(),
+                }
+                .send_signal_to_dart();
+                continue;
+            }
+        };
+        NewApiKey {
+            id: msg.id,
+            encrypted_api_key,
+            decrypted_api_key: api_key,
+            master_key,
+        }
+        .send_signal_to_dart();
+    }
+}
+
+pub async fn handle_decrypt_request() {
+    let receiver = DecryptRequest::get_dart_signal_receiver();
+    while let Some(signal_pack) = receiver.recv().await {
+        let msg = signal_pack.message;
+        let decrypted_key = match encryption::decrypt(&msg.encrypted_key, &msg.master_key) {
+            Ok(key) => key,
+            Err(e) => {
+                logger::error(&format!("Decryption failed: {}", e));
+                String::new()
+            }
+        };
+        DecryptResponse {
+            id: msg.id,
+            decrypted_key,
+        }
+        .send_signal_to_dart();
+    }
+}
+
+pub async fn handle_encrypt_request() {
+    let receiver = EncryptRequest::get_dart_signal_receiver();
+    while let Some(signal_pack) = receiver.recv().await {
+        let msg = signal_pack.message;
+        let master_key = msg
+            .master_key
+            .unwrap_or_else(encryption::generate_master_key);
+        let encrypted_key = match encryption::encrypt(&msg.plain_key, &master_key) {
+            Ok(encrypted) => encrypted,
+            Err(e) => {
+                logger::error(&format!("Encryption failed: {}", e));
+                EncryptResponse {
+                    id: msg.id,
+                    encrypted_key: String::new(),
+                    master_key: String::new(),
+                }
+                .send_signal_to_dart();
+                continue;
+            }
+        };
+        EncryptResponse {
+            id: msg.id,
+            encrypted_key,
+            master_key,
+        }
+        .send_signal_to_dart();
     }
 }
 

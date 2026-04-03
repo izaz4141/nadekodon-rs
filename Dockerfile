@@ -70,6 +70,7 @@ export NADEKO_HOME=${NADEKO_HOME:-/home/nadeko}
 export NADEKO_SERVER_HOST=${NADEKO_SERVER_HOST:-0.0.0.0}
 export NADEKO_SERVER_PORT=${NADEKO_SERVER_PORT:-8080}
 export NADEKO_SERVER_API_KEY=${NADEKO_SERVER_API_KEY:-}
+export NADEKO_SERVER_MASTER_KEY=${NADEKO_SERVER_MASTER_KEY:-}
 export NADEKO_USERNAME=${NADEKO_USERNAME:-admin}
 export NADEKO_PASSWORD=${NADEKO_PASSWORD:-admin}
 
@@ -79,6 +80,17 @@ CURRENT_GID=$(id -g)
 if [ -z "$NADEKO_SERVER_API_KEY" ]; then
     echo "ERROR: NADEKO_SERVER_API_KEY is not set!" >&2
     echo "Please set NADEKO_SERVER_API_KEY environment variable." >&2
+    exit 1
+fi
+
+if [ -z "$NADEKO_SERVER_MASTER_KEY" ]; then
+    echo "ERROR: NADEKO_SERVER_MASTER_KEY is not set!" >&2
+    echo "Please set NADEKO_SERVER_MASTER_KEY environment variable." >&2
+    exit 1
+fi
+
+if ! echo "$NADEKO_SERVER_MASTER_KEY" | grep -Eq '^[a-fA-F0-9]{64}$'; then
+    echo "ERROR: NADEKO_SERVER_MASTER_KEY must be exactly 64 hex characters!" >&2
     exit 1
 fi
 

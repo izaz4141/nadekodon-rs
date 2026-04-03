@@ -118,6 +118,10 @@ pub fn global_rate_limit_config()
         .unwrap()
 }
 
+pub fn get_master_key() -> String {
+    env::var("NADEKO_SERVER_MASTER_KEY").expect("NADEKO_SERVER_MASTER_KEY is not set")
+}
+
 pub fn load_config(path: &str) -> Value {
     let mut cfg = Value::Null;
     if let Ok(content) = std::fs::read_to_string("./assets/docs/default.json")

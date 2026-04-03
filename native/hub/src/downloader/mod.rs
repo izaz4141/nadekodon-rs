@@ -5,14 +5,14 @@ use crate::signals;
 use crate::utils::logger;
 use core::downloader;
 use core::signals as csignals;
-use core::utils::types::{DownloadInfo, DownloadState, DownloadType, WorkerEvent};
+use core::utils::types::WorkerEvent;
 
 use reqwest::Client;
 use rinf::{DartSignal, RustSignal};
 use std::collections::HashMap;
 use std::{
     sync::Arc,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    // time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::sync::oneshot;
 use uuid::Uuid;
@@ -34,112 +34,112 @@ pub async fn handle_ffmpeg_results() {
     }
 }
 
-pub async fn perform_ffmpeg_request_android(args: Vec<String>) -> Result<bool, String> {
-    let id = Uuid::new_v4().to_string();
-    let (tx, rx) = oneshot::channel();
+// pub async fn perform_ffmpeg_request_android(args: Vec<String>) -> Result<bool, String> {
+//     let id = Uuid::new_v4().to_string();
+//     let (tx, rx) = oneshot::channel();
 
-    {
-        let waiters_lock = FFMPEG_WAITERS.get_or_init(|| std::sync::Mutex::new(HashMap::new()));
-        if let Ok(mut waiters) = waiters_lock.lock() {
-            waiters.insert(id.clone(), tx);
-        }
-    }
+//     {
+//         let waiters_lock = FFMPEG_WAITERS.get_or_init(|| std::sync::Mutex::new(HashMap::new()));
+//         if let Ok(mut waiters) = waiters_lock.lock() {
+//             waiters.insert(id.clone(), tx);
+//         }
+//     }
 
-    signals::RequestFfmpeg {
-        id: id.clone(),
-        args,
-    }
-    .send_signal_to_dart();
+//     signals::RequestFfmpeg {
+//         id: id.clone(),
+//         args,
+//     }
+//     .send_signal_to_dart();
 
-    match rx.await {
-        Ok(result) => {
-            if result.success {
-                Ok(true)
-            } else {
-                Err(result.log)
-            }
-        }
-        Err(e) => Err(format!("Failed to receive ffmpeg result: {:?}", e)),
-    }
-}
+//     match rx.await {
+//         Ok(result) => {
+//             if result.success {
+//                 Ok(true)
+//             } else {
+//                 Err(result.log)
+//             }
+//         }
+//         Err(e) => Err(format!("Failed to receive ffmpeg result: {:?}", e)),
+//     }
+// }
 
-async fn handle_merge_success(
-    manager: &Arc<downloader::DownloadManager>,
-    video_id: Option<Uuid>,
-    audio_id: Option<Uuid>,
-    dest: &std::path::PathBuf,
-    url: &Option<String>,
-    video_dest: Option<&std::path::PathBuf>,
-    audio_dest: Option<&std::path::PathBuf>,
-    referer: Option<String>,
-) {
-    let mut total_size = 0;
-    if let Some(vid) = video_id {
-        if let Ok(info) = manager.info(vid).await {
-            total_size += info.downloaded;
-        }
-        let _ = manager.delete_worker(vid, true).await;
-    }
-    if let Some(aid) = audio_id {
-        if let Ok(info) = manager.info(aid).await {
-            total_size += info.downloaded;
-        }
-        let _ = manager.delete_worker(aid, true).await;
-    }
+// async fn handle_merge_success(
+//     manager: &Arc<downloader::DownloadManager>,
+//     video_id: Option<Uuid>,
+//     audio_id: Option<Uuid>,
+//     dest: &std::path::PathBuf,
+//     url: &Option<String>,
+//     video_dest: Option<&std::path::PathBuf>,
+//     audio_dest: Option<&std::path::PathBuf>,
+//     referer: Option<String>,
+// ) {
+//     let mut total_size = 0;
+//     if let Some(vid) = video_id {
+//         if let Ok(info) = manager.info(vid).await {
+//             total_size += info.downloaded;
+//         }
+//         let _ = manager.delete_worker(vid, true).await;
+//     }
+//     if let Some(aid) = audio_id {
+//         if let Ok(info) = manager.info(aid).await {
+//             total_size += info.downloaded;
+//         }
+//         let _ = manager.delete_worker(aid, true).await;
+//     }
 
-    let final_info = DownloadInfo {
-        id: Uuid::new_v4(),
-        url: url.clone().unwrap_or_default(),
-        dest: dest.clone(),
-        total_size: Some(total_size),
-        downloaded: total_size,
-        uploaded: 0,
-        uspeed: None,
-        state: DownloadState::Completed,
-        history: Vec::new(),
-        parts: Vec::new(),
-        added_at: SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64,
-        updated_at: SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64,
-        download_type: DownloadType::YTDLP,
-        torrent_hash: None,
-        referer,
-        category: None,
-        seeding_ratio_override: None,
-        seeding_time_override: None,
-    };
+//     let final_info = DownloadInfo {
+//         id: Uuid::new_v4(),
+//         url: url.clone().unwrap_or_default(),
+//         dest: dest.clone(),
+//         total_size: Some(total_size),
+//         downloaded: total_size,
+//         uploaded: 0,
+//         uspeed: None,
+//         state: DownloadState::Completed,
+//         history: Vec::new(),
+//         parts: Vec::new(),
+//         added_at: SystemTime::now()
+//             .duration_since(UNIX_EPOCH)
+//             .unwrap()
+//             .as_millis() as u64,
+//         updated_at: SystemTime::now()
+//             .duration_since(UNIX_EPOCH)
+//             .unwrap()
+//             .as_millis() as u64,
+//         download_type: DownloadType::YTDLP,
+//         torrent_hash: None,
+//         referer,
+//         category: None,
+//         seeding_ratio_override: None,
+//         seeding_time_override: None,
+//     };
 
-    manager.load_snapshot(vec![final_info]).await;
+//     manager.load_snapshot(vec![final_info]).await;
 
-    if let Some(v_path) = video_dest {
-        let _ = tokio::fs::remove_file(v_path).await;
-    }
-    if let Some(a_path) = audio_dest {
-        let _ = tokio::fs::remove_file(a_path).await;
-    }
-}
+//     if let Some(v_path) = video_dest {
+//         let _ = tokio::fs::remove_file(v_path).await;
+//     }
+//     if let Some(a_path) = audio_dest {
+//         let _ = tokio::fs::remove_file(a_path).await;
+//     }
+// }
 
-async fn wait_for_download(
-    manager: Arc<downloader::DownloadManager>,
-    id: Uuid,
-) -> Result<(), String> {
-    loop {
-        match manager.info(id).await {
-            Ok(info) => match info.state {
-                DownloadState::Completed => return Ok(()),
-                DownloadState::Error(e) => return Err(e),
-                _ => (),
-            },
-            Err(e) => return Err(e.to_string()),
-        }
-        tokio::time::sleep(Duration::from_secs(1)).await;
-    }
-}
+// async fn wait_for_download(
+//     manager: Arc<downloader::DownloadManager>,
+//     id: Uuid,
+// ) -> Result<(), String> {
+//     loop {
+//         match manager.info(id).await {
+//             Ok(info) => match info.state {
+//                 DownloadState::Completed => return Ok(()),
+//                 DownloadState::Error(e) => return Err(e),
+//                 _ => (),
+//             },
+//             Err(e) => return Err(e.to_string()),
+//         }
+//         tokio::time::sleep(Duration::from_secs(1)).await;
+//     }
+// }
 
 pub async fn query_url_info(client: Client) {
     let receiver = signals::QueryUrl::get_dart_signal_receiver();

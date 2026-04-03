@@ -24,6 +24,7 @@ hex = "0.4.3"
 percent-encoding = "2.3.2"
 argon2 = { version = "0.5.3", features = ["alloc", "password-hash", "rand"] }
 semver = "1.0.27"
+aes-gcm-siv = "0.11.1"
 
 [package.metadata.cargo-machete]
 ignored = ["openssl"]

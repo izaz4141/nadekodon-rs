@@ -1,14 +1,15 @@
 use crate::signals::InitDatabase;
-use crate::utils::logger;
+use crate::utils::{logger, tagging::handle_tagging};
 
 extern crate nadekodon_core as core;
 use core::app_context::AppContext;
 use rinf::DartSignal;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::Notify;
+use tokio::{spawn, sync::Notify};
 
 pub async fn start_database_manager(context: Arc<AppContext>, db_done_signal: Arc<Notify>) {
+    spawn(handle_tagging());
     let receiver = InitDatabase::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
         let path = signal_pack.message.path;
