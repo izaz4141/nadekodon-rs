@@ -66,7 +66,6 @@ echo "API Server: $NADEKO_SERVER_HOST:$NADEKO_SERVER_PORT"
 
 if [ -n "$TZ" ]; then
     ln -sf /usr/share/zoneinfo/"$TZ" /etc/localtime 2>/dev/null || true
-    echo "$TZ" > /etc/timezone 2>/dev/null || true
 fi
 
 envsubst '${NADEKO_SERVER_PORT}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
