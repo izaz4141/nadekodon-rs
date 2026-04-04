@@ -4,12 +4,14 @@ services:
   nadekodon:
     image: ghcr.io/izaz4141/nadekodon-rs:latest
     container_name: nadekodon
+    user: nadeko # For user 1000:1000
+    # user: 0:0 # For root or using PUID & PGID directive
     ports:
       - "3000:3000" # Web UI (HTTP) - Also serves API via reverse proxy
       # - "8080:8080" # Direct API access (bypasses web UI) (not needed)
     environment:
-      - PUID=1000 # User ID for file ownership (match your host user)
-      - PGID=1000 # Group ID for file ownership (match your host group)
+      # - PUID=1000 # Specify custom user id
+      # - PGID=1000 # Specify custom group id
       - TZ=Asia/Jakarta # Container timezone - https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
       - NADEKO_HOME=/home/nadeko # Base data folder for downloads and config
       - NADEKO_SERVER_PORT=8080 # Internal API server port (inside container)
