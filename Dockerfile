@@ -119,18 +119,12 @@ if [ -n "$RUN_AS" ]; then
     chown -R nadeko:nadeko "$NADEKO_HOME" || { echo "ERROR: Failed to chown $NADEKO_HOME" >&2; exit 1; }
 elif [ -n "$PGID" ] && [ "$PGID" -ne 0 ]; then
     chown -R :nadeko "$NADEKO_HOME" || { echo "ERROR: Failed to chown $NADEKO_HOME" >&2; exit 1; }
-elif ! is_root; then
-    chown -R "$CURRENT_UID:$CURRENT_GID" "$NADEKO_HOME" || { echo "ERROR: Failed to chown $NADEKO_HOME" >&2; exit 1; }
-fi
 
 mkdir -p /var/lib/nginx/body /var/lib/nginx/proxy /var/lib/nginx/fastcgi /var/lib/nginx/uwsgi /var/lib/nginx/scgi /var/log/nginx /var/cache/nginx
 if [ -n "$RUN_AS" ]; then
     chown -R nadeko:nadeko /var/lib/nginx /var/log/nginx /var/cache/nginx || { echo "ERROR: Failed to chown nginx directories" >&2; exit 1; }
 elif [ -n "$PGID" ] && [ "$PGID" -ne 0 ]; then
     chown -R :nadeko /var/lib/nginx /var/log/nginx /var/cache/nginx || { echo "ERROR: Failed to chown nginx directories" >&2; exit 1; }
-elif ! is_root; then
-    chown -R "$CURRENT_UID:$CURRENT_GID" /var/lib/nginx /var/log/nginx /var/cache/nginx || { echo "ERROR: Failed to chown nginx directories" >&2; exit 1; }
-fi
 
 echo "Starting Nadeko~don..."
 echo "NADEKO_HOME: $NADEKO_HOME"
