@@ -51,6 +51,7 @@ RUN apk add --no-cache \
     su-exec \
     curl \
     gcompat \
+    tzdata \
     ffmpeg \
     python3 \
     && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
@@ -129,6 +130,11 @@ elif [ -n "$PGID" ] && [ "$PGID" -ne 0 ]; then
 echo "Starting Nadeko~don..."
 echo "NADEKO_HOME: $NADEKO_HOME"
 echo "API Server: $NADEKO_SERVER_HOST:$NADEKO_SERVER_PORT"
+
+if [ -n "$TZ" ]; then
+    ln -sf /usr/share/zoneinfo/"$TZ" /etc/localtime 2>/dev/null || true
+    echo "$TZ" > /etc/timezone 2>/dev/null || true
+fi
 
 envsubst '${NADEKO_SERVER_PORT}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
 
