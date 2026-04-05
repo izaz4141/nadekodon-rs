@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'package:rinf/rinf.dart';
@@ -24,6 +25,14 @@ Future<void> main() async {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
+
+      LicenseRegistry.addLicense(() async* {
+        final licenseText = await rootBundle.loadString(
+          'assets/licenses/AGPLv3-LICENSE',
+        );
+        yield LicenseEntryWithLineBreaks(['Nadeko~don'], licenseText);
+      });
+
       if (!kIsWeb) {
         await LogService.init();
         await initializeRust(assignRustSignal);
