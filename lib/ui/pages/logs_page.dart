@@ -168,64 +168,68 @@ class _LogsPageState extends State<LogsPage> {
                             ),
                           )
                         : SingleChildScrollView(
-                            child: DataTable(
-                              sortColumnIndex: _sortColumnIndex,
-                              sortAscending: _sortAscending,
-                              columnSpacing: AppTheme.spaceMD,
-                              horizontalMargin: AppTheme.spaceMD,
-                              columns: [
-                                const DataColumn(label: Text('LEVEL')),
-                                DataColumn(
-                                  label: const Text('TIMESTAMP'),
-                                  onSort: (columnIndex, ascending) {
-                                    setState(() {
-                                      _sortColumnIndex = columnIndex;
-                                      _sortAscending = ascending;
-                                    });
-                                  },
-                                ),
-                                const DataColumn(label: Text('MESSAGE')),
-                              ],
-                              rows: filteredLogs.map((log) {
-                                final isSelected = _selectedLogs.contains(log);
-                                return DataRow(
-                                  selected: isSelected,
-                                  onSelectChanged: (selected) {
-                                    setState(() {
-                                      if (selected == true) {
-                                        _selectedLogs.add(log);
-                                      } else {
-                                        _selectedLogs.remove(log);
-                                      }
-                                    });
-                                  },
-                                  cells: [
-                                    DataCell(
-                                      _buildLevelBadge(
-                                        log.level,
-                                        colors,
-                                        textTheme,
-                                      ),
-                                    ),
-                                    DataCell(
-                                      Text(
-                                        '${DateFormat('yyyy/MM/dd').format(log.timestamp)} ${DateFormat('HH:mm:ss').format(log.timestamp)}',
-                                        style: textTheme.bodySmall,
-                                      ),
-                                    ),
-                                    DataCell(
-                                      SelectableText(
-                                        log.message,
-                                        style: textTheme.bodySmall?.copyWith(
-                                          color: log.level == LogLevel.error
-                                              ? colors.error
-                                              : null,
+                            child: IntrinsicWidth(
+                              child: DataTable(
+                                sortColumnIndex: _sortColumnIndex,
+                                sortAscending: _sortAscending,
+                                columnSpacing: AppTheme.spaceMD,
+                                horizontalMargin: AppTheme.spaceMD,
+                                columns: [
+                                  const DataColumn(label: Text('LEVEL')),
+                                  DataColumn(
+                                    label: const Text('TIMESTAMP'),
+                                    onSort: (columnIndex, ascending) {
+                                      setState(() {
+                                        _sortColumnIndex = columnIndex;
+                                        _sortAscending = ascending;
+                                      });
+                                    },
+                                  ),
+                                  const DataColumn(label: Text('MESSAGE')),
+                                ],
+                                rows: filteredLogs.map((log) {
+                                  final isSelected = _selectedLogs.contains(
+                                    log,
+                                  );
+                                  return DataRow(
+                                    selected: isSelected,
+                                    onSelectChanged: (selected) {
+                                      setState(() {
+                                        if (selected == true) {
+                                          _selectedLogs.add(log);
+                                        } else {
+                                          _selectedLogs.remove(log);
+                                        }
+                                      });
+                                    },
+                                    cells: [
+                                      DataCell(
+                                        _buildLevelBadge(
+                                          log.level,
+                                          colors,
+                                          textTheme,
                                         ),
                                       ),
-                                    ),
-                                  ],
-                                );
-                              }).toList(),
+                                      DataCell(
+                                        Text(
+                                          '${DateFormat('yyyy/MM/dd').format(log.timestamp)} ${DateFormat('HH:mm:ss').format(log.timestamp)}',
+                                          style: textTheme.bodySmall,
+                                        ),
+                                      ),
+                                      DataCell(
+                                        SelectableText(
+                                          log.message,
+                                          style: textTheme.bodySmall?.copyWith(
+                                            color: log.level == LogLevel.error
+                                                ? colors.error
+                                                : null,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                }).toList(),
+                              ),
                             ),
                           ),
                   );
