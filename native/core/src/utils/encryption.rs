@@ -1,6 +1,6 @@
 use aes_gcm_siv::{
-    aead::{rand_core::RngCore, Aead, KeyInit, OsRng},
     Aes256GcmSiv, Nonce,
+    aead::{Aead, KeyInit, OsRng, rand_core::RngCore},
 };
 
 const NONCE_SIZE: usize = 12;

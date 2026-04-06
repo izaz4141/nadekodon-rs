@@ -1,13 +1,13 @@
-use crate::server::{SharedState, build_api_cookie, normalize_secret, get_master_key};
+use crate::server::{SharedState, build_api_cookie, get_master_key, normalize_secret};
 use axum::Json;
 use axum::extract::State;
 use axum::response::IntoResponse;
 use axum_extra::extract::CookieJar;
+use nadekodon_core::utils::encryption;
 use serde::Serialize;
 use serde_json::json;
 use utoipa::ToSchema;
 use uuid::Uuid;
-use nadekodon_core::utils::encryption;
 
 #[derive(Serialize, ToSchema)]
 pub struct ApiKeyResponse {

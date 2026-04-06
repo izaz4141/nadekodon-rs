@@ -83,11 +83,11 @@ class APIService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final returnedApiKey = data['api_key'];
-        await SettingsManager.loadFromBackend();
 
         if (returnedApiKey is String && returnedApiKey.isNotEmpty) {
           SettingsManager.username.value = username;
           SettingsManager.serverApiKey.value = returnedApiKey;
+          await SettingsManager.loadFromBackend();
           SettingsManager.attachAutoSave();
           return true;
         }
