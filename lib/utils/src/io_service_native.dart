@@ -85,7 +85,7 @@ class NativeIOService implements IOService {
 
   @override
   Future<String?> getDirectoryPath() async {
-    return await FilePicker.platform.getDirectoryPath();
+    return await FilePicker.getDirectoryPath();
   }
 
   @override

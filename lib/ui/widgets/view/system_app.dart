@@ -147,7 +147,7 @@ class _SystemAppState extends State<SystemApp> {
               ),
               child: Column(
                 children: [
-                  Icon(
+                  FaIcon(
                     FontAwesomeIcons.github,
                     size: AppTheme.iconLG * AppTheme.iconScale(context),
                   ),

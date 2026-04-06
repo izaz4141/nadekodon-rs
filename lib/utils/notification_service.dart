@@ -144,7 +144,7 @@ class NotificationService {
         );
 
     await flutterLocalNotificationsPlugin.initialize(
-      initializationSettings,
+      settings: initializationSettings,
       onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
       onDidReceiveNotificationResponse: (NotificationResponse details) async {
         final actionId = details.actionId;
@@ -381,8 +381,8 @@ class NotificationService {
           customHints: [
             if (isRunning)
               LinuxNotificationCustomHint(
-                'value',
-                LinuxHintInt32Value(progress),
+                name: 'value',
+                value: LinuxHintInt32Value(progress),
               ),
           ],
           actions: <LinuxNotificationAction>[
@@ -441,16 +441,16 @@ class NotificationService {
     }
 
     await flutterLocalNotificationsPlugin.show(
-      id,
-      title,
-      body,
-      platformChannelSpecifics,
+      id: id,
+      title: title,
+      body: body,
+      notificationDetails: platformChannelSpecifics,
       payload: payload,
     );
   }
 
   Future<void> cancelNotification(int id) async {
-    await flutterLocalNotificationsPlugin.cancel(id);
+    await flutterLocalNotificationsPlugin.cancel(id: id);
   }
 
   Future<void> cancelAll() async {

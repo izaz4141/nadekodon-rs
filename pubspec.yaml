@@ -40,22 +40,22 @@ dependencies:
   dynamic_color: ^1.8.1
   window_manager: ^0.5.1
   tray_manager: ^0.5.1
-  file_picker: ^10.3.2
+  file_picker: ^11.0.1
   path_provider: ^2.1.5
   flutter_svg: ^2.2.1
   collection: ^1.19.1
   package_info_plus: ^9.0.0
   url_launcher: ^6.3.0
-  font_awesome_flutter: ^10.7.0
+  font_awesome_flutter: ^11.0.0
   intl: ^0.20.2
   flutter_launcher_icons: ^0.14.4
   open_filex: ^4.7.0
   file_share_intent: ^3.0.1
-  app_links: ^6.4.1
+  app_links: ^7.0.0
   share_plus: ^12.0.1
   permission_handler: ^12.0.1
-  flutter_local_notifications: ^19.5.0
-  flutter_local_notifications_linux: ^6.0.0
+  flutter_local_notifications: ^21.0.0
+  flutter_local_notifications_linux: ^8.0.0
   http: ^1.6.0
   archive: ^4.0.7
   device_info_plus: ^12.3.0

@@ -259,14 +259,14 @@ class APIService {
   }) async {
     try {
       final payload = {
-        if (anchorId != null) 'anchor_id': anchorId,
+        'anchor_id': ?anchorId,
         'before': before,
         'after': after,
         'statuses': statuses,
-        if (tag != null) 'tag': tag,
-        if (searchQuery != null) 'search_query': searchQuery,
-        if (sortBy != null) 'sort_by': sortBy,
-        if (ascending != null) 'ascending': ascending,
+        'tag': ?tag,
+        'search_query': ?searchQuery,
+        'sort_by': ?sortBy,
+        'ascending': ?ascending,
       };
 
       final response = await http.post(
@@ -751,9 +751,9 @@ class APIService {
           'X-Password': currentPassword,
         },
         body: jsonEncode({
-          if (newUsername != null) 'new_username': newUsername,
-          if (newPassword != null) 'new_password': newPassword,
-          if (serverPort != null) 'server_port': serverPort,
+          'new_username': ?newUsername,
+          'new_password': ?newPassword,
+          'server_port': ?serverPort,
         }),
       );
       if (response.statusCode == 200) {
