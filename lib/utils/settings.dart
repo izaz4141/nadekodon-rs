@@ -605,7 +605,9 @@ class SettingsManager {
 
   static Future<void> loadFromBackend() async {
     if (!PlatformService().isRemote) return;
+    log('loadFromBackend called');
     final data = await APIService.getSettings();
+    log('got settings data: $data');
     if (data != null) {
       await _applyFromJson(data);
     } else {
