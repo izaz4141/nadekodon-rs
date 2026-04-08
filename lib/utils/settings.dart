@@ -19,7 +19,7 @@ class SettingsManager {
   static late IOService _ioService;
   static late String configPath;
   static bool isFirstRun = false;
-  static Map<String, dynamic> _defaults = {};
+  static Map<String, dynamic> defaults = {};
 
   // Your ValueNotifiers
   static final retreatToTray = ValueNotifier<bool>(true);
@@ -64,7 +64,7 @@ class SettingsManager {
       final String response = await rootBundle.loadString(
         'assets/docs/default.json',
       );
-      _defaults = json.decode(response);
+      defaults = json.decode(response);
     } catch (e) {
       log('Error loading default settings asset: $e', isError: true);
     }
@@ -107,9 +107,9 @@ class SettingsManager {
         await _ioService.readFile(configPath),
       );
       serverHost.value =
-          data['server_host'] ?? (_defaults['server_host'] ?? '127.0.0.1');
+          data['server_host'] ?? (defaults['server_host'] ?? '127.0.0.1');
       serverPort.value =
-          data['server_port'] ?? (_defaults['server_port'] ?? 8080);
+          data['server_port'] ?? (defaults['server_port'] ?? 8080);
       await _applyFromJson(data);
       await _saveAll();
     } else {
@@ -126,7 +126,7 @@ class SettingsManager {
 
   static Future<void> _applyFromJson(Map<String, dynamic> json) async {
     retreatToTray.value =
-        json['retreat_to_tray'] ?? _defaults['retreat_to_tray'];
+        json['retreat_to_tray'] ?? defaults['retreat_to_tray'];
     downloadFolder.value = json['download_folder'] ?? '';
 
     final isRemote = PlatformService().isRemote;
@@ -178,7 +178,7 @@ class SettingsManager {
       }
     }
     if (json.containsKey('username')) {
-      username.value = json['username'] ?? _defaults['username'];
+      username.value = json['username'] ?? defaults['username'];
     }
 
     final encodedPassword = json['password'] as String?;
@@ -186,15 +186,15 @@ class SettingsManager {
       password.value = encodedPassword;
       hashedPassword.value = encodedPassword;
     } else {
-      password.value = await hashPassword(_defaults['password']);
+      password.value = await hashPassword(defaults['password']);
       hashedPassword.value = password.value;
     }
 
     // Speed Scheduler
-    speedLimit.value = (json['speed_limit'] ?? _defaults['speed_limit'])
+    speedLimit.value = (json['speed_limit'] ?? defaults['speed_limit'])
         .toDouble();
     speedMode.value =
-        SpeedMode.values[json['speed_mode'] ?? _defaults['speed_mode']];
+        SpeedMode.values[json['speed_mode'] ?? defaults['speed_mode']];
     if (json['speed_schedule'] != null) {
       speedSchedule.value = (json['speed_schedule'] as List)
           .map((e) => ScheduleRule.fromJson(e))
@@ -202,28 +202,28 @@ class SettingsManager {
     }
 
     downloadThreads.value =
-        json['download_threads'] ?? _defaults['download_threads'];
+        json['download_threads'] ?? defaults['download_threads'];
     concurrencyLimit.value =
-        json['concurrency_limit'] ?? _defaults['concurrency_limit'];
+        json['concurrency_limit'] ?? defaults['concurrency_limit'];
     downloadTimeout.value =
-        json['download_timeout'] ?? _defaults['download_timeout'];
+        json['download_timeout'] ?? defaults['download_timeout'];
     downloadRetries.value =
-        json['download_retries'] ?? _defaults['download_retries'];
+        json['download_retries'] ?? defaults['download_retries'];
 
-    seedingRatio.value = (json['seeding_ratio'] ?? _defaults['seeding_ratio'])
+    seedingRatio.value = (json['seeding_ratio'] ?? defaults['seeding_ratio'])
         .toDouble();
-    seedingTime.value = json['seeding_time'] ?? _defaults['seeding_time'];
+    seedingTime.value = json['seeding_time'] ?? defaults['seeding_time'];
 
     // Theme Settings
     if (json['theme_mode'] != null) {
       themeMode.value = ThemeMode.values[json['theme_mode']];
-    } else if (_defaults['theme_mode'] != null) {
-      themeMode.value = ThemeMode.values[_defaults['theme_mode']];
+    } else if (defaults['theme_mode'] != null) {
+      themeMode.value = ThemeMode.values[defaults['theme_mode']];
     }
     useDynamicColor.value =
-        json['use_dynamic_color'] ?? _defaults['use_dynamic_color'];
-    customColor.value = json['custom_color'] ?? _defaults['custom_color'];
-    checkNightly.value = json['check_nightly'] ?? _defaults['check_nightly'];
+        json['use_dynamic_color'] ?? defaults['use_dynamic_color'];
+    customColor.value = json['custom_color'] ?? defaults['custom_color'];
+    checkNightly.value = json['check_nightly'] ?? defaults['check_nightly'];
     if (json.containsKey('require_login')) {
       requireLogin.value = json['require_login'] ?? false;
     }
@@ -275,9 +275,9 @@ class SettingsManager {
         await _ioService.readFile(configPath),
       );
       serverHost.value =
-          data['server_host'] ?? (_defaults['server_host'] ?? '127.0.0.1');
+          data['server_host'] ?? (defaults['server_host'] ?? '127.0.0.1');
       serverPort.value =
-          data['server_port'] ?? (_defaults['server_port'] ?? 8080);
+          data['server_port'] ?? (defaults['server_port'] ?? 8080);
       await _applyFromJson(data);
     }
   }
@@ -432,32 +432,32 @@ class SettingsManager {
   }
 
   static Future<void> applyDefaultSettings() async {
-    retreatToTray.value = _defaults['retreat_to_tray'] ?? true;
+    retreatToTray.value = defaults['retreat_to_tray'] ?? true;
     // downloadFolder is usually not reset to default from asset as it's environment dependent
-    username.value = _defaults['username'];
-    password.value = await hashPassword(_defaults['password']);
+    username.value = defaults['username'];
+    password.value = await hashPassword(defaults['password']);
 
     if (salt.value.isEmpty) {
       await _generateSalt();
     }
-    serverHost.value = _defaults['server_host'] ?? '127.0.0.1';
-    serverPort.value = _defaults['server_port'] ?? 8080;
-    speedLimit.value = (_defaults['speed_limit'] ?? 0.0).toDouble();
-    downloadThreads.value = _defaults['download_threads'] ?? 8;
-    concurrencyLimit.value = _defaults['concurrency_limit'] ?? 3;
-    downloadTimeout.value = _defaults['download_timeout'] ?? 30;
-    downloadRetries.value = _defaults['download_retries'] ?? 5;
-    seedingRatio.value = (_defaults['seeding_ratio'] ?? 1.0).toDouble();
-    seedingTime.value = _defaults['seeding_time'] ?? 30;
+    serverHost.value = defaults['server_host'] ?? '127.0.0.1';
+    serverPort.value = defaults['server_port'] ?? 8080;
+    speedLimit.value = (defaults['speed_limit'] ?? 0.0).toDouble();
+    downloadThreads.value = defaults['download_threads'] ?? 8;
+    concurrencyLimit.value = defaults['concurrency_limit'] ?? 3;
+    downloadTimeout.value = defaults['download_timeout'] ?? 30;
+    downloadRetries.value = defaults['download_retries'] ?? 5;
+    seedingRatio.value = (defaults['seeding_ratio'] ?? 1.0).toDouble();
+    seedingTime.value = defaults['seeding_time'] ?? 30;
 
-    if (_defaults['theme_mode'] != null) {
-      themeMode.value = ThemeMode.values[_defaults['theme_mode']];
+    if (defaults['theme_mode'] != null) {
+      themeMode.value = ThemeMode.values[defaults['theme_mode']];
     }
-    useDynamicColor.value = _defaults['use_dynamic_color'] ?? true;
-    customColor.value = _defaults['custom_color'] ?? 0xFFFF4081;
-    checkNightly.value = _defaults['check_nightly'] ?? false;
+    useDynamicColor.value = defaults['use_dynamic_color'] ?? true;
+    customColor.value = defaults['custom_color'] ?? 0xFFFF4081;
+    checkNightly.value = defaults['check_nightly'] ?? false;
 
-    speedMode.value = SpeedMode.values[_defaults['speed_mode'] ?? 0];
+    speedMode.value = SpeedMode.values[defaults['speed_mode'] ?? 0];
     speedSchedule.value = [];
   }
 
@@ -682,9 +682,9 @@ class SettingsManager {
         await _ioService.readFile(configPath),
       );
       serverHost.value =
-          data['server_host'] ?? (_defaults['server_host'] ?? '127.0.0.1');
+          data['server_host'] ?? (defaults['server_host'] ?? '127.0.0.1');
       serverPort.value =
-          data['server_port'] ?? (_defaults['server_port'] ?? 8080);
+          data['server_port'] ?? (defaults['server_port'] ?? 8080);
       await _applyFromJson(data);
     } else {
       await applyDefaultSettings();
