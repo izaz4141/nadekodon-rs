@@ -172,7 +172,7 @@ class SettingsManager {
     }
 
     if (json.containsKey('salt')) {
-      salt.value = json['salt'] ?? '';
+      salt.value = json['salt'];
       if (salt.value.isEmpty) {
         await _generateSalt();
       }
@@ -181,13 +181,15 @@ class SettingsManager {
       username.value = json['username'] ?? defaults['username'];
     }
 
-    final encodedPassword = json['password'] as String?;
-    if (encodedPassword != null && encodedPassword.isNotEmpty) {
-      password.value = encodedPassword;
-      hashedPassword.value = encodedPassword;
-    } else {
-      password.value = await hashPassword(defaults['password']);
-      hashedPassword.value = password.value;
+    if (!isRemote) {
+      final encodedPassword = json['password'] as String?;
+      if (encodedPassword != null && encodedPassword.isNotEmpty) {
+        password.value = encodedPassword;
+        hashedPassword.value = encodedPassword;
+      } else {
+        password.value = await hashPassword(defaults['password']);
+        hashedPassword.value = password.value;
+      }
     }
 
     // Speed Scheduler
@@ -605,11 +607,12 @@ class SettingsManager {
 
   static Future<void> loadFromBackend() async {
     if (!PlatformService().isRemote) return;
-    log('loadFromBackend called');
     final data = await APIService.getSettings();
     log('got settings data: $data');
     if (data != null) {
+      log('applying data from json');
       await _applyFromJson(data);
+      log('applied data from json');
     } else {
       log('Failed to load settings from backend', isError: true);
     }

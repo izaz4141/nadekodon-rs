@@ -86,16 +86,10 @@ class APIService {
         log(data);
 
         if (returnedApiKey is String && returnedApiKey.isNotEmpty) {
-          log('api not empty');
-          log('returnedApiKey: $returnedApiKey');
           SettingsManager.username.value = username;
           SettingsManager.serverApiKey.value = returnedApiKey;
-          log('serverApiKey after set: ${SettingsManager.serverApiKey.value}');
-          log('set the api');
           await SettingsManager.loadFromBackend();
-          log('loaded settings');
           SettingsManager.attachAutoSave();
-          log('loaded autosave');
           return true;
         }
       } else {
@@ -104,8 +98,8 @@ class APIService {
           isError: true,
         );
       }
-    } catch (e) {
-      log('Login error: $e', isError: true);
+    } catch (e, stack) {
+      log('Login error: $e \n$stack', isError: true);
     }
 
     return false;
@@ -609,12 +603,10 @@ class APIService {
 
   static Future<Map<String, dynamic>?> getSettings() async {
     try {
-      log('getSettings called, apiKey: ${SettingsManager.serverApiKey.value}');
       final response = await http.get(
         Uri.parse('$baseUrl/api/nadeko/system/settings'),
         headers: {'X-API-Key': SettingsManager.serverApiKey.value},
       );
-      log("settings: ${response.body}");
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
       }
