@@ -83,7 +83,6 @@ class APIService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final returnedApiKey = data['api_key'];
-        log(data);
 
         if (returnedApiKey is String && returnedApiKey.isNotEmpty) {
           SettingsManager.username.value = username;
