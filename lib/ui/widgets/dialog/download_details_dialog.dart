@@ -115,7 +115,7 @@ class _DownloadDetailsDialogState extends State<DownloadDetailsDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildDetailRow('Name', details.name, textTheme),
+        _buildDetailRow('Name', details.name, textTheme, scrollable: true),
         const SizedBox(height: AppTheme.spaceSM),
         _buildDetailRow(
           'URL',
@@ -139,7 +139,7 @@ class _DownloadDetailsDialogState extends State<DownloadDetailsDialog> {
           ),
         ),
         const SizedBox(height: AppTheme.spaceSM),
-        _buildDetailRow('Destination', details.dest, textTheme),
+        _buildDetailRow('Destination', details.dest, textTheme, scrollable: true),
         const SizedBox(height: AppTheme.spaceSM),
         Row(
           children: [
@@ -233,6 +233,7 @@ class _DownloadDetailsDialogState extends State<DownloadDetailsDialog> {
     String value,
     TextTheme textTheme, {
     Widget? trailing,
+    bool scrollable = false,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -248,12 +249,20 @@ class _DownloadDetailsDialogState extends State<DownloadDetailsDialog> {
         Row(
           children: [
             Expanded(
-              child: Text(
-                value,
-                style: textTheme.bodyMedium,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
+              child: scrollable
+                  ? SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Text(
+                        value,
+                        style: textTheme.bodyMedium,
+                      ),
+                    )
+                  : Text(
+                      value,
+                      style: textTheme.bodyMedium,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
             ),
             if (trailing != null) ...[
               const SizedBox(width: AppTheme.spaceXS),
