@@ -1,3 +1,4 @@
+use crate::utils::logger;
 use anyhow::Result;
 use librqbit::{AddTorrent, AddTorrentOptions, AddTorrentResponse, Session, SessionOptions};
 use percent_encoding::percent_decode_str;
@@ -81,16 +82,19 @@ pub async fn get_url_info(
         });
     }
 
-    // Send HEAD request
-    let mut request_builder = client.head(url);
-    if let Some(c) = &cookie {
-        request_builder = request_builder.header(header::COOKIE, header::HeaderValue::from_str(c)?);
-    }
-    if let Some(ua) = &user_agent {
-        request_builder =
-            request_builder.header(header::USER_AGENT, header::HeaderValue::from_str(ua)?);
-    }
-    let response = request_builder.send().await?;
+    // Try HEAD request first, fallback to GET with Range if it fails
+    let response = match try_head_request(&client, url, cookie.as_deref(), user_agent.as_deref())
+        .await
+    {
+        Ok(resp) => resp,
+        Err(e) => {
+            logger::warn(&format!(
+                "HEAD request failed for {}: {}, falling back to GET with Range",
+                url, e
+            ));
+            try_get_range_request(&client, url, cookie.as_deref(), user_agent.as_deref()).await?
+        }
+    };
 
     // Extract total size
     let total_size = response
@@ -168,6 +172,47 @@ pub async fn get_url_info(
         accept_ranges,
         content_type,
     })
+}
+
+async fn try_head_request(
+    client: &Client,
+    url: &str,
+    cookie: Option<&str>,
+    user_agent: Option<&str>,
+) -> Result<reqwest::Response> {
+    let mut request_builder = client.head(url);
+    if let Some(c) = cookie {
+        request_builder = request_builder.header(header::COOKIE, header::HeaderValue::from_str(c)?);
+    }
+    if let Some(ua) = user_agent {
+        request_builder =
+            request_builder.header(header::USER_AGENT, header::HeaderValue::from_str(ua)?);
+    }
+    let response = request_builder.send().await?;
+
+    // If server returns 405 Method Not Allowed, treat as failure to trigger fallback
+    if response.status() == reqwest::StatusCode::METHOD_NOT_ALLOWED {
+        return Err(anyhow::anyhow!("Server returned 405 Method Not Allowed"));
+    }
+
+    Ok(response)
+}
+
+async fn try_get_range_request(
+    client: &Client,
+    url: &str,
+    cookie: Option<&str>,
+    user_agent: Option<&str>,
+) -> Result<reqwest::Response> {
+    let mut request_builder = client.get(url);
+    if let Some(c) = cookie {
+        request_builder = request_builder.header(header::COOKIE, header::HeaderValue::from_str(c)?);
+    }
+    if let Some(ua) = user_agent {
+        request_builder =
+            request_builder.header(header::USER_AGENT, header::HeaderValue::from_str(ua)?);
+    }
+    request_builder.send().await.map_err(|e| e.into())
 }
 
 pub fn is_hls_url(url: &str, content_type: &Option<String>) -> bool {
