@@ -13,7 +13,7 @@ class LogService {
 
     if (await _logFile!.exists()) {
       final lines = await _logFile!.readAsLines();
-      final regex = RegExp(r'\[(DEBUG|WARNING|ERROR|STDOUT)\]\[(.*?)\] (.*)');
+      final regex = RegExp(r'\[(DEBUG|INFO|WARN|ERROR|STDOUT)\]\[(.*?)\] (.*)');
       final loadedLogs = <LogEntry>[];
 
       for (final line in lines) {
@@ -27,7 +27,9 @@ class LogService {
           switch (levelStr) {
             case 'DEBUG':
               level = LogLevel.debug;
-            case 'WARNING':
+            case 'INFO':
+              level = LogLevel.info;
+            case 'WARN':
               level = LogLevel.warning;
             case 'ERROR':
               level = LogLevel.error;
@@ -53,7 +55,7 @@ class LogService {
   }
 
   static void recordLog(String line, {bool saveToFile = true}) {
-    final regex = RegExp(r'\[(DEBUG|WARNING|ERROR|STDOUT)\]\[(.*?)\] (.*)');
+    final regex = RegExp(r'\[(DEBUG|INFO|WARN|ERROR|STDOUT)\]\[(.*?)\] (.*)');
     final match = regex.firstMatch(line);
 
     if (match != null) {
@@ -66,7 +68,10 @@ class LogService {
         case 'DEBUG':
           level = LogLevel.debug;
           break;
-        case 'WARNING':
+        case 'INFO':
+          level = LogLevel.info;
+          break;
+        case 'WARN':
           level = LogLevel.warning;
           break;
         case 'ERROR':
@@ -150,7 +155,7 @@ class LogService {
   }
 }
 
-enum LogLevel { debug, warning, error, stdout }
+enum LogLevel { debug, info, warning, error, stdout }
 
 class LogEntry {
   final LogLevel level;

@@ -260,6 +260,10 @@ class _LogsPageState extends State<LogsPage> {
         backgroundColor = Colors.orange.shade100;
         textColor = Colors.orange.shade900;
         label = 'WARN';
+      case LogLevel.info:
+        backgroundColor = colors.primaryContainer;
+        textColor = colors.onPrimaryContainer;
+        label = 'INFO';
       case LogLevel.debug:
         backgroundColor = colors.secondaryContainer;
         textColor = colors.onSecondaryContainer;
