@@ -75,17 +75,6 @@ impl AppContext {
 
         *self.db.write().await = Some(db.clone());
 
-        match db.load_downloads().await {
-            Ok(downloads) => {
-                logger::debug(&format!("Loaded {} downloads from DB", downloads.len()));
-                let dm = self.dm().await;
-                dm.load_snapshot(downloads).await;
-            }
-            Err(e) => {
-                logger::error(&format!("Failed to load downloads from DB: {:?}", e));
-            }
-        }
-
         match db.load_categories().await {
             Ok(categories) => {
                 logger::debug(&format!("Loaded {} categories from DB", categories.len()));
@@ -97,6 +86,17 @@ impl AppContext {
             }
             Err(e) => {
                 logger::error(&format!("Failed to load categories from DB: {:?}", e));
+            }
+        }
+
+        match db.load_downloads().await {
+            Ok(downloads) => {
+                logger::debug(&format!("Loaded {} downloads from DB", downloads.len()));
+                let dm = self.dm().await;
+                dm.load_snapshot(downloads).await;
+            }
+            Err(e) => {
+                logger::error(&format!("Failed to load downloads from DB: {:?}", e));
             }
         }
 
