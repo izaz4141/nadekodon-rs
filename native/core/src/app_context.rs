@@ -86,6 +86,20 @@ impl AppContext {
             }
         }
 
+        match db.load_categories().await {
+            Ok(categories) => {
+                logger::debug(&format!("Loaded {} categories from DB", categories.len()));
+                let dm = self.dm().await;
+                let mut cats = dm.categories.write().await;
+                for (name, info) in categories {
+                    cats.entry(name).or_insert(info);
+                }
+            }
+            Err(e) => {
+                logger::error(&format!("Failed to load categories from DB: {:?}", e));
+            }
+        }
+
         // This will keep running until shutdown
         db.clone().run_loop().await;
 
