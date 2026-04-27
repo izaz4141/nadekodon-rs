@@ -18,7 +18,8 @@ pub use pause::handle_pause_download;
 pub use resume::*;
 pub use update_url::*;
 
-use crate::server::{SharedState, check_api_key};
+use crate::server::SharedState;
+use crate::security::check_api_key;
 use axum::middleware;
 use axum::{
     Router,

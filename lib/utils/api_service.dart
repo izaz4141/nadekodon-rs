@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-
 import 'package:flutter/foundation.dart';
+
 import 'package:nadekodon/src/bindings/bindings.dart';
 import 'package:nadekodon/utils/helper.dart';
+import 'package:nadekodon/utils/io_service.dart';
 import 'package:nadekodon/models/account.dart';
 import 'package:nadekodon/utils/settings.dart';
 import 'package:nadekodon/utils/logger.dart';
@@ -75,9 +76,22 @@ class APIService {
     try {
       final credentials = base64Encode(utf8.encode('$username:$password'));
 
+      Map<String, String> requestHeaders = {
+        'Authorization': 'Basic $credentials',
+      };
+
+      if (kIsWeb) {
+        final String? csrfToken = IOServiceFactory.create().getCookie(
+          'nadekodon_csrf',
+        );
+        if (csrfToken != null && csrfToken.isNotEmpty) {
+          requestHeaders['X-CSRF-TOKEN'] = csrfToken;
+        }
+      }
+
       final response = await http.post(
         Uri.parse('$baseUrl/api/nadeko/auth/login'),
-        headers: {'Authorization': 'Basic $credentials'},
+        headers: requestHeaders,
       );
 
       if (response.statusCode == 200) {

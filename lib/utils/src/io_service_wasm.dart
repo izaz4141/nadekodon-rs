@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:web/web.dart' as html;
 import 'io_service_base.dart';
 
 class WasmIOService implements IOService {
@@ -73,6 +74,22 @@ class WasmIOService implements IOService {
 
   @override
   Future<void> setPermissions(String path, String mode) async {}
+
+  @override
+  String? getCookie(String name) {
+    final String rawCookies = html.window.document.cookie;
+    if (rawCookies.isEmpty) return null;
+
+    final List<String> cookies = rawCookies.split(';');
+
+    for (final cookie in cookies) {
+      final List<String> pair = cookie.split('=');
+      if (pair.length == 2 && pair[0].trim() == name) {
+        return pair[1].trim();
+      }
+    }
+    return null;
+  }
 }
 
 IOService getIOService() => WasmIOService();

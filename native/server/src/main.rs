@@ -40,6 +40,8 @@ async fn main() {
     if let Ok(env_key) = std::env::var("NADEKO_SERVER_API_KEY") {
         api_key = env_key;
     }
+    let master_key =
+        std::env::var("NADEKO_SERVER_MASTER_KEY").expect("NADEKO_SERVER_MASTER_KEY is not set");
     username = normalize_secret(&username).to_string();
     password = normalize_secret(&password).to_string();
     password = if security::is_valid_hash(&password) {
@@ -118,6 +120,7 @@ async fn main() {
         config: Arc::new(RwLock::new(initial_config.clone())),
         config_path,
         api_key: Arc::new(RwLock::new(api_key)),
+        master_key: Arc::new(RwLock::new(master_key)),
         username: Arc::new(RwLock::new(username)),
         password: Arc::new(RwLock::new(password)),
         context,

@@ -28,9 +28,9 @@ class SettingsManager {
   static final serverPort = ValueNotifier<int>(8080);
   static final serverApiKey = ValueNotifier<String>('');
   static final encryptedServerApiKey = ValueNotifier<String>('');
-  static final hashedPassword = ValueNotifier<String>('');
   static final username = ValueNotifier<String>('');
   static final password = ValueNotifier<String>('');
+  static final hashedPassword = ValueNotifier<String>('');
   static final salt = ValueNotifier<String>('');
 
   static final accounts = ValueNotifier<List<Account>>([]);
@@ -552,9 +552,11 @@ class SettingsManager {
       await APIService.restartServer();
       return;
     }
+    final masterKey = await getMasterKey();
     StartServer(
       port: serverPort.value,
       apiKey: serverApiKey.value,
+      masterKey: masterKey!,
       username: username.value,
       password: password.value,
       configPath: configPath,

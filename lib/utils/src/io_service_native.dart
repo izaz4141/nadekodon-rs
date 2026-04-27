@@ -93,6 +93,11 @@ class NativeIOService implements IOService {
     if (!PlatformService.isLinux) return;
     await Process.run('chmod', [mode, path]);
   }
+
+  @override
+  String? getCookie(String name) {
+    throw UnsupportedError('Theres no cookie in native app.');
+  }
 }
 
 IOService getIOService() => NativeIOService();

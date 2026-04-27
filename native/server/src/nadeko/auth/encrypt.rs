@@ -1,4 +1,4 @@
-use crate::server::{SharedState, get_master_key};
+use crate::server::SharedState;
 use axum::{Json, extract::State, response::IntoResponse};
 use nadekodon_core::signals::{EncryptRequest, EncryptResponse};
 use nadekodon_core::utils::encryption;
@@ -15,10 +15,10 @@ use nadekodon_core::utils::encryption;
     )
 )]
 pub async fn handle_encrypt(
-    State(_state): State<SharedState>,
+    State(state): State<SharedState>,
     Json(req): Json<EncryptRequest>,
 ) -> impl IntoResponse {
-    let master_key = get_master_key();
+    let master_key = state.master_key.read().await.clone();
     let encrypted_text = match encryption::encrypt(&req.plain_key, &master_key) {
         Ok(encrypted) => encrypted,
         Err(e) => {

@@ -15,4 +15,5 @@ abstract class IOService {
   Future<void> writeFileBytes(String path, Uint8List bytes);
   Future<String?> getDirectoryPath();
   Future<void> setPermissions(String path, String mode);
+  String? getCookie(String name);
 }

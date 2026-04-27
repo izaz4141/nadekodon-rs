@@ -1,4 +1,5 @@
-use crate::server::{SharedState, build_api_cookie, normalize_secret};
+use crate::server::{SharedState, build_csrf_cookie, build_jwt_cookie, normalize_secret};
+use crate::security::create_jwt_response;
 use axum::{
     Json,
     extract::State,
@@ -9,6 +10,7 @@ use axum::{
 use axum_extra::extract::CookieJar;
 use nadekodon_core::utils::{logger, security};
 use serde::Deserialize;
+use serde::Serialize;
 use utoipa::ToSchema;
 
 const X_PASSWORD: HeaderName = HeaderName::from_static("x-password");
@@ -18,6 +20,13 @@ pub struct ChangeCredentialsRequest {
     pub new_username: Option<String>,
     pub new_password: Option<String>,
     pub server_port: Option<u16>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct ChangeCredentialsResponse {
+    pub access_token: String,
+    pub csrf_token: String,
+    pub expires_in: u64,
 }
 
 #[utoipa::path(
@@ -96,7 +105,19 @@ pub async fn handle_change_credentials(
     *state.username.write().await = new_username;
     *state.password.write().await = new_password_hash;
 
-    let jar = jar.add(build_api_cookie(&state.api_key.read().await));
+    let username = state.username.read().await.clone();
+    let jwt_response = create_jwt_response(&state, &username).unwrap();
+    let mut jar = jar.add(build_jwt_cookie(&jwt_response.access_token));
+    jar = jar.add(build_csrf_cookie(&jwt_response.csrf_token));
 
-    (StatusCode::OK, jar).into_response()
+    (
+        StatusCode::OK,
+        jar,
+        axum::Json(ChangeCredentialsResponse {
+            access_token: jwt_response.access_token,
+            csrf_token: jwt_response.csrf_token,
+            expires_in: jwt_response.expires_in,
+        }),
+    )
+        .into_response()
 }

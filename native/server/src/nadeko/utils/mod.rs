@@ -6,7 +6,8 @@ pub use img::*;
 pub use query_url::*;
 pub use query_ytdl::*;
 
-use crate::server::{SharedState, check_api_key};
+use crate::server::SharedState;
+use crate::security::check_api_key;
 use axum::middleware;
 use axum::{
     Router,

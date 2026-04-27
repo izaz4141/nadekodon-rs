@@ -90,7 +90,9 @@ pub async fn auth_login(
     {
         let cookie = Cookie::build(("SID", state.api_key.read().await.clone()))
             .path("/")
+            .secure(true)
             .http_only(true)
+            .same_site(axum_extra::extract::cookie::SameSite::Strict)
             .build();
         (jar.add(cookie), "Ok.").into_response()
     } else {

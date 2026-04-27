@@ -1,4 +1,5 @@
-use crate::server::{SharedState, build_api_cookie, get_master_key, normalize_secret};
+use crate::server::{SharedState, build_csrf_cookie, build_jwt_cookie, normalize_secret};
+use crate::security::create_jwt_response;
 use axum::Json;
 use axum::extract::State;
 use axum::response::IntoResponse;
@@ -12,6 +13,9 @@ use uuid::Uuid;
 #[derive(Serialize, ToSchema)]
 pub struct ApiKeyResponse {
     pub api_key: String,
+    pub access_token: String,
+    pub csrf_token: String,
+    pub expires_in: u64,
 }
 
 #[utoipa::path(
@@ -28,8 +32,7 @@ pub async fn handle_generate_api(
     jar: CookieJar,
 ) -> impl IntoResponse {
     let key = Uuid::new_v4().to_string();
-    let jar = jar.add(build_api_cookie(&key));
-    let master_key = get_master_key();
+    let master_key = state.master_key.read().await.clone();
     let encrypted_key = encryption::encrypt(&key, &master_key).unwrap_or_else(|_| key.clone());
     {
         let mut cfg = state.config.write().await;
@@ -37,8 +40,17 @@ pub async fn handle_generate_api(
         state.save_config(&cfg.clone());
     }
     *state.api_key.write().await = normalize_secret(&key).to_string();
+
+    let username = state.username.read().await.clone();
+    let jwt_response = create_jwt_response(&state, &username).unwrap();
+    let mut jar = jar.add(build_jwt_cookie(&jwt_response.access_token));
+    jar = jar.add(build_csrf_cookie(&jwt_response.csrf_token));
+
     let json_response = ApiKeyResponse {
         api_key: state.api_key.read().await.clone(),
+        access_token: jwt_response.access_token,
+        csrf_token: jwt_response.csrf_token,
+        expires_in: jwt_response.expires_in,
     };
     (jar, Json(json_response)).into_response()
 }

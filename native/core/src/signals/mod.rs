@@ -198,6 +198,7 @@ pub struct StartServer {
     pub api_key: String,
     pub username: String,
     pub password: String,
+    pub master_key: String,
 }
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]

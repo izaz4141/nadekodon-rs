@@ -1,5 +1,10 @@
-use crate::server::{SharedState, build_api_cookie, secure_compare};
-use axum::{extract::State, http::StatusCode, response::IntoResponse};
+use crate::security::{create_jwt_response, validate_jwt_request};
+use crate::server::{SharedState, build_csrf_cookie, build_jwt_cookie};
+use axum::{
+    extract::State,
+    http::{HeaderMap, StatusCode},
+    response::IntoResponse,
+};
 use axum_extra::{TypedHeader, extract::CookieJar};
 use headers::{Authorization, authorization::Basic};
 use nadekodon_core::utils::security;
@@ -9,6 +14,9 @@ use utoipa::ToSchema;
 #[derive(Serialize, ToSchema)]
 pub struct LoginResponse {
     pub api_key: String,
+    pub access_token: String,
+    pub csrf_token: String,
+    pub expires_in: u64,
 }
 
 #[utoipa::path(
@@ -24,14 +32,15 @@ pub struct LoginResponse {
 pub async fn handle_login(
     State(state): State<SharedState>,
     jar: CookieJar,
+    headers: HeaderMap,
     TypedHeader(Authorization(auth)): TypedHeader<Authorization<Basic>>,
 ) -> impl IntoResponse {
     let mut authorized = false;
-    if let Some(cookie) = jar.get("nadeko_api_key")
-        && secure_compare(cookie.value(), &state.api_key.read().await.clone())
-    {
+
+    if validate_jwt_request(&state, &jar, &headers).is_ok() {
         authorized = true;
     }
+
     if !authorized {
         let username = auth.username();
         let password = auth.password();
@@ -46,12 +55,19 @@ pub async fn handle_login(
         return (StatusCode::UNAUTHORIZED,).into_response();
     }
 
-    let jar = jar.add(build_api_cookie(&state.api_key.read().await));
+    let username = state.username.read().await.clone();
+    let api_key = state.api_key.read().await.clone();
+    let jwt_response = create_jwt_response(&state, &username).unwrap();
+    let mut jar = jar.add(build_jwt_cookie(&jwt_response.access_token));
+    jar = jar.add(build_csrf_cookie(&jwt_response.csrf_token));
 
     (
         jar,
         axum::Json(LoginResponse {
-            api_key: state.api_key.read().await.clone(),
+            api_key,
+            access_token: jwt_response.access_token,
+            csrf_token: jwt_response.csrf_token,
+            expires_in: jwt_response.expires_in,
         }),
     )
         .into_response()

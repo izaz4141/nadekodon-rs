@@ -4,16 +4,8 @@ use ncore::app_context::AppContext;
 use ncore::utils;
 use ncore::utils::logger;
 
-use axum::{
-    Router,
-    body::Body,
-    extract::State,
-    http::{Request, StatusCode},
-    middleware::Next,
-    response::IntoResponse,
-    routing::get,
-};
-use axum_extra::extract::{CookieJar, cookie::Cookie};
+use axum::{Router, routing::get};
+use axum_extra::extract::cookie::Cookie;
 use governor::{clock::QuantaInstant, middleware::NoOpMiddleware};
 use serde_json::Value;
 use std::env;
@@ -45,6 +37,7 @@ pub fn get_logs_dir() -> String {
 pub struct AppState {
     pub context: Arc<AppContext>,
     pub api_key: Arc<RwLock<String>>,
+    pub master_key: Arc<RwLock<String>>,
     pub username: Arc<RwLock<String>>,
     pub password: Arc<RwLock<String>>,
     pub config: Arc<RwLock<Value>>,
@@ -84,13 +77,22 @@ pub fn secure_compare(a: &str, b: &str) -> bool {
     a.as_bytes().ct_eq(b.as_bytes()).into()
 }
 
-pub fn build_api_cookie(key: &str) -> Cookie<'static> {
-    Cookie::build(("nadeko_api_key", key.to_string()))
+pub fn build_jwt_cookie(token: &str) -> Cookie<'static> {
+    Cookie::build(("nadekodon_jwt", token.to_string()))
         .path("/")
         .secure(true)
         .http_only(true)
-        .same_site(axum_extra::extract::cookie::SameSite::Strict)
-        .max_age(TimeDuration::days(30))
+        .same_site(axum_extra::extract::cookie::SameSite::Lax)
+        .max_age(TimeDuration::hours(3))
+        .build()
+}
+
+pub fn build_csrf_cookie(token: &str) -> Cookie<'static> {
+    Cookie::build(("nadekodon_csrf", token.to_string()))
+        .path("/")
+        .secure(true)
+        .same_site(axum_extra::extract::cookie::SameSite::Lax)
+        .max_age(TimeDuration::hours(3))
         .build()
 }
 
@@ -118,10 +120,6 @@ pub fn global_rate_limit_config()
         .unwrap()
 }
 
-pub fn get_master_key() -> String {
-    env::var("NADEKO_SERVER_MASTER_KEY").expect("NADEKO_SERVER_MASTER_KEY is not set")
-}
-
 pub fn load_config(path: &str) -> Value {
     let mut cfg = Value::Null;
     if let Ok(content) = std::fs::read_to_string("./assets/docs/default.json")
@@ -140,31 +138,6 @@ pub fn load_config(path: &str) -> Value {
         cfg = v;
     }
     cfg
-}
-
-pub async fn check_api_key(
-    State(state): State<SharedState>,
-    jar: CookieJar,
-    req: Request<Body>,
-    next: Next,
-) -> Result<impl IntoResponse, StatusCode> {
-    let api_key = state.api_key.read().await.clone();
-    if let Some(key) = req.headers().get("X-API-Key")
-        && key
-            .to_str()
-            .map(|k| secure_compare(k, &api_key))
-            .unwrap_or(false)
-    {
-        return Ok(next.run(req).await);
-    }
-
-    if let Some(cookie) = jar.get("nadeko_api_key")
-        && secure_compare(cookie.value(), &api_key)
-    {
-        return Ok(next.run(req).await);
-    }
-
-    Err(StatusCode::UNAUTHORIZED)
 }
 
 pub fn create_router(

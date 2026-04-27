@@ -18,7 +18,7 @@ impl Modify for SecurityModifier {
             "ApiKeyAuth",
             SecurityScheme::ApiKey(ApiKey::Header(ApiKeyValue::with_description(
                 "X-API-Key",
-                "API key authentication. Accepts X-API-Key header or nadeko_api_key cookie",
+                "API key authentication. Accepts X-API-Key header",
             ))),
         );
 

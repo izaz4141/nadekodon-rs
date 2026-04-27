@@ -16,7 +16,8 @@ pub use login::*;
 pub use salt::*;
 pub use verify_password::*;
 
-use crate::server::{SharedState, auth_rate_limit_config, check_api_key};
+use crate::server::{SharedState, auth_rate_limit_config};
+use crate::security::check_api_key;
 use axum::middleware;
 use axum::{
     Router,

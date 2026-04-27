@@ -195,6 +195,7 @@ pub struct RequestAddDownload {
 pub struct StartServer {
     pub port: u16,
     pub api_key: String,
+    pub master_key: String,
     pub username: String,
     pub password: String,
     pub config_path: String,

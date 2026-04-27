@@ -18,6 +18,7 @@ import 'package:nadekodon/utils/api_service.dart';
 import 'package:nadekodon/utils/single_instance.dart';
 import 'package:nadekodon/utils/app_lifecycle.dart';
 import 'package:nadekodon/utils/platform_service.dart';
+import 'package:nadekodon/utils/helper.dart';
 
 final _windowListener = _WindowListener();
 
@@ -51,9 +52,11 @@ Future<void> main() async {
         final dbPath = await SettingsManager.getDatabasePath();
         InitDatabase(path: dbPath).sendSignalToRust();
         NotificationService().startListening();
+        final masterKey = await getMasterKey();
         StartServer(
           port: SettingsManager.serverPort.value,
           apiKey: SettingsManager.serverApiKey.value,
+          masterKey: masterKey!,
           username: SettingsManager.username.value,
           password: SettingsManager.password.value,
           configPath: SettingsManager.configPath,

@@ -4,9 +4,8 @@ use nadekodon_server::{
     docs::create_docs_router,
     nadeko::{create_nadeko_router, system::handle_status},
     qbittorrent::get_router,
-    server::{
-        AppState, SharedState, check_api_key, global_rate_limit_config, load_config, run_server,
-    },
+    security::check_api_key,
+    server::{AppState, SharedState, global_rate_limit_config, load_config, run_server},
 };
 use ncore::app_context::AppContext;
 use ncore::utils::security;
@@ -175,6 +174,7 @@ pub async fn start_server_listener(context: Arc<AppContext>) {
             api_key: Arc::new(RwLock::new(msg.api_key)),
             username: Arc::new(RwLock::new(msg.username)),
             password: Arc::new(RwLock::new(password)),
+            master_key: Arc::new(RwLock::new(msg.master_key)),
             config,
             config_path,
             restart_signal: restart_signal.clone(),
