@@ -33,8 +33,8 @@ pub struct JwtResponse {
     pub expires_in: u64,
 }
 
-fn get_jwt_secret(state: &SharedState) -> Vec<u8> {
-    state.master_key.blocking_read().as_bytes().to_vec()
+async fn get_jwt_secret(state: &SharedState) -> Vec<u8> {
+    state.master_key.read().await.clone().into_bytes()
 }
 
 fn get_current_timestamp() -> u64 {
@@ -53,7 +53,7 @@ fn create_csrf_token() -> String {
     Uuid::new_v4().to_string()
 }
 
-fn create_jwt_token(
+async fn create_jwt_token(
     state: &SharedState,
     username: &str,
     csrf_token: &str,
@@ -70,11 +70,11 @@ fn create_jwt_token(
     encode(
         &header,
         &claims,
-        &EncodingKey::from_secret(&get_jwt_secret(state)),
+        &EncodingKey::from_secret(&get_jwt_secret(state).await),
     )
 }
 
-fn validate_jwt_token(
+async fn validate_jwt_token(
     state: &SharedState,
     token: &str,
 ) -> Result<TokenData<JwtClaims>, jsonwebtoken::errors::Error> {
@@ -83,7 +83,7 @@ fn validate_jwt_token(
 
     decode::<JwtClaims>(
         token,
-        &DecodingKey::from_secret(&get_jwt_secret(state)),
+        &DecodingKey::from_secret(&get_jwt_secret(state).await),
         &validation,
     )
 }
@@ -92,12 +92,12 @@ fn is_token_expired(exp: u64) -> bool {
     get_current_timestamp() >= exp
 }
 
-pub fn create_jwt_response(
+pub async fn create_jwt_response(
     state: &SharedState,
     username: &str,
 ) -> Result<JwtResponse, jsonwebtoken::errors::Error> {
     let csrf = create_csrf_token();
-    let access_token = create_jwt_token(state, username, &csrf)?;
+    let access_token = create_jwt_token(state, username, &csrf).await?;
     let expires_in = JWT_EXPIRY_HOURS * 3600;
 
     Ok(JwtResponse {
@@ -107,7 +107,7 @@ pub fn create_jwt_response(
     })
 }
 
-pub fn validate_jwt_request(
+pub async fn validate_jwt_request(
     state: &SharedState,
     jar: &CookieJar,
     headers: &HeaderMap,
@@ -121,7 +121,7 @@ pub fn validate_jwt_request(
     let token = jwt.ok_or("No JWT cookie")?;
     let csrf = csrf_header.ok_or("No CSRF header")?;
 
-    let token_data = validate_jwt_token(state, token.value()).map_err(|e| e.to_string())?;
+    let token_data = validate_jwt_token(state, token.value()).await.map_err(|e| e.to_string())?;
     let claims = token_data.claims;
 
     if is_token_expired(claims.exp) {

@@ -42,7 +42,7 @@ pub async fn handle_generate_api(
     *state.api_key.write().await = normalize_secret(&key).to_string();
 
     let username = state.username.read().await.clone();
-    let jwt_response = create_jwt_response(&state, &username).unwrap();
+    let jwt_response = create_jwt_response(&state, &username).await.unwrap();
     let mut jar = jar.add(build_jwt_cookie(&jwt_response.access_token));
     jar = jar.add(build_csrf_cookie(&jwt_response.csrf_token));
 

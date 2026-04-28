@@ -37,7 +37,7 @@ pub async fn handle_login(
 ) -> impl IntoResponse {
     let mut authorized = false;
 
-    if validate_jwt_request(&state, &jar, &headers).is_ok() {
+    if validate_jwt_request(&state, &jar, &headers).await.is_ok() {
         authorized = true;
     }
 
@@ -57,7 +57,7 @@ pub async fn handle_login(
 
     let username = state.username.read().await.clone();
     let api_key = state.api_key.read().await.clone();
-    let jwt_response = create_jwt_response(&state, &username).unwrap();
+    let jwt_response = create_jwt_response(&state, &username).await.unwrap();
     let mut jar = jar.add(build_jwt_cookie(&jwt_response.access_token));
     jar = jar.add(build_csrf_cookie(&jwt_response.csrf_token));
 

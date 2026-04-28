@@ -106,7 +106,7 @@ pub async fn handle_change_credentials(
     *state.password.write().await = new_password_hash;
 
     let username = state.username.read().await.clone();
-    let jwt_response = create_jwt_response(&state, &username).unwrap();
+    let jwt_response = create_jwt_response(&state, &username).await.unwrap();
     let mut jar = jar.add(build_jwt_cookie(&jwt_response.access_token));
     jar = jar.add(build_csrf_cookie(&jwt_response.csrf_token));
 
