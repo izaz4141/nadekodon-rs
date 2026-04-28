@@ -202,6 +202,7 @@ pub async fn spawn_download_worker(manager: Arc<downloader::DownloadManager>) {
             cookie: drequest.cookie,
             user_agent: drequest.user_agent,
             referer: drequest.referer,
+            category: drequest.category,
         };
         match downloader::spawn_download_worker_internal(&manager, coredrequest).await {
             Ok(_) => logger::debug(&format!("Spawned worker for {:?}", &drequest.url)),
@@ -423,6 +424,39 @@ pub async fn listen_worker_events(manager: Arc<downloader::DownloadManager>) {
             WorkerEvent::Error(id, msg) => {
                 logger::error(&format!("Worker {:?} finished: Error - {}", id, msg));
             }
+        }
+    }
+}
+
+pub async fn get_categories(manager: Arc<downloader::DownloadManager>) {
+    let receiver = signals::GetCategories::get_dart_signal_receiver();
+    while let Some(_signal_pack) = receiver.recv().await {
+        let categories = manager.list_categories().await;
+        let category_list: Vec<signals::CategoryDisplay> = categories
+            .into_iter()
+            .map(|c| signals::CategoryDisplay {
+                name: c.name,
+                save_path: c.save_path.map(|p| p.to_string_lossy().to_string()),
+            })
+            .collect();
+        signals::CategoriesOutput { categories: category_list }.send_signal_to_dart();
+    }
+}
+
+pub async fn update_categories(manager: Arc<downloader::DownloadManager>) {
+    let receiver = signals::UpdateCategories::get_dart_signal_receiver();
+    while let Some(signal_pack) = receiver.recv().await {
+        let data = signal_pack.message;
+        let category_infos: Vec<core::utils::types::CategoryInfo> = data
+            .categories
+            .into_iter()
+            .map(|c| core::utils::types::CategoryInfo {
+                name: c.name,
+                save_path: c.save_path.map(std::path::PathBuf::from),
+            })
+            .collect();
+        if let Err(e) = manager.update_categories(category_infos).await {
+            logger::error(&format!("Failed to update categories: {:?}", e));
         }
     }
 }

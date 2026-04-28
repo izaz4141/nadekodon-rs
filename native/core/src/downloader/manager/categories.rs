@@ -34,4 +34,38 @@ impl DownloadManager {
 
         Ok(())
     }
+
+    pub async fn list_categories(&self) -> Vec<CategoryInfo> {
+        let categories = self.categories.read().await.clone();
+        categories.values().cloned().collect()
+    }
+
+    pub async fn update_categories(
+        &self,
+        categories: Vec<CategoryInfo>,
+    ) -> Result<(), &'static str> {
+        for cat in &categories {
+            if cat.name.is_empty() {
+                return Err("Category name is empty");
+            }
+            if cat.name.contains('|') || cat.name.contains('/') {
+                return Err("Invalid category name");
+            }
+        }
+
+        let mut map = self.categories.write().await;
+        map.clear();
+        for cat in categories {
+            map.insert(cat.name.clone(), cat);
+        }
+
+        if let Some(ctx) = self.context.upgrade() {
+            let db = ctx.db().await;
+            tokio::spawn(async move {
+                db.save_categories().await;
+            });
+        }
+
+        Ok(())
+    }
 }

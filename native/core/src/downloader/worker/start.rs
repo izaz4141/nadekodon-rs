@@ -22,6 +22,10 @@ impl DownloadWorker {
         let threads = self.threads;
         let (url, dest) = self.extract_info().await;
 
+        if let Some(parent) = dest.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+
         if (Path::new(&url).is_file() && is_torrent_file(&url, &None)) || is_magnet_url(&url) {
             {
                 let mut info = self.info.lock().await;

@@ -64,6 +64,8 @@ async fn main() {
     spawn(downloader::cancel_download(dm.clone()));
     spawn(downloader::delete_download(dm.clone()));
     spawn(downloader::handle_update_download_url(dm.clone()));
+    spawn(downloader::get_categories(dm.clone()));
+    spawn(downloader::update_categories(dm.clone()));
     spawn(utils::ytdlp::handle_ytdl_query());
     spawn(downloader::handle_ffmpeg_results());
     spawn(utils::security::handle_password_security());

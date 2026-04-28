@@ -63,6 +63,7 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
   final _selectedDir = ValueNotifier<String>(
     SettingsManager.downloadFolder.value,
   );
+  final _selectedCategory = ValueNotifier<String?>(null);
 
   YtdlFormat? ytdlVideo;
   YtdlFormat? ytdlAudio;
@@ -228,6 +229,7 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
         cookie: widget.cookie,
         userAgent: widget.userAgent,
         referer: widget.referer,
+        category: _selectedCategory.value,
       ).sendSignalToRust();
       AppSnackBar.show(context, "Added local download");
     } else {
@@ -238,6 +240,7 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
         cookie: widget.cookie,
         userAgent: widget.userAgent,
         referer: widget.referer,
+        category: _selectedCategory.value,
       );
       AppSnackBar.show(context, "Added download");
     }
@@ -287,6 +290,7 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
       audioFormat: aFormat,
       isYtdl: true,
       referer: _urlController.text.trim(),
+      category: _selectedCategory.value,
     );
 
     if (!mounted) return;
@@ -336,6 +340,7 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
         _queryFinished,
         _isQueryingYtdl,
         _selectedDir,
+        _selectedCategory,
       ]),
       builder: (context, _) {
         return ConstrainedBox(
@@ -353,6 +358,7 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
       return YtdlpView(
         nameController: _nameController,
         selectedDir: _selectedDir,
+        selectedCategory: _selectedCategory,
         onDownload: _handleYtdlDownload,
         onVideoChanged: _onSelectYtdlVideo,
         onAudioChanged: _onSelectYtdlAudio,
@@ -366,6 +372,7 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
           QueryView(
             urlController: _urlController,
             selectedDir: _selectedDir,
+            selectedCategory: _selectedCategory,
             onQuery: _queryUrl,
           ),
         if (_showQueryInfo.value)
@@ -373,6 +380,7 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
             urlController: _urlController,
             nameController: _nameController,
             selectedDir: _selectedDir,
+            selectedCategory: _selectedCategory,
             queryFinished: _queryFinished,
             isQueryingYtdl: _isQueryingYtdl,
             onDownload: _handleSubmit,

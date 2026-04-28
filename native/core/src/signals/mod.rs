@@ -72,6 +72,7 @@ pub struct DoDownload {
     pub cookie: Option<String>,
     pub user_agent: Option<String>,
     pub referer: Option<String>,
+    pub category: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
@@ -247,4 +248,23 @@ pub struct FfmpegResult {
     pub id: String,
     pub success: bool,
     pub log: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct GetCategories {}
+
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+pub struct UpdateCategories {
+    pub categories: Vec<CategoryDisplay>,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct CategoriesOutput {
+    pub categories: Vec<CategoryDisplay>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CategoryDisplay {
+    pub name: String,
+    pub save_path: Option<String>,
 }

@@ -8,6 +8,7 @@ import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/ui/widgets/components/spin_box.dart';
 import 'package:nadekodon/ui/widgets/components/double_spin_box.dart';
 import 'package:nadekodon/ui/widgets/dialog/add_schedule_rule.dart';
+import 'package:nadekodon/ui/widgets/dialog/category_manager.dart';
 import 'package:nadekodon/ui/widgets/components/settings_chip.dart';
 
 class SettingsDM extends StatelessWidget {
@@ -56,6 +57,22 @@ class SettingsDM extends StatelessWidget {
                   }
                 },
               ),
+            );
+          },
+        ),
+        ListTile(
+          title: Text("Categories", style: textTheme.bodyMedium),
+          subtitle: Text(
+            "Manage download categories",
+            style: textTheme.bodySmall?.copyWith(
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+          trailing: Icon(Icons.chevron_right, color: colors.onSurfaceVariant),
+          onTap: () {
+            showDialog(
+              context: context,
+              builder: (context) => const CategoryManagerDialog(),
             );
           },
         ),

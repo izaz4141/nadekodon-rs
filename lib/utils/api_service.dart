@@ -386,6 +386,7 @@ class APIService {
     String? cookie,
     String? userAgent,
     String? referer,
+    String? category,
   }) async {
     final payload = {
       'url': url,
@@ -394,6 +395,7 @@ class APIService {
       'cookie': cookie,
       'user_agent': userAgent,
       'referer': referer,
+      'category': category,
       if (videoFormat != null)
         'video_format': {
           'format_id': videoFormat.formatId,
@@ -844,5 +846,54 @@ class APIService {
       log("Decrypt error: $e", isError: true);
     }
     return null;
+  }
+
+  static Future<List<CategoryDisplay>?> getCategories() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/nadeko/download/categories'),
+        headers: {
+          'X-API-Key': SettingsManager.serverApiKey.value,
+        },
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final categories = data['categories'] as List?;
+        return categories
+            ?.map((c) => CategoryDisplay(
+                  name: c['name'] as String,
+                  savePath: c['save_path'] as String?,
+                ))
+            .toList();
+      }
+    } catch (e) {
+      log("Get categories error: $e", isError: true);
+    }
+    return null;
+  }
+
+  static Future<bool> updateCategories(List<CategoryDisplay> categories) async {
+    try {
+      final payload = {
+        'categories': categories
+            .map((c) => {
+                  'name': c.name,
+                  'save_path': c.savePath,
+                })
+            .toList(),
+      };
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/nadeko/download/categories'),
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': SettingsManager.serverApiKey.value,
+        },
+        body: jsonEncode(payload),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      log("Update categories error: $e", isError: true);
+    }
+    return false;
   }
 }

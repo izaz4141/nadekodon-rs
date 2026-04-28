@@ -214,7 +214,7 @@ pub async fn spawn_download_worker_internal(
                         None,
                         None,
                         data.referer.clone(),
-                        None,
+                        data.category.clone(),
                     )
                     .await
                 {
@@ -238,7 +238,7 @@ pub async fn spawn_download_worker_internal(
                         None,
                         None,
                         data.referer.clone(),
-                        None,
+                        data.category.clone(),
                     )
                     .await
                 {
@@ -394,7 +394,7 @@ pub async fn spawn_download_worker_internal(
                 data.cookie,
                 data.user_agent,
                 data.referer,
-                None,
+                data.category,
             )
             .await
         {

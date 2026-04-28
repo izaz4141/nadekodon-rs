@@ -13,6 +13,7 @@ import 'package:nadekodon/src/bindings/bindings.dart';
 class YtdlpView extends StatefulWidget {
   final TextEditingController nameController;
   final ValueNotifier<String> selectedDir;
+  final ValueNotifier<String?> selectedCategory;
   final void Function() onDownload;
   final ValueChanged<YtdlFormat?> onVideoChanged;
   final ValueChanged<YtdlFormat?> onAudioChanged;
@@ -22,6 +23,7 @@ class YtdlpView extends StatefulWidget {
     super.key,
     required this.nameController,
     required this.selectedDir,
+    required this.selectedCategory,
     required this.onDownload,
     required this.onVideoChanged,
     required this.onAudioChanged,
@@ -265,7 +267,7 @@ class _YtdlpView extends State<YtdlpView> {
           decoration: InputDecoration(
             labelText: "Filename",
             labelStyle: textTheme.bodyMedium,
-            floatingLabelStyle: textTheme.bodySmall?.copyWith(
+            floatingLabelStyle: textTheme.bodyMedium?.copyWith(
               color: colors.primary,
             ),
             hintText: "No format needed",
@@ -296,7 +298,10 @@ class _YtdlpView extends State<YtdlpView> {
           style: textTheme.bodyMedium,
         ),
         SizedBox(height: AppTheme.spaceSM * AppTheme.spaceScale(context)),
-        DirChoose(selectedDir: widget.selectedDir),
+        DirChoose(
+          selectedDir: widget.selectedDir,
+          selectedCategory: widget.selectedCategory,
+        ),
         if (items.length > 1) ...[
           SizedBox(height: AppTheme.spaceSM * AppTheme.spaceScale(context)),
           pageNavigator,

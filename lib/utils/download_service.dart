@@ -118,6 +118,7 @@ class DownloadService {
     String? cookie,
     String? userAgent,
     String? referer,
+    String? category,
   }) async {
     if (PlatformService().isRemote) {
       await APIService.addDownload(
@@ -129,6 +130,7 @@ class DownloadService {
         cookie: cookie,
         userAgent: userAgent,
         referer: referer,
+        category: category,
       );
     } else {
       DoDownload(
@@ -140,6 +142,7 @@ class DownloadService {
         cookie: cookie,
         userAgent: userAgent,
         referer: referer,
+        category: category,
       ).sendSignalToRust();
     }
   }

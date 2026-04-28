@@ -1,4 +1,5 @@
 pub mod cancel;
+pub mod categories;
 pub mod create;
 pub mod delete;
 pub mod details;
@@ -9,6 +10,7 @@ pub mod resume;
 pub mod update_url;
 
 pub use cancel::handle_cancel_download;
+pub use categories::{handle_get_categories, handle_update_categories};
 pub use create::handle_create_download;
 pub use delete::*;
 pub use details::*;
@@ -37,5 +39,6 @@ pub fn create_download_router(state: SharedState) -> Router<SharedState> {
         .route("/delete", post(handle_delete_download))
         .route("/update-url", post(handle_update_url))
         .route("/file/{id}", get(handle_download_file))
+        .route("/categories", get(handle_get_categories).post(handle_update_categories))
         .layer(middleware::from_fn_with_state(state, check_api_key))
 }

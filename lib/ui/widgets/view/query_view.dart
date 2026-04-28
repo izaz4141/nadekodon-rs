@@ -6,12 +6,14 @@ import 'package:nadekodon/ui/widgets/components/dir_choose.dart';
 class QueryView extends StatelessWidget {
   final TextEditingController urlController;
   final ValueNotifier<String> selectedDir;
+  final ValueNotifier<String?> selectedCategory;
   final void Function() onQuery;
 
   const QueryView({
     super.key,
     required this.urlController,
     required this.selectedDir,
+    required this.selectedCategory,
     required this.onQuery,
   });
 
@@ -30,7 +32,7 @@ class QueryView extends StatelessWidget {
           decoration: InputDecoration(
             labelText: "Download URL",
             labelStyle: textTheme.bodyMedium,
-            floatingLabelStyle: textTheme.bodySmall?.copyWith(
+            floatingLabelStyle: textTheme.bodyMedium?.copyWith(
               color: colors.primary,
             ),
             hintText: "https://example.com/file.zip",
@@ -61,7 +63,7 @@ class QueryView extends StatelessWidget {
           style: textTheme.bodyMedium,
         ),
         const SizedBox(height: AppTheme.spaceLG),
-        DirChoose(selectedDir: selectedDir),
+        DirChoose(selectedDir: selectedDir, selectedCategory: selectedCategory),
       ],
     );
   }

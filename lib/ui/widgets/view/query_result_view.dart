@@ -11,6 +11,7 @@ class QueryResultView extends StatefulWidget {
   final TextEditingController urlController;
   final TextEditingController nameController;
   final ValueNotifier<String> selectedDir;
+  final ValueNotifier<String?> selectedCategory;
   final ValueNotifier<bool> queryFinished;
   final ValueNotifier<bool> isQueryingYtdl;
   final void Function() onDownload;
@@ -22,6 +23,7 @@ class QueryResultView extends StatefulWidget {
     required this.urlController,
     required this.nameController,
     required this.selectedDir,
+    required this.selectedCategory,
     required this.queryFinished,
     required this.isQueryingYtdl,
     required this.onDownload,
@@ -112,7 +114,7 @@ class _QueryResultViewState extends State<QueryResultView> {
             decoration: InputDecoration(
               labelText: "Filename",
               labelStyle: textTheme.bodyMedium,
-              floatingLabelStyle: textTheme.bodySmall?.copyWith(
+              floatingLabelStyle: textTheme.bodyMedium?.copyWith(
                 color: colors.primary,
               ),
               hintText: "download.bin",
@@ -143,7 +145,10 @@ class _QueryResultViewState extends State<QueryResultView> {
             style: textTheme.bodyMedium,
           ),
           const SizedBox(height: AppTheme.spaceSM),
-          DirChoose(selectedDir: widget.selectedDir),
+          DirChoose(
+            selectedDir: widget.selectedDir,
+            selectedCategory: widget.selectedCategory,
+          ),
           const SizedBox(height: AppTheme.spaceSM),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,

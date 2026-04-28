@@ -72,6 +72,7 @@ pub struct DoDownload {
     pub cookie: Option<String>,
     pub user_agent: Option<String>,
     pub referer: Option<String>,
+    pub category: Option<String>,
 }
 
 #[derive(Deserialize, DartSignal)]
@@ -331,4 +332,23 @@ pub struct PutTaggingRequest {
 pub struct PutTaggingResponse {
     pub id: String,
     pub success: String,
+}
+
+#[derive(Deserialize, DartSignal)]
+pub struct GetCategories {}
+
+#[derive(Deserialize, DartSignal)]
+pub struct UpdateCategories {
+    pub categories: Vec<CategoryDisplay>,
+}
+
+#[derive(Serialize, RustSignal)]
+pub struct CategoriesOutput {
+    pub categories: Vec<CategoryDisplay>,
+}
+
+#[derive(Serialize, Deserialize, SignalPiece)]
+pub struct CategoryDisplay {
+    pub name: String,
+    pub save_path: Option<String>,
 }

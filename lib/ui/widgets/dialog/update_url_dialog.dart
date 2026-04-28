@@ -89,7 +89,7 @@ class _UpdateUrlDialogState extends State<UpdateUrlDialog> {
             decoration: InputDecoration(
               labelText: "New URL",
               labelStyle: textTheme.bodyMedium,
-              floatingLabelStyle: textTheme.bodySmall?.copyWith(
+              floatingLabelStyle: textTheme.bodyMedium?.copyWith(
                 color: colors.primary,
               ),
               hintText: "https://example.com",

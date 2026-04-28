@@ -356,7 +356,6 @@ class _DownloadPageState extends State<DownloadPage>
                           borderRadius: BorderRadius.circular(
                             AppTheme.radiusLG * AppTheme.radiusScale(context),
                           ),
-                          borderSide: BorderSide.none,
                         ),
                         filled: true,
                         fillColor: colors.surfaceContainer,
