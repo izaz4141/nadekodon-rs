@@ -74,7 +74,7 @@ async fn create_jwt_token(
     )
 }
 
-async fn validate_jwt_token(
+pub async fn validate_jwt_token(
     state: &SharedState,
     token: &str,
 ) -> Result<TokenData<JwtClaims>, jsonwebtoken::errors::Error> {
@@ -86,10 +86,6 @@ async fn validate_jwt_token(
         &DecodingKey::from_secret(&get_jwt_secret(state).await),
         &validation,
     )
-}
-
-fn is_token_expired(exp: u64) -> bool {
-    get_current_timestamp() >= exp
 }
 
 pub async fn create_jwt_response(
@@ -125,10 +121,6 @@ pub async fn validate_jwt_request(
         .await
         .map_err(|e| e.to_string())?;
     let claims = token_data.claims;
-
-    if is_token_expired(claims.exp) {
-        return Err("Token expired".to_string());
-    }
 
     if !secure_compare(&claims.csrf, &csrf) {
         return Err("CSRF token mismatch".to_string());
