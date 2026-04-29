@@ -66,8 +66,12 @@ class _DirChooseState extends State<DirChoose> {
     if (category == null || category.savePath == null) {
       return widget.selectedDir.value;
     }
+    final savePath = category.savePath!;
+    if (savePath.startsWith('/') || RegExp(r'^[A-Za-z]:').hasMatch(savePath)) {
+      return savePath;
+    }
     final baseDir = SettingsManager.downloadFolder.value;
-    return '$baseDir/${category.savePath}';
+    return '$baseDir/$savePath';
   }
 
   void _showDropdown(BuildContext context) async {
