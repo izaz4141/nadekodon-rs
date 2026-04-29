@@ -1,0 +1,80 @@
+name: Checks & Formats
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  flutter:
+    name: Flutter Checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Fetch version info
+        shell: bash
+        run: |
+          FLUTTER_VERSION=$(jq -r '.flutter' .fvmrc)
+          echo "FLUTTER_VERSION=${FLUTTER_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Cache Cargo Binaries
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin
+          key: ${{ runner.os }}-cargo-bin
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+          cache-key: "flutter-:os:-:channel:-:version:-:arch:-:hash:"
+          cache-path: "${{ runner.tool_cache }}/flutter/:channel:-:version:-:arch:"
+
+      - name: Generate rinf bindings
+        shell: bash
+        run: |
+          if ! command -v rinf &> /dev/null; then
+            cargo install rinf_cli
+          fi
+          rinf gen
+
+      - name: Get Flutter packages
+        run: flutter pub get
+
+      - name: Dart Format Checker
+        run: dart format . -o none --set-exit-if-changed
+
+      - name: Flutter Analyzer
+        run: flutter analyze --fatal-warnings
+
+  rust:
+    name: Rust Checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Rust Linter
+        run: cargo check --all-targets --all-features
+
+      - name: Rust Format Checker
+        run: cargo fmt --all -- --check
