@@ -421,7 +421,11 @@ pub async fn torrents_add(
         let categories = state.context.dm().await.categories.read().await.clone();
         if let Some(cat_info) = categories.get(cat) {
             if let Some(ref sp) = cat_info.save_path {
-                sp.clone()
+                if sp.is_absolute() {
+                    sp.clone()
+                } else {
+                    PathBuf::from(&default_save_dir).join(sp)
+                }
             } else {
                 PathBuf::from(&default_save_dir)
             }
