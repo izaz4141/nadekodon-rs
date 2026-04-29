@@ -66,8 +66,17 @@ class _DirChooseState extends State<DirChoose> {
     if (category == null || category.savePath == null) {
       return widget.selectedDir.value;
     }
+    final savePath = category.savePath!;
+    final isUnixAbsolute = savePath.startsWith('/');
+    final isWindowsDriveAbsolute = RegExp(
+      r'^[A-Za-z]:[\\/]',
+    ).hasMatch(savePath);
+    final isWindowsUncAbsolute = savePath.startsWith(r'\\');
+    if (isUnixAbsolute || isWindowsDriveAbsolute || isWindowsUncAbsolute) {
+      return savePath;
+    }
     final baseDir = SettingsManager.downloadFolder.value;
-    return '$baseDir/${category.savePath}';
+    return '$baseDir/$savePath';
   }
 
   void _showDropdown(BuildContext context) async {
