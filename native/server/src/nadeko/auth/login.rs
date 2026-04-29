@@ -1,5 +1,5 @@
 use crate::security::{create_jwt_response, validate_jwt_request};
-use crate::server::{SharedState, build_csrf_cookie, build_jwt_cookie};
+use crate::server::{SharedState, build_jwt_cookie};
 use axum::{
     extract::State,
     http::{HeaderMap, StatusCode},
@@ -58,8 +58,7 @@ pub async fn handle_login(
     let username = state.username.read().await.clone();
     let api_key = state.api_key.read().await.clone();
     let jwt_response = create_jwt_response(&state, &username).await.unwrap();
-    let mut jar = jar.add(build_jwt_cookie(&jwt_response.access_token));
-    jar = jar.add(build_csrf_cookie(&jwt_response.csrf_token));
+    let jar = build_jwt_cookie(jar, &jwt_response);
 
     (
         jar,
