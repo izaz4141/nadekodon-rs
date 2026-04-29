@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::path::PathBuf;
+use std::path::{Component, PathBuf};
 
 use crate::utils::types::CategoryInfo;
 
@@ -20,7 +20,14 @@ impl DownloadManager {
 
         let mut categories = self.categories.write().await;
         if categories.contains_key(&name) {
+            drop(categories);
             return Ok(());
+        }
+
+        if let Some(path) = &save_path {
+            if path.components().any(|c| matches!(c, Component::ParentDir)) {
+                return Err("Path traversal is not allowed in save_path");
+            }
         }
 
         categories.insert(name.clone(), CategoryInfo { name, save_path });
@@ -53,10 +60,19 @@ impl DownloadManager {
             }
         }
 
-        let mut map = self.categories.write().await;
-        map.clear();
+        let mut next = std::collections::HashMap::new();
         for cat in categories {
-            map.insert(cat.name.clone(), cat);
+            if let Some(path) = &cat.save_path {
+                if path.components().any(|c| matches!(c, Component::ParentDir)) {
+                    return Err("Path traversal is not allowed in save_path");
+                }
+            }
+            next.insert(cat.name.clone(), cat);
+        }
+
+        {
+            let mut map = self.categories.write().await;
+            *map = next;
         }
 
         if let Some(ctx) = self.context.upgrade() {
