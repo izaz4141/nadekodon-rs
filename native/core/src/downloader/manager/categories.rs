@@ -60,15 +60,19 @@ impl DownloadManager {
             }
         }
 
-        let mut map = self.categories.write().await;
-        map.clear();
+        let mut next = std::collections::HashMap::new();
         for cat in categories {
             if let Some(path) = &cat.save_path {
                 if path.components().any(|c| matches!(c, Component::ParentDir)) {
                     return Err("Path traversal is not allowed in save_path");
                 }
             }
-            map.insert(cat.name.clone(), cat);
+            next.insert(cat.name.clone(), cat);
+        }
+
+        {
+            let mut map = self.categories.write().await;
+            *map = next;
         }
 
         if let Some(ctx) = self.context.upgrade() {
