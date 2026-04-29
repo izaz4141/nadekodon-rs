@@ -72,6 +72,15 @@ impl DatabaseManager {
             let url: String = row.get("url");
             let dest_str: String = row.get("dest");
             let dest = PathBuf::from(dest_str);
+            if dest.components().any(|c| matches!(c, Component::ParentDir)) {
+                logger::warn(&format!(
+                    "Skipping Download with id '{}' due to invalid save_path: {}",
+                    id.to_string(),
+                    dest.display()
+                ));
+                continue;
+            }
+
             let total_size: Option<i64> = row.get("total_size");
             let total_size = total_size.map(|s| s as u64);
             let downloaded: i64 = row.get("downloaded");
@@ -155,6 +164,11 @@ impl DatabaseManager {
             let save_path = save_path.map(PathBuf::from);
             if let Some(path) = &save_path {
                 if path.components().any(|c| matches!(c, Component::ParentDir)) {
+                    logger::warn(&format!(
+                        "Skipping category '{}' due to invalid save_path: {}",
+                        name,
+                        path.display()
+                    ));
                     continue;
                 }
             }
