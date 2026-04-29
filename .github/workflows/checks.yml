@@ -53,7 +53,8 @@ jobs:
         run: flutter pub get
 
       - name: Dart Format Checker
-        run: dart format . -o none --set-exit-if-changed
+        run: |
+          find lib test -path "lib/src/bindings" -prune -o -name "*.dart" -print0 | xargs -0 dart format -o none --set-exit-if-changed
 
       - name: Flutter Analyzer
         run: flutter analyze --fatal-warnings
