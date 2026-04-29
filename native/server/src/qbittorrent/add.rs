@@ -415,23 +415,22 @@ pub async fn torrents_add(
         settings.download_dir.clone()
     };
 
+    let resolve_path = |path: &str, default: &str| -> PathBuf {
+        let p = PathBuf::from(path);
+        if p.is_absolute() {
+            p
+        } else {
+            PathBuf::from(default).join(path)
+        }
+    };
+
     let dest_dir = if let Some(ref sp) = savepath {
-        PathBuf::from(sp)
+        resolve_path(sp, &default_save_dir)
     } else if let Some(ref cat) = category {
         let categories = state.context.dm().await.categories.read().await.clone();
-        if let Some(cat_info) = categories.get(cat) {
-            if let Some(ref sp) = cat_info.save_path {
-                if sp.is_absolute() {
-                    sp.clone()
-                } else {
-                    PathBuf::from(&default_save_dir).join(sp)
-                }
-            } else {
-                PathBuf::from(&default_save_dir)
-            }
-        } else {
-            PathBuf::from(&default_save_dir)
-        }
+        let path = categories.get(cat).and_then(|c| c.save_path.as_ref());
+        path.map(|p| resolve_path(&p.to_string_lossy(), &default_save_dir))
+            .unwrap_or_else(|| PathBuf::from(&default_save_dir))
     } else {
         PathBuf::from(&default_save_dir)
     };
