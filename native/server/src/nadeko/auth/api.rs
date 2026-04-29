@@ -1,5 +1,5 @@
 use crate::security::create_jwt_response;
-use crate::server::{SharedState, build_csrf_cookie, build_jwt_cookie, normalize_secret};
+use crate::server::{SharedState, build_jwt_cookie, normalize_secret};
 use axum::Json;
 use axum::extract::State;
 use axum::response::IntoResponse;
@@ -43,8 +43,7 @@ pub async fn handle_generate_api(
 
     let username = state.username.read().await.clone();
     let jwt_response = create_jwt_response(&state, &username).await.unwrap();
-    let mut jar = jar.add(build_jwt_cookie(&jwt_response.access_token));
-    jar = jar.add(build_csrf_cookie(&jwt_response.csrf_token));
+    let jar = build_jwt_cookie(jar, &jwt_response);
 
     let json_response = ApiKeyResponse {
         api_key: state.api_key.read().await.clone(),

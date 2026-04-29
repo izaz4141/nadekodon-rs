@@ -22,7 +22,8 @@ pub use misc::{
 };
 pub use properties::{TorrentsPropertiesQuery, TorrentsPropertiesResponse, torrents_properties};
 
-use crate::server::{SharedState, auth_rate_limit_config, secure_compare};
+use crate::security::{create_jwt_response, validate_jwt_token};
+use crate::server::{SharedState, auth_rate_limit_config};
 use axum::{
     Form, Router,
     extract::State,
@@ -33,6 +34,7 @@ use axum::{
 use axum_extra::extract::cookie::{Cookie, CookieJar};
 use nadekodon_core::utils::security;
 use serde::Deserialize;
+use time::Duration;
 use tower_governor::GovernorLayer;
 use utoipa::ToSchema;
 
@@ -88,11 +90,19 @@ pub async fn auth_login(
     if auth.username == *current_username
         && security::validate_password(&current_hash, &auth.password).unwrap_or(false)
     {
-        let cookie = Cookie::build(("SID", state.api_key.read().await.clone()))
+        let jwt_response = match create_jwt_response(&state, &auth.username).await {
+            Ok(resp) => resp,
+            Err(_) => {
+                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create token")
+                    .into_response();
+            }
+        };
+        let cookie = Cookie::build(("SID", jwt_response.access_token))
             .path("/")
             .secure(true)
             .http_only(true)
             .same_site(axum_extra::extract::cookie::SameSite::Strict)
+            .max_age(Duration::seconds(jwt_response.expires_in as i64))
             .build();
         (jar.add(cookie), "Ok.").into_response()
     } else {
@@ -106,10 +116,12 @@ async fn auth_middleware(
     req: axum::http::Request<axum::body::Body>,
     next: axum::middleware::Next,
 ) -> impl IntoResponse {
-    if let Some(cookie) = jar.get("SID")
-        && secure_compare(cookie.value(), &state.api_key.read().await.clone())
-    {
-        return next.run(req).await;
+    if let Some(cookie) = jar.get("SID") {
+        let token = cookie.value();
+        match validate_jwt_token(&state, token).await {
+            Ok(_) => return next.run(req).await,
+            Err(_) => return StatusCode::FORBIDDEN.into_response(),
+        }
     }
     StatusCode::FORBIDDEN.into_response()
 }

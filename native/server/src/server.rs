@@ -1,11 +1,15 @@
 extern crate nadekodon_core as ncore;
-
 use ncore::app_context::AppContext;
 use ncore::utils;
 use ncore::utils::logger;
 
+use crate::security::JwtResponse;
+
 use axum::{Router, routing::get};
-use axum_extra::extract::cookie::Cookie;
+use axum_extra::extract::{
+    CookieJar,
+    cookie::{Cookie, SameSite},
+};
 use governor::{clock::QuantaInstant, middleware::NoOpMiddleware};
 use serde_json::Value;
 use std::env;
@@ -77,23 +81,21 @@ pub fn secure_compare(a: &str, b: &str) -> bool {
     a.as_bytes().ct_eq(b.as_bytes()).into()
 }
 
-pub fn build_jwt_cookie(token: &str) -> Cookie<'static> {
-    Cookie::build(("nadekodon_jwt", token.to_string()))
+pub fn build_jwt_cookie(jar: CookieJar, jwt: &JwtResponse) -> CookieJar {
+    let jwt_token = Cookie::build(("nadekodon_jwt", jwt.access_token.clone()))
         .path("/")
         .secure(true)
         .http_only(true)
-        .same_site(axum_extra::extract::cookie::SameSite::Lax)
-        .max_age(TimeDuration::hours(3))
-        .build()
-}
-
-pub fn build_csrf_cookie(token: &str) -> Cookie<'static> {
-    Cookie::build(("nadekodon_csrf", token.to_string()))
+        .same_site(SameSite::Lax)
+        .max_age(TimeDuration::seconds(jwt.expires_in as i64))
+        .build();
+    let csrf_token = Cookie::build(("nadekodon_csrf", jwt.csrf_token.clone()))
         .path("/")
         .secure(true)
-        .same_site(axum_extra::extract::cookie::SameSite::Lax)
-        .max_age(TimeDuration::hours(3))
-        .build()
+        .same_site(SameSite::Lax)
+        .max_age(TimeDuration::seconds(jwt.expires_in as i64))
+        .build();
+    jar.add(jwt_token).add(csrf_token)
 }
 
 pub fn get_config_path() -> String {
