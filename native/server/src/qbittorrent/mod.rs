@@ -34,6 +34,7 @@ use axum::{
 use axum_extra::extract::cookie::{Cookie, CookieJar};
 use nadekodon_core::utils::security;
 use serde::Deserialize;
+use time::Duration;
 use tower_governor::GovernorLayer;
 use utoipa::ToSchema;
 
@@ -101,6 +102,7 @@ pub async fn auth_login(
             .secure(true)
             .http_only(true)
             .same_site(axum_extra::extract::cookie::SameSite::Strict)
+            .max_age(Duration::seconds(jwt_response.expires_in as i64))
             .build();
         (jar.add(cookie), "Ok.").into_response()
     } else {
