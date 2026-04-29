@@ -7,7 +7,7 @@
   <p>
     <a href="https://github.com/izaz4141/nadekodon-rs/releases"><img src="https://img.shields.io/github/v/release/izaz4141/nadekodon-rs?style=for-the-badge&labelColor=101418&color=9ccbfb" alt="GitHub release"></a>
     <a href="https://github.com/izaz4141/nadekodon-rs/blob/main/LICENSE.md"><img src="https://img.shields.io/github/license/izaz4141/nadekodon-rs?style=for-the-badge&labelColor=101418&color=b9c8da" alt="GitHub License"></a>
-    <a href="https://github.com/izaz4141/nadekodon-rs/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/izaz4141/nadekodon-rs/build.yml?branch=main&style=for-the-badge&labelColor=101418&color=a6e3a1&label=BUILD" alt="Build Status"></a>
+    <a href="https://github.com/izaz4141/nadekodon-rs/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/izaz4141/nadekodon-rs/build.yml?branch=main&style=for-the-badge&labelColor=101418&label=BUILD" alt="Build Status"></a>
   </p>
   
   <p>
