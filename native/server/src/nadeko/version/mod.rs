@@ -6,8 +6,8 @@ pub use compare::*;
 pub use current::*;
 pub use latest::*;
 
-use crate::server::SharedState;
 use crate::security::check_api_key;
+use crate::server::SharedState;
 use axum::middleware;
 use axum::{
     Router,

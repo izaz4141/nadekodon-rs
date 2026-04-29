@@ -1,5 +1,5 @@
-use crate::server::{SharedState, build_csrf_cookie, build_jwt_cookie, normalize_secret};
 use crate::security::create_jwt_response;
+use crate::server::{SharedState, build_csrf_cookie, build_jwt_cookie, normalize_secret};
 use axum::{
     Json,
     extract::State,

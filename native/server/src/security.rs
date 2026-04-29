@@ -121,7 +121,9 @@ pub async fn validate_jwt_request(
     let token = jwt.ok_or("No JWT cookie")?;
     let csrf = csrf_header.ok_or("No CSRF header")?;
 
-    let token_data = validate_jwt_token(state, token.value()).await.map_err(|e| e.to_string())?;
+    let token_data = validate_jwt_token(state, token.value())
+        .await
+        .map_err(|e| e.to_string())?;
     let claims = token_data.claims;
 
     if is_token_expired(claims.exp) {

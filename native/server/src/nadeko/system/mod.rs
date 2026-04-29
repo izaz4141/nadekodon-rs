@@ -6,8 +6,8 @@ pub use restart::*;
 pub use settings::*;
 pub use status::*;
 
-use crate::server::SharedState;
 use crate::security::check_api_key;
+use crate::server::SharedState;
 use axum::{
     Router, middleware,
     routing::{get, post},

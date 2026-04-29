@@ -439,7 +439,10 @@ pub async fn get_categories(manager: Arc<downloader::DownloadManager>) {
                 save_path: c.save_path.map(|p| p.to_string_lossy().to_string()),
             })
             .collect();
-        signals::CategoriesOutput { categories: category_list }.send_signal_to_dart();
+        signals::CategoriesOutput {
+            categories: category_list,
+        }
+        .send_signal_to_dart();
     }
 }
 

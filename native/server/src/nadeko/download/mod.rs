@@ -20,8 +20,8 @@ pub use pause::handle_pause_download;
 pub use resume::*;
 pub use update_url::*;
 
-use crate::server::SharedState;
 use crate::security::check_api_key;
+use crate::server::SharedState;
 use axum::middleware;
 use axum::{
     Router,
@@ -39,6 +39,9 @@ pub fn create_download_router(state: SharedState) -> Router<SharedState> {
         .route("/delete", post(handle_delete_download))
         .route("/update-url", post(handle_update_url))
         .route("/file/{id}", get(handle_download_file))
-        .route("/categories", get(handle_get_categories).post(handle_update_categories))
+        .route(
+            "/categories",
+            get(handle_get_categories).post(handle_update_categories),
+        )
         .layer(middleware::from_fn_with_state(state, check_api_key))
 }

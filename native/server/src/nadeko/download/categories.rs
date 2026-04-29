@@ -1,6 +1,6 @@
 use crate::server::SharedState;
-use axum::{extract::State, response::IntoResponse, Json};
-use nadekodon_core::signals::{CategoryDisplay, CategoriesOutput, UpdateCategories};
+use axum::{Json, extract::State, response::IntoResponse};
+use nadekodon_core::signals::{CategoriesOutput, CategoryDisplay, UpdateCategories};
 use std::path::PathBuf;
 
 #[utoipa::path(
@@ -13,9 +13,7 @@ use std::path::PathBuf;
         (status = 500, description = "Server error")
     )
 )]
-pub async fn handle_get_categories(
-    State(state): State<SharedState>,
-) -> impl IntoResponse {
+pub async fn handle_get_categories(State(state): State<SharedState>) -> impl IntoResponse {
     let dm = state.context.dm().await;
     let categories = dm.list_categories().await;
     let category_list: Vec<CategoryDisplay> = categories
@@ -25,7 +23,9 @@ pub async fn handle_get_categories(
             save_path: c.save_path.map(|p| p.to_string_lossy().to_string()),
         })
         .collect();
-    Json(CategoriesOutput { categories: category_list })
+    Json(CategoriesOutput {
+        categories: category_list,
+    })
 }
 
 #[utoipa::path(

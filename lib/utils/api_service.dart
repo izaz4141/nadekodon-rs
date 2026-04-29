@@ -852,18 +852,18 @@ class APIService {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/api/nadeko/download/categories'),
-        headers: {
-          'X-API-Key': SettingsManager.serverApiKey.value,
-        },
+        headers: {'X-API-Key': SettingsManager.serverApiKey.value},
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final categories = data['categories'] as List?;
         return categories
-            ?.map((c) => CategoryDisplay(
-                  name: c['name'] as String,
-                  savePath: c['save_path'] as String?,
-                ))
+            ?.map(
+              (c) => CategoryDisplay(
+                name: c['name'] as String,
+                savePath: c['save_path'] as String?,
+              ),
+            )
             .toList();
       }
     } catch (e) {
@@ -876,10 +876,7 @@ class APIService {
     try {
       final payload = {
         'categories': categories
-            .map((c) => {
-                  'name': c.name,
-                  'save_path': c.savePath,
-                })
+            .map((c) => {'name': c.name, 'save_path': c.savePath})
             .toList(),
       };
       final response = await http.post(

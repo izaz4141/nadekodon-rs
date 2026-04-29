@@ -139,7 +139,12 @@ class _DownloadDetailsDialogState extends State<DownloadDetailsDialog> {
           ),
         ),
         const SizedBox(height: AppTheme.spaceSM),
-        _buildDetailRow('Destination', details.dest, textTheme, scrollable: true),
+        _buildDetailRow(
+          'Destination',
+          details.dest,
+          textTheme,
+          scrollable: true,
+        ),
         const SizedBox(height: AppTheme.spaceSM),
         Row(
           children: [
@@ -252,10 +257,7 @@ class _DownloadDetailsDialogState extends State<DownloadDetailsDialog> {
               child: scrollable
                   ? SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
-                      child: Text(
-                        value,
-                        style: textTheme.bodyMedium,
-                      ),
+                      child: Text(value, style: textTheme.bodyMedium),
                     )
                   : Text(
                       value,
