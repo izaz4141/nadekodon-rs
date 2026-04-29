@@ -1,5 +1,8 @@
 use anyhow::Result;
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::{Component, PathBuf},
+    sync::Arc,
+};
 use uuid::Uuid;
 
 use crate::utils::logger;
@@ -39,6 +42,12 @@ impl DownloadManager {
         referer: Option<String>,
         category: Option<String>,
     ) -> Result<Uuid> {
+        if dest.components().any(|c| matches!(c, Component::ParentDir)) {
+            return Err(anyhow::anyhow!(
+                "Path traversal is not allowed in destination"
+            ));
+        }
+
         let id = Uuid::new_v4();
         let worker = DownloadWorker::new(
             id,
@@ -66,6 +75,17 @@ impl DownloadManager {
 
         for info in downloads {
             let id = info.id;
+            if info
+                .dest
+                .components()
+                .any(|c| matches!(c, Component::ParentDir))
+            {
+                logger::warn(&format!(
+                    "Download with id {} has path traversal, skipping.",
+                    &id
+                ));
+                continue;
+            }
             let result = DownloadWorker::from_info(
                 info,
                 self.client.clone(),

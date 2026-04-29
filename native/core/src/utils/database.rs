@@ -3,7 +3,7 @@ use crate::utils::types::{CategoryInfo, DownloadInfo, DownloadState, DownloadTyp
 
 use sqlx::{Pool, Row, Sqlite, sqlite::SqlitePoolOptions};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::Notify;
@@ -153,6 +153,11 @@ impl DatabaseManager {
             let name: String = row.get("name");
             let save_path: Option<String> = row.get("save_path");
             let save_path = save_path.map(PathBuf::from);
+            if let Some(path) = &save_path {
+                if path.components().any(|c| matches!(c, Component::ParentDir)) {
+                    continue;
+                }
+            }
             categories.insert(name.clone(), CategoryInfo { name, save_path });
         }
 
