@@ -107,6 +107,7 @@ pub async fn start_download_manager(
         seeding_ratio: 1.0,
         seeding_time: 30,
         download_dir: "Downloads".to_string(),
+        stalled_time: 30,
     };
 
     DownloadManager::new(client, settings, context).await

@@ -16,13 +16,14 @@ pub async fn update_settings(dm: Arc<DownloadManager>) {
         let data = signal_pack.message;
         let core_settings = signals::UpdateSettings {
             download_dir: data.download_dir,
-            download_retries: data.download_retries,
-            download_threads: data.download_threads,
-            download_timeout: data.download_timeout,
-            seeding_time: data.seeding_time,
-            concurrency_limit: data.concurrency_limit,
-            seeding_ratio: data.seeding_ratio,
             speed_limit: data.speed_limit,
+            download_threads: data.download_threads,
+            concurrency_limit: data.concurrency_limit,
+            download_timeout: data.download_timeout,
+            download_retries: data.download_retries,
+            seeding_time: data.seeding_time,
+            seeding_ratio: data.seeding_ratio,
+            stalled_time: data.stalled_time,
         };
         let dm_new = update_settings_internal(dm.clone(), core_settings).await;
         logger::debug(&format!("Updated DM Settings to {:?}", &dm_new));

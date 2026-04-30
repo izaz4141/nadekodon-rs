@@ -116,6 +116,16 @@ impl DownloadManager {
 
                 logger::debug(&format!("Worker {:?} finished event: {:?}", id, event));
             }
+            WorkerEvent::Stalled(id) => {
+                {
+                    let conc = self.concurrency.load(Ordering::SeqCst);
+                    if conc > 0 {
+                        self.concurrency.store(conc - 1, Ordering::SeqCst);
+                    };
+                }
+
+                logger::debug(&format!("Worker {:?} stalled, slot released", id));
+            }
         }
         let _ = self.broadcast_tx.send(event.clone());
         self.process_queue().await;
@@ -166,8 +176,16 @@ impl DownloadManager {
                 break;
             }
             let info = worker.info().await;
-            if matches!(info.state, DownloadState::Queued) {
-                to_start.push(id);
+            match info.state {
+                DownloadState::Queued => to_start.push(id),
+                DownloadState::Stalled => {
+                    let current_active = self.concurrency.load(Ordering::SeqCst);
+                    if current_active < limit {
+                        self.concurrency.fetch_add(1, Ordering::SeqCst);
+                        let _ = worker.resume().await;
+                    }
+                }
+                _ => continue,
             }
         }
 

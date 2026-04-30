@@ -39,6 +39,7 @@ async fn main() {
         seeding_ratio: 1.0,
         seeding_time: 30,
         download_dir: "Downloads".to_string(),
+        stalled_time: 30,
     };
 
     let context = AppContext::new(rclient.clone(), settings, shutdown_signal.clone()).await;

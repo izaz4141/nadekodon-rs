@@ -100,10 +100,10 @@ pub async fn torrents_info(
                     "active" => matches!(d.state, DownloadState::Running | DownloadState::Seeding),
                     "inactive" => matches!(
                         d.state,
-                        DownloadState::Paused | DownloadState::Queued | DownloadState::Completed
+                        DownloadState::Paused | DownloadState::Queued | DownloadState::Completed | DownloadState::Error(_)
                     ),
                     "resumed" => !matches!(d.state, DownloadState::Paused),
-                    "stalled" => false, // We don't have "stalled" state yet
+                    "stalled" => matches!(d.state, DownloadState::Stalled),
                     "errored" => matches!(d.state, DownloadState::Error(_)),
                     _ => true,
                 };
@@ -169,6 +169,7 @@ pub async fn torrents_info(
                 DownloadState::Paused => "pausedDL",
                 DownloadState::Completed => "uploading",
                 DownloadState::Seeding => "uploading",
+                DownloadState::Stalled => "stalledDL",
                 DownloadState::Cancelled => "error",
                 DownloadState::Error(_) => "error",
             };

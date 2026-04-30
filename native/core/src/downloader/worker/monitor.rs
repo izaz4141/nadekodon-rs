@@ -37,13 +37,46 @@ impl DownloadWorker {
 
                 tokio::select! {
                     _ = samp.tick() => {
-                        let snapshot = sampler_worker.downloaded.load(Ordering::SeqCst);
-                        let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
-                        sampler_worker.history.write().await.push((ts, snapshot));
+                        let current_value = match sampler_worker.info.lock().await.state.clone(){
+                            DownloadState::Running => sampler_worker.downloaded.load(Ordering::SeqCst),
+                            DownloadState::Seeding => sampler_worker.uploaded.load(Ordering::SeqCst),
+                            _ => continue
+                        };
+                        let ts_ms = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
+                        let ts_sec = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+
+                        sampler_worker.history.write().await.push((ts_ms as u128, current_value));
                         let hist_len = sampler_worker.history.read().await.len();
                         if hist_len > MAX_HISTORY {
                             let remove = hist_len - MAX_HISTORY;
                             sampler_worker.history.write().await.drain(0..remove);
+                        }
+
+                        let settings = sampler_worker.settings.read().await;
+                        let timeout_secs = settings.stalled_time * 60;
+                        drop(settings);
+                        let last_prog = sampler_worker.last_progress.load(Ordering::SeqCst);
+                        let time_diff = ts_sec.saturating_sub(last_prog);
+
+                        if timeout_secs > 0 && time_diff >= timeout_secs{
+                            let history = sampler_worker.history.read().await.clone();
+                            if let Some(last_entry) = history.last() {
+                                if current_value != last_entry.1 {
+                                    sampler_worker.last_progress.store(ts_sec, Ordering::SeqCst);
+                                } else {continue}
+                            } else {continue}
+
+                            let mut info = sampler_worker.info.lock().await;
+                            info.state = DownloadState::Stalled;
+                            let id = info.id;
+                            drop(info);
+                            sampler_worker.sync_to_info().await;
+                            let _ = sampler_worker
+                                .event_tx
+                                .send(WorkerEvent::Stalled(id))
+                                .await;
+                            logger::debug(&format!("Download {} marked as stalled", id));
+
                         }
                     }
                     _ = stop_flag.notified() => {

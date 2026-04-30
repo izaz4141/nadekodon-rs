@@ -12,6 +12,7 @@ pub struct DMSettings {
     pub seeding_ratio: f32,
     pub seeding_time: u64,
     pub download_dir: String,
+    pub stalled_time: u64,
 }
 
 #[derive(Debug)]
@@ -51,6 +52,7 @@ pub enum DownloadState {
     Paused,
     Completed,
     Seeding,
+    Stalled,
     Cancelled,
     Error(String),
 }
@@ -63,6 +65,7 @@ impl DownloadState {
             DownloadState::Paused => "Paused".to_string(),
             DownloadState::Completed => "Completed".to_string(),
             DownloadState::Seeding => "Seeding".to_string(),
+            DownloadState::Stalled => "Stalled".to_string(),
             DownloadState::Cancelled => "Cancelled".to_string(),
             DownloadState::Error(_) => "Error".to_string(),
         }
@@ -103,6 +106,7 @@ pub enum WorkerEvent {
     Completed(Uuid),
     Error(Uuid, String),
     Cancelled(Uuid),
+    Stalled(Uuid),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

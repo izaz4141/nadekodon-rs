@@ -57,6 +57,7 @@ pub async fn handle_update_settings(
         seeding_ratio: new_config["seeding_ratio"].as_f64().unwrap_or(0.0) as f32,
         seeding_time: new_config["seeding_time"].as_u64().unwrap_or(0),
         download_dir: format!("{}/downloads", nadeko_home()),
+        stalled_time: new_config["stalled_time"].as_u64().unwrap_or(30),
     };
     if let Err(e) = state.context.dm().await.update_settings(dm_settings).await {
         nadekodon_core::utils::logger::error(&format!("Error in updating DMSettings: {:?}", e));

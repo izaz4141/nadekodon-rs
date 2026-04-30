@@ -243,6 +243,8 @@ impl DownloadWorker {
                     Ordering::SeqCst,
                 );
                 logger::debug(&format!("Download {} completed, starting seeding", info.id));
+                drop(info);
+                self.history.write().await.clear();
             }
         }
 

@@ -218,6 +218,13 @@ class SettingsDM extends StatelessWidget {
           min: 0,
           max: 999999,
         ),
+        SpinBox(
+          title: "Stalled Time",
+          subtitle: "Time to mark as stalled (Minutes)",
+          valueListenable: SettingsManager.stalledTime,
+          min: 0,
+          max: 9999999,
+        ),
       ],
     );
   }

@@ -77,6 +77,12 @@ impl DownloadWorker {
             uploaded: AtomicU64::new(0),
             seeding_start: AtomicU64::new(0),
             history: RwLock::new(Vec::new()),
+            last_progress: AtomicU64::new(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
+            ),
             handles: Mutex::new(Vec::new()),
             part_progress: RwLock::new(Vec::new()),
             event_tx,
@@ -136,6 +142,12 @@ impl DownloadWorker {
             uploaded: AtomicU64::new(uploaded),
             seeding_start: AtomicU64::new(0),
             history: RwLock::new(safe_info.history),
+            last_progress: AtomicU64::new(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
+            ),
             handles: Mutex::new(Vec::new()),
             part_progress: RwLock::new(parts_progress),
             event_tx,

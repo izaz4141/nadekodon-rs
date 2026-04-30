@@ -11,6 +11,7 @@ pub struct UpdateSettings {
     pub download_retries: Option<u8>,
     pub seeding_ratio: Option<f32>,
     pub seeding_time: Option<u64>,
+    pub stalled_time: Option<u64>,
 }
 
 #[derive(Deserialize, DartSignal)]

@@ -1,5 +1,8 @@
 use anyhow::Result;
-use std::sync::{Arc, atomic::Ordering};
+use std::{
+    sync::{Arc, atomic::Ordering},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use crate::utils::types::{DownloadState, WorkerEvent};
 
@@ -21,6 +24,14 @@ impl DownloadWorker {
         {
             let mut info = self.info.lock().await;
             info.state = DownloadState::Running;
+            drop(info);
+            self.last_progress.store(
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
+                Ordering::SeqCst,
+            );
         }
         Ok(())
     }

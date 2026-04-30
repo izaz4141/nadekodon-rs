@@ -24,6 +24,7 @@ pub async fn update_settings_internal(
             .download_dir
             .clone()
             .unwrap_or(dm_old.download_dir.clone()),
+        stalled_time: settings.stalled_time.unwrap_or(dm_old.stalled_time),
     };
     drop(dm_old);
     let _ = dm.update_settings(dm_new.clone()).await;

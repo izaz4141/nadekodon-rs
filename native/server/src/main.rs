@@ -67,6 +67,7 @@ async fn main() {
         download_retries: initial_config["download_retries"].as_u64().unwrap_or(3) as u8,
         seeding_ratio: initial_config["seeding_ratio"].as_f64().unwrap_or(0.0) as f32,
         seeding_time: initial_config["seeding_time"].as_u64().unwrap_or(0),
+        stalled_time: initial_config["stalled_time"].as_u64().unwrap_or(30),
         download_dir: format!("{}/downloads", nadeko_home()),
     };
 
