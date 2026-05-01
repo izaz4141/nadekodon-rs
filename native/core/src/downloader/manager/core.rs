@@ -155,8 +155,7 @@ impl DownloadManager {
                 for (id, worker) in candidates {
                     set.spawn(async move {
                         let info = worker.info().await;
-                        let is_stalled = matches!(info.state, DownloadState::Stalled);
-                        if !is_stalled {
+                        if !matches!(info.state, DownloadState::Stalled) {
                             Some((id, worker))
                         } else {
                             None
@@ -178,6 +177,10 @@ impl DownloadManager {
                     return;
                 }
                 if worker.pause().await.is_ok() {
+                    let worker_info = worker.info.lock().await.clone();
+                    if matches!(worker_info.state, DownloadState::Stalled) {
+                        self.concurrency.fetch_add(1, Ordering::SeqCst);
+                    }
                     worker.info.lock().await.state = DownloadState::Queued;
                     if self.active.lock().await.remove(&id) {
                         self.concurrency.fetch_sub(1, Ordering::SeqCst);
@@ -204,8 +207,9 @@ impl DownloadManager {
             match info.state {
                 DownloadState::Queued => to_start.push(id),
                 DownloadState::Stalled => {
-                    let current_active = self.concurrency.load(Ordering::SeqCst);
-                    if current_active < limit {
+                    if self.concurrency.load(Ordering::SeqCst) < limit
+                        && !worker.stalled.load(Ordering::SeqCst)
+                    {
                         self.concurrency.fetch_add(1, Ordering::SeqCst);
                         let _ = worker.resume().await;
                     }
@@ -215,7 +219,6 @@ impl DownloadManager {
         }
 
         for id in to_start {
-            // It's possible another task already started a worker, so we check again.
             let current_active = self.concurrency.load(Ordering::SeqCst);
             if current_active < limit {
                 self.concurrency.fetch_add(1, Ordering::SeqCst);

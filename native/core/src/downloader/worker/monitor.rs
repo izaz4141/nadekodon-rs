@@ -67,6 +67,7 @@ impl DownloadWorker {
                         if let Some(previous_value) = previous_value {
                             if current_value != previous_value {
                                 sampler_worker.last_progress.store(ts_sec, Ordering::SeqCst);
+                                sampler_worker.stalled.store(false, Ordering::SeqCst);
                                 continue;
                             }
                         } else {
@@ -76,6 +77,7 @@ impl DownloadWorker {
                         if timeout_secs > 0 && time_diff >= timeout_secs {
                             let mut info = sampler_worker.info.lock().await;
                             info.state = DownloadState::Stalled;
+                            sampler_worker.stalled.store(true, Ordering::SeqCst);
                             let id = info.id;
                             drop(info);
                             let _ = sampler_worker

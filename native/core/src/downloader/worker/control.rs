@@ -20,6 +20,7 @@ impl DownloadWorker {
 
     pub async fn resume(self: &Arc<Self>) -> Result<()> {
         self.paused.store(false, Ordering::SeqCst);
+        self.stalled.store(false, Ordering::SeqCst);
         self.notify_resume.notify_waiters();
         {
             let mut info = self.info.lock().await;

@@ -28,6 +28,7 @@ pub struct DownloadWorker {
     paused: AtomicBool,
     pub(crate) started: AtomicBool,
     cancel: AtomicBool,
+    pub(crate) stalled: AtomicBool,
     threads: u64,
     speed_limit: AtomicU64,
     notify_resume: Notify,
@@ -52,6 +53,7 @@ impl std::fmt::Debug for DownloadWorker {
             .field("paused", &self.paused)
             .field("started", &self.started)
             .field("cancel", &self.cancel)
+            .field("stalled", &self.stalled)
             .field("threads", &self.threads)
             .field("speed_limit", &self.speed_limit)
             .field("downloaded", &self.downloaded)
