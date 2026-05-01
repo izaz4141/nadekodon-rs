@@ -13,6 +13,14 @@ impl DownloadManager {
             Some(worker) => {
                 {
                     let info = worker.info.lock().await;
+
+                    if matches!(
+                        info.state,
+                        DownloadState::StalledDL | DownloadState::StalledUP
+                    ) {
+                        self.concurrency.fetch_add(1, Ordering::SeqCst);
+                    }
+
                     if cfg!(target_os = "android") && info.download_type == DownloadType::YTDLP {
                         return Ok(());
                     }
@@ -59,6 +67,14 @@ impl DownloadManager {
             Some(worker) => {
                 {
                     let info = worker.info.lock().await;
+
+                    if matches!(
+                        info.state,
+                        DownloadState::StalledDL | DownloadState::StalledUP
+                    ) {
+                        self.concurrency.fetch_add(1, Ordering::SeqCst);
+                    }
+
                     if cfg!(target_os = "android") && info.download_type == DownloadType::YTDLP {
                         return Ok(());
                     }
