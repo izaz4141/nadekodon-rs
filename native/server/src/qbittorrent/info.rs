@@ -101,6 +101,8 @@ pub async fn torrents_info(
                     "inactive" => matches!(
                         d.state,
                         DownloadState::Paused
+                            | DownloadState::StalledDL
+                            | DownloadState::StalledUP
                             | DownloadState::Queued
                             | DownloadState::Completed
                             | DownloadState::Error(_)
