@@ -71,12 +71,19 @@ impl DownloadWorker {
             paused: AtomicBool::new(false),
             started: AtomicBool::new(false),
             cancel: AtomicBool::new(false),
+            stalled: AtomicBool::new(false),
             speed_limit: AtomicU64::new(speed_limit),
             notify_resume: Notify::new(),
             downloaded: AtomicU64::new(0),
             uploaded: AtomicU64::new(0),
             seeding_start: AtomicU64::new(0),
             history: RwLock::new(Vec::new()),
+            last_progress: AtomicU64::new(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
+            ),
             handles: Mutex::new(Vec::new()),
             part_progress: RwLock::new(Vec::new()),
             event_tx,
@@ -114,7 +121,11 @@ impl DownloadWorker {
         // Reset state to Paused if it was Running or Queued, to avoid auto-start issues
         let mut safe_info = info.clone();
         match safe_info.state {
-            DownloadState::Running | DownloadState::Queued | DownloadState::Seeding => {
+            DownloadState::Running
+            | DownloadState::Queued
+            | DownloadState::Seeding
+            | DownloadState::StalledDL
+            | DownloadState::StalledUP => {
                 safe_info.state = DownloadState::Paused;
             }
             _ => {}
@@ -130,12 +141,19 @@ impl DownloadWorker {
             paused: AtomicBool::new(is_paused),
             started: AtomicBool::new(false),
             cancel: AtomicBool::new(false),
+            stalled: AtomicBool::new(false),
             speed_limit: AtomicU64::new(speed_limit),
             notify_resume: Notify::new(),
             downloaded: AtomicU64::new(downloaded),
             uploaded: AtomicU64::new(uploaded),
             seeding_start: AtomicU64::new(0),
             history: RwLock::new(safe_info.history),
+            last_progress: AtomicU64::new(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
+            ),
             handles: Mutex::new(Vec::new()),
             part_progress: RwLock::new(parts_progress),
             event_tx,

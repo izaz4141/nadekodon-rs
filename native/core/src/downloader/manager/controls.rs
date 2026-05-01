@@ -11,15 +11,22 @@ impl DownloadManager {
         let w = { self.workers.lock().await.get(&id).cloned() };
         match w {
             Some(worker) => {
-                {
+                let was_stalled = {
                     let info = worker.info.lock().await;
+
                     if cfg!(target_os = "android") && info.download_type == DownloadType::YTDLP {
                         return Ok(());
                     }
-                }
+
+                    matches!(
+                        info.state,
+                        DownloadState::StalledDL | DownloadState::StalledUP
+                    )
+                };
 
                 worker.pause().await?;
                 if self.active.lock().await.remove(&id)
+                    && !was_stalled
                     && self.concurrency.load(Ordering::SeqCst) > 0
                 {
                     self.concurrency.fetch_sub(1, Ordering::SeqCst);
@@ -57,19 +64,27 @@ impl DownloadManager {
         let w = { self.workers.lock().await.get(&id).cloned() };
         match w {
             Some(worker) => {
-                {
+                let was_stalled = {
                     let info = worker.info.lock().await;
+
                     if cfg!(target_os = "android") && info.download_type == DownloadType::YTDLP {
                         return Ok(());
                     }
-                }
+
+                    matches!(
+                        info.state,
+                        DownloadState::StalledDL | DownloadState::StalledUP
+                    )
+                };
 
                 worker.cancel().await?;
                 self.active.lock().await.remove(&id);
-                let conc = self.concurrency.load(Ordering::SeqCst);
-                if conc > 0 {
-                    self.concurrency.store(conc - 1, Ordering::SeqCst);
-                };
+                if !was_stalled {
+                    let conc = self.concurrency.load(Ordering::SeqCst);
+                    if conc > 0 {
+                        self.concurrency.store(conc - 1, Ordering::SeqCst);
+                    };
+                }
                 self.process_queue().await;
                 Ok(())
             }

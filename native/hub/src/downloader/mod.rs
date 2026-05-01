@@ -415,14 +415,11 @@ pub async fn listen_worker_events(manager: Arc<downloader::DownloadManager>) {
     let mut rx = manager.subscribe();
     while let Ok(event) = rx.recv().await {
         match &event {
-            WorkerEvent::Completed(id) => {
-                logger::debug(&format!("Worker {:?} finished: Completed", id));
-            }
-            WorkerEvent::Cancelled(id) => {
-                logger::debug(&format!("Worker {:?} finished: Cancelled", id));
-            }
+            WorkerEvent::Completed(id) => logger::debug(&format!("Worker {:?} Completed", id)),
+            WorkerEvent::Stalled(id) => logger::debug(&format!("Worker {:?} Stalled", id)),
+            WorkerEvent::Cancelled(id) => logger::debug(&format!("Worker {:?} Cancelled", id)),
             WorkerEvent::Error(id, msg) => {
-                logger::error(&format!("Worker {:?} finished: Error - {}", id, msg));
+                logger::error(&format!("Worker {:?} Error - {}", id, msg))
             }
         }
     }

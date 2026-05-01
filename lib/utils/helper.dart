@@ -72,6 +72,8 @@ enum DownloadStatus {
   queued,
   running,
   seeding,
+  stalledDL,
+  stalledUP,
   paused,
   completed,
   cancelled,
@@ -88,6 +90,10 @@ DownloadStatus parseDownloadStatus(String state) {
       return DownloadStatus.running;
     case 'seeding':
       return DownloadStatus.seeding;
+    case 'stalleddl':
+      return DownloadStatus.stalledDL;
+    case 'stalledup':
+      return DownloadStatus.stalledUP;
     case 'paused':
       return DownloadStatus.paused;
     case 'completed':

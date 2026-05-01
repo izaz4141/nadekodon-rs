@@ -28,6 +28,7 @@ pub struct DownloadWorker {
     paused: AtomicBool,
     pub(crate) started: AtomicBool,
     cancel: AtomicBool,
+    pub(crate) stalled: AtomicBool,
     threads: u64,
     speed_limit: AtomicU64,
     notify_resume: Notify,
@@ -35,6 +36,7 @@ pub struct DownloadWorker {
     uploaded: AtomicU64,
     seeding_start: AtomicU64,
     pub(crate) history: RwLock<Vec<(u128, u64)>>,
+    pub(crate) last_progress: AtomicU64,
     pub torrent_session: Arc<tokio::sync::RwLock<Option<Arc<Session>>>>,
     handles: Mutex<Vec<JoinHandle<anyhow::Result<()>>>>,
     part_progress: RwLock<Vec<Arc<AtomicU64>>>,
@@ -51,6 +53,7 @@ impl std::fmt::Debug for DownloadWorker {
             .field("paused", &self.paused)
             .field("started", &self.started)
             .field("cancel", &self.cancel)
+            .field("stalled", &self.stalled)
             .field("threads", &self.threads)
             .field("speed_limit", &self.speed_limit)
             .field("downloaded", &self.downloaded)

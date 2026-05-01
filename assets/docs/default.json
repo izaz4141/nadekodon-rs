@@ -16,6 +16,7 @@
   "download_retries": 5,
   "seeding_ratio": 1.0,
   "seeding_time": 30,
+  "stalled_time": 30,
   "theme_mode": 0,
   "use_dynamic_color": true,
   "custom_color": 4294918273,

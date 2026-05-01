@@ -100,10 +100,17 @@ pub async fn torrents_info(
                     "active" => matches!(d.state, DownloadState::Running | DownloadState::Seeding),
                     "inactive" => matches!(
                         d.state,
-                        DownloadState::Paused | DownloadState::Queued | DownloadState::Completed
+                        DownloadState::Paused
+                            | DownloadState::StalledDL
+                            | DownloadState::StalledUP
+                            | DownloadState::Queued
+                            | DownloadState::Completed
+                            | DownloadState::Error(_)
                     ),
                     "resumed" => !matches!(d.state, DownloadState::Paused),
-                    "stalled" => false, // We don't have "stalled" state yet
+                    "stalled" => {
+                        matches!(d.state, DownloadState::StalledDL | DownloadState::StalledUP)
+                    }
                     "errored" => matches!(d.state, DownloadState::Error(_)),
                     _ => true,
                 };
@@ -169,17 +176,24 @@ pub async fn torrents_info(
                 DownloadState::Paused => "pausedDL",
                 DownloadState::Completed => "uploading",
                 DownloadState::Seeding => "uploading",
+                DownloadState::StalledDL => "stalledDL",
+                DownloadState::StalledUP => "stalledUP",
                 DownloadState::Cancelled => "error",
                 DownloadState::Error(_) => "error",
             };
 
             let last_activity = d.updated_at / 1000;
-            let completion_on =
-                if matches!(d.state, DownloadState::Completed | DownloadState::Seeding) {
-                    (d.updated_at / 1000) as i64
-                } else {
-                    -1
-                };
+            let completion_on = if matches!(
+                d.state,
+                DownloadState::Completed
+                    | DownloadState::Seeding
+                    | DownloadState::StalledDL
+                    | DownloadState::StalledUP
+            ) {
+                (d.updated_at / 1000) as i64
+            } else {
+                -1
+            };
 
             let mut content_path = d.dest.to_string_lossy().to_string();
             if d.dest.is_dir()

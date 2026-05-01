@@ -47,6 +47,7 @@ class SettingsManager {
   static final downloadRetries = ValueNotifier<int>(5);
   static final seedingRatio = ValueNotifier<double>(1.0);
   static final seedingTime = ValueNotifier<int>(30);
+  static final stalledTime = ValueNotifier<int>(30);
 
   // Theme Settings
   static final themeMode = ValueNotifier<ThemeMode>(ThemeMode.system);
@@ -215,6 +216,7 @@ class SettingsManager {
     seedingRatio.value = (json['seeding_ratio'] ?? defaults['seeding_ratio'])
         .toDouble();
     seedingTime.value = json['seeding_time'] ?? defaults['seeding_time'];
+    stalledTime.value = json['stalled_time'] ?? defaults['stalled_time'];
 
     // Theme Settings
     if (json['theme_mode'] != null) {
@@ -254,6 +256,7 @@ class SettingsManager {
     'download_threads': downloadThreads.value,
     'concurrency_limit': concurrencyLimit.value,
     'download_timeout': downloadTimeout.value,
+    'stalled_time': stalledTime.value,
     'download_retries': downloadRetries.value,
     'seeding_ratio': seedingRatio.value,
     'seeding_time': seedingTime.value,
@@ -357,6 +360,7 @@ class SettingsManager {
     add(downloadRetries, 'download_retries');
     add(seedingRatio, 'seeding_ratio');
     add(seedingTime, 'seeding_time');
+    add(stalledTime, 'stalled_time');
     add(themeMode, 'theme_mode', () => themeMode.value.index);
     add(useDynamicColor, 'use_dynamic_color');
     add(customColor, 'custom_color');
@@ -407,6 +411,11 @@ class SettingsManager {
           seedingTime: Uint64.fromBigInt(BigInt.from(value)),
         ).sendSignalToRust();
         break;
+      case 'stalled_time':
+        UpdateSettings(
+          stalledTime: Uint64.fromBigInt(BigInt.from(value)),
+        ).sendSignalToRust();
+        break;
     }
   }
 
@@ -423,6 +432,7 @@ class SettingsManager {
       downloadTimeout: Uint64.fromBigInt(BigInt.from(downloadTimeout.value)),
       seedingRatio: seedingRatio.value,
       seedingTime: Uint64.fromBigInt(BigInt.from(seedingTime.value)),
+      stalledTime: Uint64.fromBigInt(BigInt.from(stalledTime.value)),
     ).sendSignalToRust();
   }
 
@@ -448,6 +458,7 @@ class SettingsManager {
     downloadThreads.value = defaults['download_threads'] ?? 8;
     concurrencyLimit.value = defaults['concurrency_limit'] ?? 3;
     downloadTimeout.value = defaults['download_timeout'] ?? 30;
+    stalledTime.value = defaults['stalled_time'] ?? 30;
     downloadRetries.value = defaults['download_retries'] ?? 5;
     seedingRatio.value = (defaults['seeding_ratio'] ?? 1.0).toDouble();
     seedingTime.value = defaults['seeding_time'] ?? 30;
