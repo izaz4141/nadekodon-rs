@@ -179,14 +179,16 @@ impl DownloadManager {
                 if self.concurrency.load(Ordering::SeqCst) <= limit {
                     return;
                 }
+
+                let worker_info = worker.info.lock().await.clone();
+                if matches!(
+                    worker_info.state,
+                    DownloadState::StalledDL | DownloadState::StalledUP
+                ) {
+                    self.concurrency.fetch_add(1, Ordering::SeqCst);
+                }
+
                 if worker.pause().await.is_ok() {
-                    let worker_info = worker.info.lock().await.clone();
-                    if matches!(
-                        worker_info.state,
-                        DownloadState::StalledDL | DownloadState::StalledUP
-                    ) {
-                        self.concurrency.fetch_add(1, Ordering::SeqCst);
-                    }
                     worker.info.lock().await.state = DownloadState::Queued;
                     if self.active.lock().await.remove(&id) {
                         self.concurrency.fetch_sub(1, Ordering::SeqCst);
