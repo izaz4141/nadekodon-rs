@@ -48,8 +48,9 @@ impl DownloadWorker {
                             .await
                             .last()
                             .map(|(_, value)| *value);
-                        let ts_ms = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
-                        let ts_sec = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+                        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+                        let ts_ms = now.as_millis();
+                        let ts_sec = now.as_secs();
 
                         sampler_worker.history.write().await.push((ts_ms as u128, current_value));
                         let hist_len = sampler_worker.history.read().await.len();
