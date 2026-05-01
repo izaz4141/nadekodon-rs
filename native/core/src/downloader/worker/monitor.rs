@@ -42,6 +42,12 @@ impl DownloadWorker {
                             DownloadState::Seeding => sampler_worker.uploaded.load(Ordering::SeqCst),
                             _ => continue
                         };
+                        let previous_value = sampler_worker
+                            .history
+                            .read()
+                            .await
+                            .last()
+                            .map(|(_, value)| *value);
                         let ts_ms = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
                         let ts_sec = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
 
@@ -59,9 +65,8 @@ impl DownloadWorker {
                         let time_diff = ts_sec.saturating_sub(last_prog);
 
                         if timeout_secs > 0 && time_diff >= timeout_secs{
-                            let history = sampler_worker.history.read().await.clone();
-                            if let Some(last_entry) = history.last() {
-                                if current_value != last_entry.1 {
+                            if let Some(previous_value) = previous_value {
+                                if current_value != previous_value {
                                     sampler_worker.last_progress.store(ts_sec, Ordering::SeqCst);
                                 } else {continue}
                             } else {continue}
@@ -70,7 +75,6 @@ impl DownloadWorker {
                             info.state = DownloadState::Stalled;
                             let id = info.id;
                             drop(info);
-                            sampler_worker.sync_to_info().await;
                             let _ = sampler_worker
                                 .event_tx
                                 .send(WorkerEvent::Stalled(id))
