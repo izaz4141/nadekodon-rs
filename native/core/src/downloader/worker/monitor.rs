@@ -64,13 +64,16 @@ impl DownloadWorker {
                         let last_prog = sampler_worker.last_progress.load(Ordering::SeqCst);
                         let time_diff = ts_sec.saturating_sub(last_prog);
 
-                        if timeout_secs > 0 && time_diff >= timeout_secs{
-                            if let Some(previous_value) = previous_value {
-                                if current_value != previous_value {
-                                    sampler_worker.last_progress.store(ts_sec, Ordering::SeqCst);
-                                } else {continue}
-                            } else {continue}
+                        if let Some(previous_value) = previous_value {
+                            if current_value != previous_value {
+                                sampler_worker.last_progress.store(ts_sec, Ordering::SeqCst);
+                                continue;
+                            }
+                        } else {
+                            continue;
+                        }
 
+                        if timeout_secs > 0 && time_diff >= timeout_secs {
                             let mut info = sampler_worker.info.lock().await;
                             info.state = DownloadState::Stalled;
                             let id = info.id;
