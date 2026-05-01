@@ -183,12 +183,17 @@ pub async fn torrents_info(
             };
 
             let last_activity = d.updated_at / 1000;
-            let completion_on =
-                if matches!(d.state, DownloadState::Completed | DownloadState::Seeding) {
-                    (d.updated_at / 1000) as i64
-                } else {
-                    -1
-                };
+            let completion_on = if matches!(
+                d.state,
+                DownloadState::Completed
+                    | DownloadState::Seeding
+                    | DownloadState::StalledDL
+                    | DownloadState::StalledUP
+            ) {
+                (d.updated_at / 1000) as i64
+            } else {
+                -1
+            };
 
             let mut content_path = d.dest.to_string_lossy().to_string();
             if d.dest.is_dir()
