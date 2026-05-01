@@ -44,10 +44,10 @@ class SettingsManager {
   static final downloadThreads = ValueNotifier<int>(8);
   static final concurrencyLimit = ValueNotifier<int>(3);
   static final downloadTimeout = ValueNotifier<int>(30);
-  static final stalledTime = ValueNotifier<int>(5);
   static final downloadRetries = ValueNotifier<int>(5);
   static final seedingRatio = ValueNotifier<double>(1.0);
   static final seedingTime = ValueNotifier<int>(30);
+  static final stalledTime = ValueNotifier<int>(30);
 
   // Theme Settings
   static final themeMode = ValueNotifier<ThemeMode>(ThemeMode.system);
