@@ -8,6 +8,7 @@ use std::{
     },
 };
 use tokio::sync::{Mutex, RwLock, broadcast, mpsc};
+use tokio::task::JoinSet;
 
 use crate::app_context::AppContext;
 use crate::utils::logger;
@@ -141,17 +142,41 @@ impl DownloadManager {
         if active_count > limit {
             let to_pause_count = active_count - limit;
             let workers_to_pause = {
-                let active = self.active.lock().await;
-                let workers = self.workers.lock().await;
-                active
-                    .iter()
-                    .take(to_pause_count as usize)
-                    .map(|id| (*id, workers.get(id).cloned()))
-                    .filter_map(|(id, w_opt)| w_opt.map(|w| (id, w)))
-                    .collect::<Vec<_>>()
+                let candidates = {
+                    let active = self.active.lock().await;
+                    let workers = self.workers.lock().await;
+                    active
+                        .iter()
+                        .filter_map(|id| workers.get(id).cloned().map(|w| (*id, w)))
+                        .collect::<Vec<_>>()
+                };
+
+                let mut set = JoinSet::new();
+                for (id, worker) in candidates {
+                    set.spawn(async move {
+                        let info = worker.info().await;
+                        let is_stalled = matches!(info.state, DownloadState::Stalled);
+                        if !is_stalled {
+                            Some((id, worker))
+                        } else {
+                            None
+                        }
+                    });
+                }
+
+                let mut results = Vec::with_capacity(to_pause_count as usize);
+                while let Some(res) = set.join_next().await {
+                    if let Ok(Some(worker_data)) = res {
+                        results.push(worker_data);
+                    }
+                }
+                results
             };
 
             for (id, worker) in workers_to_pause {
+                if self.concurrency.load(Ordering::SeqCst) <= limit {
+                    return;
+                }
                 if worker.pause().await.is_ok() {
                     worker.info.lock().await.state = DownloadState::Queued;
                     if self.active.lock().await.remove(&id) {
