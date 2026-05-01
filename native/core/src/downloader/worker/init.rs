@@ -121,7 +121,11 @@ impl DownloadWorker {
         // Reset state to Paused if it was Running or Queued, to avoid auto-start issues
         let mut safe_info = info.clone();
         match safe_info.state {
-            DownloadState::Running | DownloadState::Queued | DownloadState::Seeding => {
+            DownloadState::Running
+            | DownloadState::Queued
+            | DownloadState::Seeding
+            | DownloadState::StalledDL
+            | DownloadState::StalledUP => {
                 safe_info.state = DownloadState::Paused;
             }
             _ => {}
