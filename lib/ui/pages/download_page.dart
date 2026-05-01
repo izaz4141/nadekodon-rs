@@ -18,7 +18,8 @@ class DownloadPage extends StatefulWidget {
     DownloadStatus.queued,
     DownloadStatus.running,
     DownloadStatus.seeding,
-    DownloadStatus.stalled,
+    DownloadStatus.stalledDL,
+    DownloadStatus.stalledUP,
     DownloadStatus.paused,
   };
 
@@ -178,8 +179,10 @@ class _DownloadPageState extends State<DownloadPage>
           return "Running";
         case DownloadStatus.seeding:
           return "Seeding";
-        case DownloadStatus.stalled:
-          return "Stalled";
+        case DownloadStatus.stalledDL:
+          return "StalledDL";
+        case DownloadStatus.stalledUP:
+          return "StalledUP";
         case DownloadStatus.paused:
           return "Paused";
         case DownloadStatus.completed:

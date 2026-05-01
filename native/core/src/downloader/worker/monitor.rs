@@ -38,8 +38,8 @@ impl DownloadWorker {
                 tokio::select! {
                     _ = samp.tick() => {
                         let current_value = match sampler_worker.info.lock().await.state.clone(){
-                            DownloadState::Running => sampler_worker.downloaded.load(Ordering::SeqCst),
-                            DownloadState::Seeding => sampler_worker.uploaded.load(Ordering::SeqCst),
+                            DownloadState::Running | DownloadState::StalledDL => sampler_worker.downloaded.load(Ordering::SeqCst),
+                            DownloadState::Seeding | DownloadState::StalledUP => sampler_worker.uploaded.load(Ordering::SeqCst),
                             _ => continue
                         };
                         let previous_value = sampler_worker
@@ -76,7 +76,12 @@ impl DownloadWorker {
 
                         if timeout_secs > 0 && time_diff >= timeout_secs {
                             let mut info = sampler_worker.info.lock().await;
-                            info.state = DownloadState::Stalled;
+                            let stalled_state = match info.state {
+                                DownloadState::Running => DownloadState::StalledDL,
+                                DownloadState::Seeding => DownloadState::StalledUP,
+                                _ => continue,
+                            };
+                            info.state = stalled_state.clone();
                             sampler_worker.stalled.store(true, Ordering::SeqCst);
                             let id = info.id;
                             drop(info);
@@ -84,7 +89,7 @@ impl DownloadWorker {
                                 .event_tx
                                 .send(WorkerEvent::Stalled(id))
                                 .await;
-                            logger::debug(&format!("Download {} marked as stalled", id));
+                            logger::debug(&format!("Download {} marked as {:?}", id, stalled_state));
 
                         }
                     }

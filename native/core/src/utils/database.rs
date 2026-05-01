@@ -93,8 +93,10 @@ impl DatabaseManager {
                 DownloadState::Error(state_str)
             } else if state_str.contains("Seeding") {
                 DownloadState::Seeding
-            } else if state_str.contains("Stalled") {
-                DownloadState::Stalled
+            } else if state_str.contains("StalledDL") {
+                DownloadState::StalledDL
+            } else if state_str.contains("StalledUP") {
+                DownloadState::StalledUP
             } else if state_str.contains("Cancelled") {
                 DownloadState::Cancelled
             } else if state_str.contains("Completed") {

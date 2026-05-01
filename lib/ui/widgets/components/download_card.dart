@@ -44,7 +44,9 @@ class _DownloadCardState extends State<DownloadCard> {
         return colors.primary;
       case DownloadStatus.seeding:
         return colors.primary;
-      case DownloadStatus.stalled:
+      case DownloadStatus.stalledDL:
+        return colors.secondary;
+      case DownloadStatus.stalledUP:
         return colors.secondary;
       case DownloadStatus.paused:
         return colors.secondary;

@@ -52,7 +52,8 @@ pub enum DownloadState {
     Paused,
     Completed,
     Seeding,
-    Stalled,
+    StalledDL,
+    StalledUP,
     Cancelled,
     Error(String),
 }
@@ -65,7 +66,8 @@ impl DownloadState {
             DownloadState::Paused => "Paused".to_string(),
             DownloadState::Completed => "Completed".to_string(),
             DownloadState::Seeding => "Seeding".to_string(),
-            DownloadState::Stalled => "Stalled".to_string(),
+            DownloadState::StalledDL => "StalledDL".to_string(),
+            DownloadState::StalledUP => "StalledUP".to_string(),
             DownloadState::Cancelled => "Cancelled".to_string(),
             DownloadState::Error(_) => "Error".to_string(),
         }
