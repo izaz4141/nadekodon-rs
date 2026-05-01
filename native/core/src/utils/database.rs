@@ -89,16 +89,16 @@ impl DatabaseManager {
             let uploaded = uploaded as u64;
 
             let state_str: String = row.get("state");
-            let state = if state_str.contains("Completed") {
-                DownloadState::Completed
+            let state = if state_str.contains("Error") {
+                DownloadState::Error(state_str)
             } else if state_str.contains("Seeding") {
                 DownloadState::Seeding
             } else if state_str.contains("Stalled") {
                 DownloadState::Stalled
             } else if state_str.contains("Cancelled") {
                 DownloadState::Cancelled
-            } else if state_str.contains("Error") {
-                DownloadState::Error(state_str)
+            } else if state_str.contains("Completed") {
+                DownloadState::Completed
             } else {
                 DownloadState::Paused
             };
