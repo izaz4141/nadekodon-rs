@@ -155,7 +155,10 @@ impl DownloadManager {
                 for (id, worker) in candidates {
                     set.spawn(async move {
                         let info = worker.info().await;
-                        if !matches!(info.state, DownloadState::StalledDL | DownloadState::StalledUP) {
+                        if !matches!(
+                            info.state,
+                            DownloadState::StalledDL | DownloadState::StalledUP
+                        ) {
                             Some((id, worker))
                         } else {
                             None
@@ -178,7 +181,10 @@ impl DownloadManager {
                 }
                 if worker.pause().await.is_ok() {
                     let worker_info = worker.info.lock().await.clone();
-                    if matches!(worker_info.state, DownloadState::StalledDL | DownloadState::StalledUP) {
+                    if matches!(
+                        worker_info.state,
+                        DownloadState::StalledDL | DownloadState::StalledUP
+                    ) {
                         self.concurrency.fetch_add(1, Ordering::SeqCst);
                     }
                     worker.info.lock().await.state = DownloadState::Queued;
