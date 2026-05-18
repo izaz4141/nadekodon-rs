@@ -71,7 +71,7 @@ pub struct AuthQuery {
 
 #[utoipa::path(
     post,
-    path = "/api/qbittorrent/auth/login",
+    path = "/api/v2/auth/login",
     tag = "qbit.auth",
     request_body = AuthQuery,
     responses(

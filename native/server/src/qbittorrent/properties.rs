@@ -56,7 +56,7 @@ pub struct TorrentsPropertiesResponse {
 
 #[utoipa::path(
     get,
-    path = "/api/qbittorrent/torrents/properties",
+    path = "/api/v2/torrents/properties",
     tag = "qbit.torrents",
     security(("SIDCookie" = [])),
     params(TorrentsPropertiesQuery),

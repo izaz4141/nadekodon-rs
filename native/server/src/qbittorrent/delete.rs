@@ -18,7 +18,7 @@ pub struct TorrentsDeleteQuery {
 
 #[utoipa::path(
     post,
-    path = "/api/qbittorrent/torrents/delete",
+    path = "/api/v2/torrents/delete",
     tag = "qbit.torrents",
     security(("SIDCookie" = [])),
     request_body = TorrentsDeleteQuery,

@@ -343,7 +343,7 @@ impl TorrentsAddMultipart {
 
 #[utoipa::path(
     post,
-    path = "/api/qbittorrent/torrents/add",
+    path = "/api/v2/torrents/add",
     tag = "qbit.torrents",
     security(("SIDCookie" = [])),
     request_body = TorrentsAddMultipart,

@@ -29,7 +29,7 @@ pub struct TorrentFileResponse {
 
 #[utoipa::path(
     get,
-    path = "/api/qbittorrent/torrents/files",
+    path = "/api/v2/torrents/files",
     tag = "qbit.torrents",
     security(("SIDCookie" = [])),
     params(TorrentsFilesQuery),

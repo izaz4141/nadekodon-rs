@@ -16,7 +16,7 @@ pub struct TorrentsSetShareLimitsForm {
 
 #[utoipa::path(
     post,
-    path = "/api/qbittorrent/torrents/setShareLimits",
+    path = "/api/v2/torrents/setShareLimits",
     tag = "qbit.torrents",
     security(("SIDCookie" = [])),
     request_body = TorrentsSetShareLimitsForm,
@@ -75,7 +75,7 @@ pub struct TorrentsTopPrioForm {
 
 #[utoipa::path(
     post,
-    path = "/api/qbittorrent/torrents/topPrio",
+    path = "/api/v2/torrents/topPrio",
     tag = "qbit.torrents",
     security(("SIDCookie" = [])),
     request_body = TorrentsTopPrioForm,
@@ -106,7 +106,7 @@ pub struct TorrentsSetForceStartForm {
 
 #[utoipa::path(
     post,
-    path = "/api/qbittorrent/torrents/setForceStart",
+    path = "/api/v2/torrents/setForceStart",
     tag = "qbit.torrents",
     security(("SIDCookie" = [])),
     request_body = TorrentsSetForceStartForm,

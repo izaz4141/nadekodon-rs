@@ -14,7 +14,7 @@ pub struct TorrentsSetCategoryForm {
 
 #[utoipa::path(
     post,
-    path = "/api/qbittorrent/torrents/setCategory",
+    path = "/api/v2/torrents/setCategory",
     tag = "qbit.torrents",
     security(("SIDCookie" = [])),
     request_body = TorrentsSetCategoryForm,
@@ -99,7 +99,7 @@ pub struct TorrentsCreateCategoryForm {
 
 #[utoipa::path(
     post,
-    path = "/api/qbittorrent/torrents/createCategory",
+    path = "/api/v2/torrents/createCategory",
     tag = "qbit.torrents",
     security(("SIDCookie" = [])),
     request_body = TorrentsCreateCategoryForm,
@@ -143,7 +143,7 @@ pub struct CategoryResponse {
 
 #[utoipa::path(
     get,
-    path = "/api/qbittorrent/torrents/categories",
+    path = "/api/v2/torrents/categories",
     tag = "qbit.torrents",
     security(("SIDCookie" = [])),
     responses(

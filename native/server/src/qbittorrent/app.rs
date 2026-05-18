@@ -156,7 +156,7 @@ pub struct PreferencesResponse {
 
 #[utoipa::path(
     get,
-    path = "/api/qbittorrent/app/version",
+    path = "/api/v2/app/version",
     tag = "qbit.app",
     responses(
         (status = 200, description = "Application version", body = String)
@@ -168,7 +168,7 @@ pub async fn app_version() -> &'static str {
 
 #[utoipa::path(
     get,
-    path = "/api/qbittorrent/app/webapiVersion",
+    path = "/api/v2/app/webapiVersion",
     tag = "qbit.app",
     responses(
         (status = 200, description = "Web API version", body = String)
@@ -180,7 +180,7 @@ pub async fn app_webapi_version() -> &'static str {
 
 #[utoipa::path(
     get,
-    path = "/api/qbittorrent/app/preferences",
+    path = "/api/v2/app/preferences",
     tag = "qbit.app",
     security(("SIDCookie" = [])),
     responses(
