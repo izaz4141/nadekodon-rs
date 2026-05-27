@@ -54,7 +54,7 @@ class DownloadService {
   void fetchList(GetDownloadList query) {
     if (PlatformService().isRemote) {
       APIService.getDownloadList(
-        anchorId: query.anchorId,
+        offsetIndex: query.offsetIndex,
         before: query.before.toInt(),
         after: query.after.toInt(),
         statuses: query.statuses,

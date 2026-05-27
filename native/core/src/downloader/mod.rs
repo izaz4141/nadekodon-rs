@@ -493,26 +493,11 @@ pub async fn get_download_list_internal(
 
             let total_count = filtered.len() as u64;
 
-            let anchor_index = if let Some(anchor_id_str) = query.anchor_id {
-                filtered
-                    .iter()
-                    .position(|x| x.id.to_string() == anchor_id_str)
-            } else {
-                None
-            };
-
-            let (start, end) = match anchor_index {
-                Some(idx) => {
-                    let s = idx.saturating_sub(query.before as usize);
-                    let e = (idx + query.after as usize + 1).min(filtered.len());
-                    (s, e)
-                }
-                None => {
-                    let s = 0;
-                    let e = (query.after as usize + 1).min(filtered.len());
-                    (s, e)
-                }
-            };
+            let start = (query.offset_index as usize)
+                .saturating_sub(query.before as usize)
+                .min(filtered.len().saturating_sub(1));
+            let end = (query.offset_index as usize + query.after as usize + 1)
+                .min(filtered.len());
 
             let slice = &filtered[start..end];
             let mut download_list = Vec::new();

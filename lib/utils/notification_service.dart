@@ -185,7 +185,7 @@ class NotificationService {
     // Poll every second ONLY for Running downloads
     _pollTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       GetDownloadList(
-        anchorId: null,
+        offsetIndex: 0,
         before: 0,
         after: 100,
         statuses: ["Running", "Seeding"],

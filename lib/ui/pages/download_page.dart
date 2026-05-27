@@ -163,11 +163,6 @@ class _DownloadPageState extends State<DownloadPage>
       state.totalCount,
     );
 
-    String? anchorId;
-    if (firstVisibleIndex < state.items.length) {
-      anchorId = state.items[firstVisibleIndex]?.id;
-    }
-
     final int afterCount = (viewportHeight / itemHeight).ceil() + 5;
     const int beforeCount = 5;
 
@@ -196,7 +191,7 @@ class _DownloadPageState extends State<DownloadPage>
 
     DownloadService().fetchList(
       GetDownloadList(
-        anchorId: anchorId,
+        offsetIndex: firstVisibleIndex,
         before: beforeCount,
         after: afterCount,
         statuses: statusStrings,

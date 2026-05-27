@@ -361,7 +361,7 @@ pub async fn get_download_list(manager: Arc<downloader::DownloadManager>) {
     while let Some(dart_signal) = receiver.recv().await {
         let query = dart_signal.message;
         let cquery = csignals::GetDownloadList {
-            anchor_id: query.anchor_id,
+            offset_index: query.offset_index,
             before: query.before,
             after: query.after,
             statuses: query.statuses,

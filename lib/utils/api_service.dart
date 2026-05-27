@@ -262,7 +262,7 @@ class APIService {
   }
 
   static Future<DownloadList?> getDownloadList({
-    String? anchorId,
+    int offsetIndex = 0,
     int before = 0,
     int after = 0,
     List<String> statuses = const [],
@@ -273,7 +273,7 @@ class APIService {
   }) async {
     try {
       final payload = {
-        'anchor_id': ?anchorId,
+        'offset_index': offsetIndex,
         'before': before,
         'after': after,
         'statuses': statuses,

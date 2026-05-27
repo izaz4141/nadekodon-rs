@@ -78,7 +78,7 @@ pub struct DoDownload {
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct GetDownloadList {
-    pub anchor_id: Option<String>,
+    pub offset_index: u32,
     pub before: u32,
     pub after: u32,
     pub statuses: Vec<String>,
