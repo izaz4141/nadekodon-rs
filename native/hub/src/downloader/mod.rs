@@ -421,6 +421,9 @@ pub async fn listen_worker_events(manager: Arc<downloader::DownloadManager>) {
             WorkerEvent::Error(id, msg) => {
                 logger::error(&format!("Worker {:?} Error - {}", id, msg))
             }
+            WorkerEvent::ProgressResumed(id) => {
+                logger::debug(&format!("Worker {:?} Progress Resumed", id))
+            }
         }
     }
 }

@@ -109,6 +109,7 @@ pub enum WorkerEvent {
     Error(Uuid, String),
     Cancelled(Uuid),
     Stalled(Uuid),
+    ProgressResumed(Uuid),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

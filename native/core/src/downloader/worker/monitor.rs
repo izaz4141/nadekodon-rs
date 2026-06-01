@@ -68,7 +68,16 @@ impl DownloadWorker {
                         if let Some(previous_value) = previous_value {
                             if current_value != previous_value {
                                 sampler_worker.last_progress.store(ts_sec, Ordering::SeqCst);
-                                sampler_worker.stalled.store(false, Ordering::SeqCst);
+                                let was_stalled = sampler_worker.stalled.swap(false, Ordering::SeqCst);
+                                if was_stalled {
+                                    let info = sampler_worker.info.lock().await;
+                                    let id = info.id;
+                                    drop(info);
+                                    let _ = sampler_worker
+                                        .event_tx
+                                        .send(WorkerEvent::ProgressResumed(id))
+                                        .await;
+                                }
                                 continue;
                             }
                         } else {

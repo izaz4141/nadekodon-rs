@@ -127,6 +127,9 @@ impl DownloadManager {
 
                 logger::debug(&format!("Worker {:?} stalled, slot released", id));
             }
+            WorkerEvent::ProgressResumed(id) => {
+                logger::debug(&format!("Worker {:?} progress resumed, re-checking queue", id));
+            }
         }
         let _ = self.broadcast_tx.send(event.clone());
         self.process_queue().await;
