@@ -11,7 +11,7 @@ impl DownloadManager {
         let w = { self.workers.lock().await.get(&id).cloned() };
         match w {
             Some(worker) => {
-                let was_stalled = {
+                let was_stalled_or_seeding = {
                     let info = worker.info.lock().await;
 
                     if cfg!(target_os = "android") && info.download_type == DownloadType::YTDLP {
@@ -20,13 +20,15 @@ impl DownloadManager {
 
                     matches!(
                         info.state,
-                        DownloadState::StalledDL | DownloadState::StalledUP
+                        DownloadState::StalledDL
+                            | DownloadState::StalledUP
+                            | DownloadState::Seeding
                     )
                 };
 
                 worker.pause().await?;
                 if self.active.lock().await.remove(&id)
-                    && !was_stalled
+                    && !was_stalled_or_seeding
                     && self.concurrency.load(Ordering::SeqCst) > 0
                 {
                     self.concurrency.fetch_sub(1, Ordering::SeqCst);
@@ -46,6 +48,12 @@ impl DownloadManager {
                     let mut info = worker.info.lock().await;
                     match info.state {
                         DownloadState::Paused => {
+                            if worker.seeding_start.load(Ordering::SeqCst) > 0 {
+                                info.state = DownloadState::Seeding;
+                                drop(info);
+                                worker.resume().await?;
+                                return Ok(());
+                            }
                             info.state = DownloadState::Queued;
                         }
                         _ => {
@@ -64,27 +72,13 @@ impl DownloadManager {
         let w = { self.workers.lock().await.get(&id).cloned() };
         match w {
             Some(worker) => {
-                let was_stalled = {
-                    let info = worker.info.lock().await;
-
-                    if cfg!(target_os = "android") && info.download_type == DownloadType::YTDLP {
-                        return Ok(());
-                    }
-
-                    matches!(
-                        info.state,
-                        DownloadState::StalledDL | DownloadState::StalledUP
-                    )
-                };
+                if cfg!(target_os = "android")
+                    && worker.info.lock().await.download_type == DownloadType::YTDLP
+                {
+                    return Ok(());
+                }
 
                 worker.cancel().await?;
-                self.active.lock().await.remove(&id);
-                if !was_stalled {
-                    let conc = self.concurrency.load(Ordering::SeqCst);
-                    if conc > 0 {
-                        self.concurrency.store(conc - 1, Ordering::SeqCst);
-                    };
-                }
                 self.process_queue().await;
                 Ok(())
             }

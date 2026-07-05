@@ -110,6 +110,7 @@ pub enum WorkerEvent {
     Cancelled(Uuid),
     Stalled(Uuid),
     ProgressResumed(Uuid),
+    SeedingStarted(Uuid),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

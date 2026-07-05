@@ -496,8 +496,7 @@ pub async fn get_download_list_internal(
             let start = (query.offset_index as usize)
                 .saturating_sub(query.before as usize)
                 .min(filtered.len().saturating_sub(1));
-            let end = (query.offset_index as usize + query.after as usize + 1)
-                .min(filtered.len());
+            let end = (query.offset_index as usize + query.after as usize + 1).min(filtered.len());
 
             let slice = &filtered[start..end];
             let mut download_list = Vec::new();

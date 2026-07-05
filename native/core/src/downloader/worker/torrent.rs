@@ -1,6 +1,6 @@
 use crate::utils::logger;
 use crate::utils::{
-    types::{DownloadState, PartInfo},
+    types::{DownloadState, PartInfo, WorkerEvent},
     url::is_magnet_url,
 };
 use anyhow::Result;
@@ -231,7 +231,7 @@ impl DownloadWorker {
         }
 
         // Transition to Seeding if not already
-        {
+        let seeding_id = {
             let mut info = self.info.lock().await;
             if !matches!(info.state, DownloadState::Seeding) {
                 info.state = DownloadState::Seeding;
@@ -243,9 +243,16 @@ impl DownloadWorker {
                     Ordering::SeqCst,
                 );
                 logger::debug(&format!("Download {} completed, starting seeding", info.id));
+                let id = info.id;
                 drop(info);
                 self.history.write().await.clear();
+                Some(id)
+            } else {
+                None
             }
+        };
+        if let Some(id) = seeding_id {
+            let _ = self.event_tx.send(WorkerEvent::SeedingStarted(id)).await;
         }
 
         // Seeding Loop
@@ -322,7 +329,9 @@ impl DownloadWorker {
                 0
             };
 
-            if ratio >= ratio_limit || elapsed_mins >= time_limit {
+            let ratio_ok = ratio_limit > 0.0 && ratio >= ratio_limit;
+            let time_ok = time_limit > 0 && elapsed_mins >= time_limit;
+            if ratio_ok || time_ok {
                 logger::debug(&format!(
                     "Seeding limit reached: ratio {:.2}/{}, time {}/{}m",
                     ratio, ratio_limit, elapsed_mins, time_limit

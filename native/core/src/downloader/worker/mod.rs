@@ -34,7 +34,7 @@ pub struct DownloadWorker {
     notify_resume: Notify,
     downloaded: AtomicU64,
     uploaded: AtomicU64,
-    seeding_start: AtomicU64,
+    pub(crate) seeding_start: AtomicU64,
     pub(crate) history: RwLock<Vec<(u128, u64)>>,
     pub(crate) last_progress: AtomicU64,
     pub torrent_session: Arc<tokio::sync::RwLock<Option<Arc<Session>>>>,

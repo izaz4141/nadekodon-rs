@@ -8,7 +8,6 @@ use std::{
     },
 };
 use tokio::sync::{Mutex, RwLock, broadcast, mpsc};
-use tokio::task::JoinSet;
 
 use crate::app_context::AppContext;
 use crate::utils::logger;
@@ -106,9 +105,12 @@ impl DownloadManager {
     /// Called when a worker completes / cancels / errors
     async fn handle_event(self: &Arc<Self>, event: WorkerEvent) {
         match event {
-            WorkerEvent::Completed(id) | WorkerEvent::Cancelled(id) | WorkerEvent::Error(id, _) => {
-                self.active.lock().await.remove(&id);
-                {
+            WorkerEvent::Completed(id)
+            | WorkerEvent::Error(id, _)
+            | WorkerEvent::Cancelled(id)
+            | WorkerEvent::SeedingStarted(id)
+            | WorkerEvent::Stalled(id) => {
+                if self.active.lock().await.remove(&id) {
                     let conc = self.concurrency.load(Ordering::SeqCst);
                     if conc > 0 {
                         self.concurrency.store(conc - 1, Ordering::SeqCst);
@@ -117,18 +119,11 @@ impl DownloadManager {
 
                 logger::debug(&format!("Worker {:?} finished event: {:?}", id, event));
             }
-            WorkerEvent::Stalled(id) => {
-                {
-                    let conc = self.concurrency.load(Ordering::SeqCst);
-                    if conc > 0 {
-                        self.concurrency.store(conc - 1, Ordering::SeqCst);
-                    };
-                }
-
-                logger::debug(&format!("Worker {:?} stalled, slot released", id));
-            }
             WorkerEvent::ProgressResumed(id) => {
-                logger::debug(&format!("Worker {:?} progress resumed, re-checking queue", id));
+                logger::debug(&format!(
+                    "Worker {:?} progress resumed, re-checking queue",
+                    id
+                ));
             }
         }
         let _ = self.broadcast_tx.send(event.clone());
@@ -144,51 +139,19 @@ impl DownloadManager {
         }
         if active_count > limit {
             let to_pause_count = active_count - limit;
-            let workers_to_pause = {
-                let candidates = {
-                    let active = self.active.lock().await;
-                    let workers = self.workers.lock().await;
-                    active
-                        .iter()
-                        .filter_map(|id| workers.get(id).cloned().map(|w| (*id, w)))
-                        .collect::<Vec<_>>()
-                };
-
-                let mut set = JoinSet::new();
-                for (id, worker) in candidates {
-                    set.spawn(async move {
-                        let info = worker.info().await;
-                        if !matches!(
-                            info.state,
-                            DownloadState::StalledDL | DownloadState::StalledUP
-                        ) {
-                            Some((id, worker))
-                        } else {
-                            None
-                        }
-                    });
-                }
-
-                let mut results = Vec::with_capacity(to_pause_count as usize);
-                while let Some(res) = set.join_next().await {
-                    if let Ok(Some(worker_data)) = res {
-                        results.push(worker_data);
-                    }
-                }
-                results
+            let candidates = {
+                let active = self.active.lock().await;
+                let workers = self.workers.lock().await;
+                active
+                    .iter()
+                    .filter_map(|id| workers.get(id).cloned().map(|w| (*id, w)))
+                    .take(to_pause_count as usize)
+                    .collect::<Vec<_>>()
             };
 
-            for (id, worker) in workers_to_pause {
+            for (id, worker) in candidates {
                 if self.concurrency.load(Ordering::SeqCst) <= limit {
                     return;
-                }
-
-                let worker_info = worker.info.lock().await.clone();
-                if matches!(
-                    worker_info.state,
-                    DownloadState::StalledDL | DownloadState::StalledUP
-                ) {
-                    self.concurrency.fetch_add(1, Ordering::SeqCst);
                 }
 
                 if worker.pause().await.is_ok() {
@@ -221,6 +184,7 @@ impl DownloadManager {
                     if self.concurrency.load(Ordering::SeqCst) < limit
                         && !worker.stalled.load(Ordering::SeqCst)
                     {
+                        self.active.lock().await.insert(id);
                         self.concurrency.fetch_add(1, Ordering::SeqCst);
                         let _ = worker.resume().await;
                     }
