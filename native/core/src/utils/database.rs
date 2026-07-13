@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
-use tokio::sync::Notify;
+use tokio::sync::{Notify, RwLock};
 use tokio::time::sleep;
 use uuid::Uuid;
 
@@ -18,6 +18,7 @@ pub struct DatabaseManager {
     context: Weak<AppContext>,
     shutdown_signal: Arc<Notify>,
     db_done_signal: Arc<Notify>,
+    last_saved: Arc<RwLock<HashMap<Uuid, (u64, u64, String)>>>,
 }
 
 impl DatabaseManager {
@@ -32,6 +33,7 @@ impl DatabaseManager {
             context,
             shutdown_signal,
             db_done_signal,
+            last_saved: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
@@ -301,14 +303,22 @@ impl DatabaseManager {
                     return;
                 }
             };
+            let mut last_saved = self.last_saved.write().await;
             for download in downloads {
-                let id = download.id.to_string();
+                let id = download.id;
+                let state = format!("{:?}", download.state);
+                let checkpoint = (download.downloaded, download.uploaded, state.clone());
+
+                if last_saved.get(&id) == Some(&checkpoint) {
+                    continue;
+                }
+
+                let id_str = id.to_string();
                 let url = download.url;
                 let dest = download.dest.to_string_lossy().to_string();
                 let total_size = download.total_size.map(|s| s as i64);
                 let downloaded = download.downloaded as i64;
                 let uploaded = download.uploaded as i64;
-                let state = format!("{:?}", download.state);
                 let added_at = download.added_at as i64;
                 let updated_at = download.updated_at as i64;
                 let download_type = format!("{:?}", download.download_type);
@@ -339,7 +349,7 @@ impl DatabaseManager {
                         seeding_time_override = excluded.seeding_time_override;
                     "#
                 )
-                .bind(id)
+                .bind(id_str)
                 .bind(url)
                 .bind(dest)
                 .bind(total_size)
@@ -360,6 +370,8 @@ impl DatabaseManager {
 
                 if let Err(e) = result {
                     logger::error(&format!("Failed to save download to DB: {:?}", e));
+                } else {
+                    last_saved.insert(id, checkpoint);
                 }
             }
         }
