@@ -439,7 +439,15 @@ pub async fn get_download_list_internal(
                         true
                     };
 
-                    matches_status && matches_search
+                    let matches_category = if query.categories.is_empty() {
+                        true
+                    } else {
+                        info.category
+                            .as_ref()
+                            .map_or(false, |c| query.categories.contains(c))
+                    };
+
+                    matches_status && matches_search && matches_category
                 })
                 .collect();
 

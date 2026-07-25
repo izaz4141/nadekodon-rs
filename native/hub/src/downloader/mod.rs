@@ -369,6 +369,7 @@ pub async fn get_download_list(manager: Arc<downloader::DownloadManager>) {
             search_query: query.search_query,
             sort_by: query.sort_by,
             ascending: query.ascending,
+            categories: query.categories,
         };
         let manager = Arc::clone(&manager);
         match downloader::get_download_list_internal(&manager, cquery).await {
