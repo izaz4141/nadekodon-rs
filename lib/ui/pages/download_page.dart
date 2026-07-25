@@ -199,6 +199,7 @@ class _DownloadPageState extends State<DownloadPage>
         searchQuery: _searchQuery.isNotEmpty ? _searchQuery : null,
         sortBy: _sortBy,
         ascending: _ascending,
+        categories: [],
       ),
     );
   }

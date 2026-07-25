@@ -270,6 +270,7 @@ class APIService {
     String? searchQuery,
     int? sortBy,
     bool? ascending,
+    List<String> categories = const [],
   }) async {
     try {
       final payload = {
@@ -281,6 +282,7 @@ class APIService {
         'search_query': ?searchQuery,
         'sort_by': ?sortBy,
         'ascending': ?ascending,
+        'categories': categories,
       };
 
       final response = await http.post(

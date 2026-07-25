@@ -193,6 +193,7 @@ class NotificationService {
         searchQuery: null,
         sortBy: 0,
         ascending: false,
+        categories: [],
       ).sendSignalToRust();
     });
 
