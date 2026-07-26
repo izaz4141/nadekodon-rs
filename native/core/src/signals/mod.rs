@@ -64,6 +64,28 @@ pub struct YtdlFormat {
 }
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
+pub struct SearchYtdl {
+    pub query: String,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct YtdlSearchResult {
+    pub id: String,
+    pub title: String,
+    pub url: String,
+    pub thumbnail: Option<String>,
+    pub duration: Option<f64>,
+    pub channel: Option<String>,
+    pub webpage_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct YtdlSearchOutput {
+    pub results: Vec<YtdlSearchResult>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct DoDownload {
     pub url: Option<String>,
     pub dest: String,

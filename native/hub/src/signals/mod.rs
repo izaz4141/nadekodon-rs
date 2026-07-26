@@ -64,6 +64,28 @@ pub struct YtdlFormat {
 }
 
 #[derive(Deserialize, DartSignal)]
+pub struct SearchYtdl {
+    pub query: String,
+}
+
+#[derive(Serialize, SignalPiece)]
+pub struct YtdlSearchResult {
+    pub id: String,
+    pub title: String,
+    pub url: String,
+    pub thumbnail: Option<String>,
+    pub duration: Option<f64>,
+    pub channel: Option<String>,
+    pub webpage_url: Option<String>,
+}
+
+#[derive(Serialize, RustSignal)]
+pub struct YtdlSearchOutput {
+    pub results: Vec<YtdlSearchResult>,
+    pub error: Option<String>,
+}
+
+#[derive(Deserialize, DartSignal)]
 pub struct DoDownload {
     pub url: Option<String>,
     pub dest: String,

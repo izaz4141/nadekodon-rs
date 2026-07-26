@@ -68,6 +68,7 @@ async fn main() {
     spawn(downloader::get_categories(dm.clone()));
     spawn(downloader::update_categories(dm.clone()));
     spawn(utils::ytdlp::handle_ytdl_query());
+    spawn(utils::ytdlp::handle_ytdl_search());
     spawn(downloader::handle_ffmpeg_results());
     spawn(utils::security::handle_password_security());
     spawn(utils::security::handle_login());

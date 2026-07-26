@@ -1,7 +1,9 @@
+use anyhow::Context;
 use serde_json::Value;
+use std::process::Stdio;
 use tokio::process::Command;
 
-use crate::signals::{YtdlFormat, YtdlQueryOutput};
+use crate::signals::{YtdlFormat, YtdlQueryOutput, YtdlSearchResult};
 
 pub async fn get_ytdl_info(url: &str) -> Result<YtdlQueryOutput, String> {
     let output = Command::new("yt-dlp")
@@ -66,4 +68,56 @@ pub async fn get_ytdl_info(url: &str) -> Result<YtdlQueryOutput, String> {
     }
 
     Ok(YtdlQueryOutput { items, error: None })
+}
+
+pub async fn search(query: &str) -> anyhow::Result<Vec<YtdlSearchResult>> {
+    let output = Command::new("yt-dlp")
+        .arg("--dump-json")
+        .arg("--no-download")
+        .arg("--flat-playlist")
+        .arg("--ignore-errors")
+        .arg(format!("ytsearch10:{query}"))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .context("Failed to execute yt-dlp for search")?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("yt-dlp search failed: {stderr}");
+    }
+
+    let stdout = String::from_utf8(output.stdout).context("Invalid UTF-8 from yt-dlp")?;
+    let mut results = Vec::new();
+
+    for line in stdout.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        if let Ok(v) = serde_json::from_str::<Value>(line) {
+            results.push(YtdlSearchResult {
+                id: v["id"].as_str().unwrap_or_default().to_string(),
+                title: v["title"].as_str().unwrap_or_default().to_string(),
+                url: v["webpage_url"]
+                    .as_str()
+                    .or_else(|| v["url"].as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+                thumbnail: v["thumbnails"]
+                    .as_array()
+                    .and_then(|arr| arr.first().or_else(|| arr.last()))
+                    .and_then(|t| t["url"].as_str())
+                    .map(|s| s.to_string()),
+                duration: v["duration"].as_f64(),
+                channel: v["channel"]
+                    .as_str()
+                    .or_else(|| v["uploader"].as_str())
+                    .map(|s| s.to_string()),
+                webpage_url: v["webpage_url"].as_str().map(|s| s.to_string()),
+            });
+        }
+    }
+
+    Ok(results)
 }
