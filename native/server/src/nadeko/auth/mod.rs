@@ -4,7 +4,6 @@ pub mod decrypt;
 pub mod encrypt;
 pub mod hash;
 pub mod login;
-pub mod salt;
 pub mod verify_password;
 
 pub use api::*;
@@ -13,7 +12,6 @@ pub use decrypt::*;
 pub use encrypt::*;
 pub use hash::*;
 pub use login::*;
-pub use salt::*;
 pub use verify_password::*;
 
 use crate::security::check_api_key;
@@ -32,7 +30,6 @@ pub fn create_auth_router(state: SharedState) -> Router<SharedState> {
 
     let protected_router = Router::new()
         .route("/hash", post(handle_hashing_password))
-        .route("/generate-salt", get(handle_generate_salt))
         .route("/generate-api", get(handle_generate_api))
         .route("/change-credentials", post(handle_change_credentials))
         .route("/verify-password", post(handle_verify_password))

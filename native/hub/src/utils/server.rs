@@ -147,15 +147,11 @@ pub async fn start_server_listener(context: Arc<AppContext>) {
 
         let config_path = msg.config_path;
         let config_val = load_config(&config_path);
-        let salt = config_val["salt"]
-            .as_str()
-            .map(|s| s.to_string())
-            .unwrap_or_else(security::generate_salt);
 
         let password = if security::is_valid_hash(&msg.password) {
             msg.password
         } else {
-            match security::hash_password(&msg.password, &salt) {
+            match security::hash_password(&msg.password) {
                 Ok(v) => v,
                 Err(e) => {
                     logger::error(&format!("Error when hashing password: {:?}", e));

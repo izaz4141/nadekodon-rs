@@ -6,7 +6,6 @@ use utoipa::ToSchema;
 #[derive(Deserialize, ToSchema)]
 pub struct HashRequest {
     pub plain_text: String,
-    pub salt: String,
 }
 
 #[utoipa::path(
@@ -21,7 +20,7 @@ pub struct HashRequest {
     )
 )]
 pub async fn handle_hashing_password(Json(payload): Json<HashRequest>) -> impl IntoResponse {
-    match security::hash_password(&payload.plain_text, &payload.salt) {
+    match security::hash_password(&payload.plain_text) {
         Ok(encrypted) => (axum::http::StatusCode::OK, encrypted).into_response(),
         Err(e) => (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }

@@ -75,11 +75,7 @@ pub async fn handle_change_credentials(
 
     if let Some(new_password) = &payload.new_password {
         if !new_password.is_empty() {
-            let salt = {
-                let config = state.config.read().await;
-                config["salt"].as_str().unwrap_or("").to_string()
-            };
-            match security::hash_password(new_password, &salt) {
+            match security::hash_password(new_password) {
                 Ok(hashed) => new_password_hash = hashed,
                 Err(e) => {
                     logger::error(&format!("Failed to hash password: {}", e));

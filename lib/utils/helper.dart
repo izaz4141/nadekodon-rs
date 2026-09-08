@@ -211,6 +211,15 @@ Future<ResultType> openFile(String filePath) async {
   }
 }
 
+bool isValidHash(String input) {
+  // Mirrors security::is_valid_hash: a stored password is a valid PHC (Argon2)
+  // hash only if it starts with the "$argon2" prefix.
+  final trimmed = input.trim();
+  return trimmed.length >= 8 &&
+      trimmed.startsWith('\$argon2') &&
+      trimmed.contains('\$');
+}
+
 bool isValidMasterKey(String key) {
   if (key.length != 64) return false;
   for (int i = 0; i < 64; i += 2) {

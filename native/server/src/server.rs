@@ -128,9 +128,7 @@ pub fn load_config(path: &str) -> Value {
         && let Ok(mut v) = serde_json::from_str::<Value>(&content)
     {
         v["server_api_key"] = Value::String(Uuid::new_v4().to_string());
-        let salt = utils::security::generate_salt();
-        v["salt"] = Value::String(salt.clone());
-        v["password"] = Value::String(utils::security::hash_password("admin", &salt).unwrap());
+        v["password"] = Value::String(utils::security::hash_password("admin").unwrap());
         cfg = v;
     }
     logger::debug(&format!("Loading config from {}", path));

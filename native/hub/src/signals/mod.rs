@@ -284,24 +284,12 @@ pub struct FfmpegResult {
 pub struct HashPassword {
     pub id: String,
     pub plain_text: String,
-    pub salt: String,
 }
 
 #[derive(Serialize, RustSignal)]
 pub struct HashingOutput {
     pub id: String,
     pub hashed_text: Option<String>,
-}
-
-#[derive(Deserialize, DartSignal)]
-pub struct GenerateSalt {
-    pub id: String,
-}
-
-#[derive(Serialize, RustSignal)]
-pub struct SaltOutput {
-    pub id: String,
-    pub salt: String,
 }
 
 #[derive(Deserialize, DartSignal)]

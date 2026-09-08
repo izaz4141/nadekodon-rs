@@ -27,7 +27,6 @@ pub async fn handle_get_settings(State(state): State<SharedState>) -> impl IntoR
         map.remove("require_login");
         map.remove("username");
         map.remove("password");
-        map.remove("salt");
         map.remove("server_api_key");
         map.remove("accounts");
     }

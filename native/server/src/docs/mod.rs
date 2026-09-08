@@ -13,7 +13,6 @@ use security::SecurityModifier;
     paths(
         crate::nadeko::auth::login::handle_login,
         crate::nadeko::auth::hash::handle_hashing_password,
-        crate::nadeko::auth::salt::handle_generate_salt,
         crate::nadeko::auth::api::handle_generate_api,
         crate::nadeko::auth::change_credentials::handle_change_credentials,
         crate::nadeko::auth::verify_password::handle_verify_password,

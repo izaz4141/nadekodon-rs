@@ -29,7 +29,6 @@ async fn main() {
 
     let mut username = get_str("username");
     let mut password = get_str("password");
-    let salt = get_str("salt");
 
     if let Ok(env_user) = std::env::var("NADEKO_USERNAME") {
         username = env_user;
@@ -47,7 +46,7 @@ async fn main() {
     password = if security::is_valid_hash(&password) {
         password
     } else {
-        match security::hash_password(&password, &salt) {
+        match security::hash_password(&password) {
             Ok(v) => v,
             Err(e) => {
                 logger::error(&format!("Error when hashing password: {:?}", e));
@@ -107,7 +106,7 @@ async fn main() {
         if security::is_valid_hash(&password) {
             Value::String(password.clone())
         } else {
-            match security::hash_password(&password, &salt) {
+            match security::hash_password(&password) {
                 Ok(v) => Value::String(v),
                 Err(e) => {
                     logger::error(&format!("Error when hashing password: {:?}", e));

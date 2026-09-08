@@ -31,7 +31,6 @@ class SettingsManager {
   static final username = ValueNotifier<String>('');
   static final password = ValueNotifier<String>('');
   static final hashedPassword = ValueNotifier<String>('');
-  static final salt = ValueNotifier<String>('');
 
   static final accounts = ValueNotifier<List<Account>>([]);
   static final Map<ValueNotifier, VoidCallback> _autoSaveListeners = {};
@@ -172,19 +171,17 @@ class SettingsManager {
       }
     }
 
-    if (json.containsKey('salt')) {
-      salt.value = json['salt'];
-      if (salt.value.isEmpty) {
-        await _generateSalt();
-      }
-    }
     if (json.containsKey('username')) {
-      username.value = json['username'] ?? defaults['username'];
+      final user = json['username'] as String?;
+      username.value =
+          (user == null || user.isEmpty) ? defaults['username'] : user;
     }
 
     if (!isRemote) {
       final encodedPassword = json['password'] as String?;
-      if (encodedPassword != null && encodedPassword.isNotEmpty) {
+      if (encodedPassword != null &&
+          encodedPassword.isNotEmpty &&
+          isValidHash(encodedPassword)) {
         password.value = encodedPassword;
         hashedPassword.value = encodedPassword;
       } else {
@@ -247,7 +244,6 @@ class SettingsManager {
     'server_host': serverHost.value,
     'server_port': serverPort.value,
     'server_api_key': encryptedServerApiKey.value,
-    'salt': salt.value,
     'username': username.value,
     'password': hashedPassword.value,
     'speed_limit': speedLimit.value,
@@ -346,7 +342,6 @@ class SettingsManager {
     add(retreatToTray, 'retreat_to_tray');
     add(downloadFolder, 'download_folder');
     add(serverHost, 'server_host');
-    add(salt, 'salt');
     add(speedLimit, 'speed_limit');
     add(speedMode, 'speed_mode', () => speedMode.value.index);
     add(
@@ -448,10 +443,7 @@ class SettingsManager {
     // downloadFolder is usually not reset to default from asset as it's environment dependent
     username.value = defaults['username'];
     password.value = await hashPassword(defaults['password']);
-
-    if (salt.value.isEmpty) {
-      await _generateSalt();
-    }
+    hashedPassword.value = password.value;
     serverHost.value = defaults['server_host'] ?? '127.0.0.1';
     serverPort.value = defaults['server_port'] ?? 8080;
     speedLimit.value = (defaults['speed_limit'] ?? 0.0).toDouble();
@@ -574,27 +566,11 @@ class SettingsManager {
     ).sendSignalToRust();
   }
 
-  static Future<void> _generateSalt() async {
-    if (PlatformService().isRemote) {
-      final newSalt = await APIService.generateSalt();
-      if (newSalt != null) salt.value = newSalt;
-      return;
-    } else {
-      final id = DateTime.now().microsecondsSinceEpoch.toString();
-      final stream = SaltOutput.rustSignalStream.where(
-        (signal) => signal.message.id == id,
-      );
-      GenerateSalt(id: id).sendSignalToRust();
-      final signal = await stream.first;
-      salt.value = signal.message.salt;
-    }
-  }
-
   static Future<String> hashPassword(String plainText) async {
     if (plainText.isEmpty) return '';
     try {
       if (PlatformService().isRemote) {
-        final hashed = await APIService.hashPassword(plainText, salt.value);
+        final hashed = await APIService.hashPassword(plainText);
         if (hashed != null) return hashed;
       } else {
         final id = DateTime.now().microsecondsSinceEpoch.toString();
@@ -604,7 +580,6 @@ class SettingsManager {
         HashPassword(
           id: id,
           plainText: plainText,
-          salt: salt.value,
         ).sendSignalToRust();
         final signal = await stream.first;
         if (signal.message.hashedText != null) {

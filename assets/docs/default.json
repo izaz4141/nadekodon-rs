@@ -4,7 +4,6 @@
   "server_host": "127.0.0.1",
   "server_port": 8080,
   "server_api_key": "aReallylongR4ndomsTring",
-  "salt": "4Really1ongR4ndomsTrin&",
   "username": "admin",
   "password": "admin",
   "speed_limit": 0.0,

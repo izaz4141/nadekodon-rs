@@ -8,12 +8,11 @@ pub fn generate_salt() -> String {
     SaltString::generate(&mut OsRng).as_str().to_string()
 }
 
-pub fn hash_password(password: &str, salt: &str) -> Result<String> {
+pub fn hash_password(password: &str) -> Result<String> {
     if PasswordHash::new(password).is_ok() {
         return Ok(password.to_string());
     };
-    let salt_string =
-        SaltString::from_b64(salt).map_err(|e| anyhow::anyhow!("Invalid salt format: {}", e))?;
+    let salt_string = SaltString::generate(&mut OsRng);
 
     let argon2 = Argon2::default();
 

@@ -650,7 +650,7 @@ class APIService {
     }
   }
 
-  static Future<String?> hashPassword(String plainText, String salt) async {
+  static Future<String?> hashPassword(String plainText) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/api/nadeko/auth/hash'),
@@ -658,28 +658,13 @@ class APIService {
           'Content-Type': 'application/json',
           'X-API-Key': SettingsManager.serverApiKey.value,
         },
-        body: jsonEncode({'plain_text': plainText, 'salt': salt}),
+        body: jsonEncode({'plain_text': plainText}),
       );
       if (response.statusCode == 200) {
         return response.body;
       }
     } catch (e) {
       log("Error hashing password: $e", isError: true);
-    }
-    return null;
-  }
-
-  static Future<String?> generateSalt() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/nadeko/auth/generate-salt'),
-        headers: {'X-API-Key': SettingsManager.serverApiKey.value},
-      );
-      if (response.statusCode == 200) {
-        return response.body;
-      }
-    } catch (e) {
-      log("Error generating salt: $e", isError: true);
     }
     return null;
   }
