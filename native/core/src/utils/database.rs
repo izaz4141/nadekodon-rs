@@ -203,7 +203,21 @@ impl DatabaseManager {
         let db_url = format!("sqlite://{}", path.display());
 
         let pool = SqlitePoolOptions::new()
-            .max_connections(5)
+            .max_connections(10)
+            .after_connect(|conn, _metadata| {
+                Box::pin(async move {
+                    sqlx::query("PRAGMA journal_mode=WAL")
+                        .execute(&mut *conn)
+                        .await?;
+                    sqlx::query("PRAGMA busy_timeout=5000")
+                        .execute(&mut *conn)
+                        .await?;
+                    sqlx::query("PRAGMA foreign_keys=ON")
+                        .execute(&mut *conn)
+                        .await?;
+                    Ok(())
+                })
+            })
             .connect(&db_url)
             .await?;
 
