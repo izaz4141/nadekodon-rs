@@ -158,7 +158,7 @@ class SettingsManager {
             if (encrypted != null) {
               serverApiKey.value = storedApiKey;
               encryptedServerApiKey.value = encrypted;
-              saveChanged('server_api_key', encrypted);
+              await saveChanged('server_api_key', encrypted);
             } else {
               await regenerateApiKey();
             }
@@ -547,7 +547,7 @@ class SettingsManager {
     await _ioService.setPermissions(masterKeyPath, '0600');
     serverApiKey.value = signal.message.decryptedApiKey;
     encryptedServerApiKey.value = signal.message.encryptedApiKey;
-    saveChanged('server_api_key', signal.message.encryptedApiKey);
+    await saveChanged('server_api_key', signal.message.encryptedApiKey);
   }
 
   static Future<void> restartServer() async {
