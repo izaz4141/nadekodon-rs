@@ -9,7 +9,7 @@ import 'package:nadekodon/ui/widgets/components/section_header.dart';
 import 'package:nadekodon/ui/widgets/components/spin_box.dart';
 import 'package:nadekodon/ui/widgets/components/list_text_field.dart';
 import 'package:nadekodon/ui/widgets/dialog/verify_password_dialog.dart';
-import 'package:nadekodon/utils/api_service.dart';
+import 'package:nadekodon/utils/bridge_service.dart';
 
 class SettingsSec extends StatefulWidget {
   const SettingsSec({super.key});
@@ -57,7 +57,7 @@ class _SettingsSecState extends State<SettingsSec> {
     });
     bool success = false;
     if (PlatformService().isRemote) {
-      success = await APIService.changeCredentials(
+      success = await BridgeService.changeCredentials(
         currentPassword: SettingsManager.password.value,
         newUsername: _localUsername.value,
         newPassword: _localPassword.value.isEmpty ? null : _localPassword.value,
@@ -131,7 +131,7 @@ class _SettingsSecState extends State<SettingsSec> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ValueListenableBuilder<bool>(
-                valueListenable: APIService.isOnline,
+                valueListenable: BridgeService.isOnline,
                 builder: (context, isOnline, _) {
                   return IconButton(
                     icon: Icon(
@@ -144,7 +144,7 @@ class _SettingsSecState extends State<SettingsSec> {
                     tooltip: isOnline ? "Server Online" : "Server Offline",
                     onPressed: () {
                       SettingsManager.restartServer();
-                      APIService.restartPolling();
+                      BridgeService.restartPolling();
                       AppSnackBar.show(context, "Server restarted");
                     },
                   );

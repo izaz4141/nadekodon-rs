@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/services.dart';
 import 'package:nadekodon/utils/logger.dart';
-import 'package:nadekodon/src/bindings/bindings.dart';
+import 'package:nadekodon/utils/rinf_service/rinf_service.dart';
 
 class YtDlpAndroid {
   static const MethodChannel _channel = MethodChannel(
@@ -49,7 +49,7 @@ class YtDlpAndroid {
 
   static YtdlQueryOutput _mapToYtdlQueryOutput(Map<String, dynamic> raw) {
     if (raw.containsKey('error')) {
-      return YtdlQueryOutput(items: [], error: raw['error']);
+      return YtdlQueryOutput(id: '', items: [], error: raw['error']);
     }
 
     final String name = raw['title'] ?? 'Unknown';
@@ -92,6 +92,7 @@ class YtDlpAndroid {
     }
 
     return YtdlQueryOutput(
+      id: '',
       items: [
         YtdlItem(
           name: name,

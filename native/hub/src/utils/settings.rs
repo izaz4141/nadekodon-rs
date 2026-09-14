@@ -3,18 +3,19 @@ use core::downloader::DownloadManager;
 use core::signals;
 use core::utils::settings::update_settings_internal;
 
-use rinf::DartSignal;
+use rinf::{DartSignal, RustSignal};
 use std::sync::Arc;
 
-use crate::signals::UpdateSettings;
+use crate::signals::{UpdateSettingsRequest, UpdateSettingsResponse};
 use crate::utils::logger;
 
 pub async fn update_settings(dm: Arc<DownloadManager>) {
-    let receiver = UpdateSettings::get_dart_signal_receiver();
+    let receiver = UpdateSettingsRequest::get_dart_signal_receiver();
 
     while let Some(signal_pack) = receiver.recv().await {
         let data = signal_pack.message;
-        let core_settings = signals::UpdateSettings {
+        let core_settings = signals::UpdateSettingsRequest {
+            id: data.id.clone(),
             download_dir: data.download_dir,
             speed_limit: data.speed_limit,
             download_threads: data.download_threads,
@@ -27,5 +28,10 @@ pub async fn update_settings(dm: Arc<DownloadManager>) {
         };
         let dm_new = update_settings_internal(dm.clone(), core_settings).await;
         logger::debug(&format!("Updated DM Settings to {:?}", &dm_new));
+        UpdateSettingsResponse {
+            id: data.id,
+            success: true,
+        }
+        .send_signal_to_dart();
     }
 }

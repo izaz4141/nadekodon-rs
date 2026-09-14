@@ -2,15 +2,16 @@ extern crate nadekodon_core as core;
 use core::utils::ytdlp::{get_ytdl_info, search};
 
 use crate::signals::{
-    QueryYtdl, SearchYtdl, YtdlFormat, YtdlQueryOutput, YtdlSearchOutput, YtdlSearchResult,
+    QueryYtdlRequest, SearchYtdlRequest, YtdlFormat, QueryYtdlResponse, SearchYtdlResponse, YtdlSearchResult,
 };
 use crate::utils::logger;
 
 use rinf::{DartSignal, RustSignal};
 
 pub async fn handle_ytdl_query() {
-    let receiver = QueryYtdl::get_dart_signal_receiver();
+    let receiver = QueryYtdlRequest::get_dart_signal_receiver();
     while let Some(signal) = receiver.recv().await {
+        let id = signal.message.id;
         let url = signal.message.url;
         let result = get_ytdl_info(&url).await;
         let signal_to_send = match result {
@@ -55,14 +56,16 @@ pub async fn handle_ytdl_query() {
                     })
                     .collect();
 
-                YtdlQueryOutput {
+                QueryYtdlResponse {
+                    id: id.clone(),
                     items,
                     error: output.error,
                 }
             }
             Err(e) => {
                 logger::error(&format!("YT-DLP url not supported: {:?}", e));
-                YtdlQueryOutput {
+                QueryYtdlResponse {
+                    id,
                     items: vec![],
                     error: Some(e),
                 }
@@ -73,8 +76,9 @@ pub async fn handle_ytdl_query() {
 }
 
 pub async fn handle_ytdl_search() {
-    let receiver = SearchYtdl::get_dart_signal_receiver();
+    let receiver = SearchYtdlRequest::get_dart_signal_receiver();
     while let Some(signal) = receiver.recv().await {
+        let id = signal.message.id;
         let query = signal.message.query;
         let result = search(&query).await;
         let signal_to_send = match result {
@@ -91,14 +95,16 @@ pub async fn handle_ytdl_search() {
                         webpage_url: r.webpage_url,
                     })
                     .collect();
-                YtdlSearchOutput {
+                SearchYtdlResponse {
+                    id: id.clone(),
                     results: items,
                     error: None,
                 }
             }
             Err(e) => {
                 logger::error(&format!("YT-DLP search failed: {:?}", e));
-                YtdlSearchOutput {
+                SearchYtdlResponse {
+                    id,
                     results: vec![],
                     error: Some(e.to_string()),
                 }

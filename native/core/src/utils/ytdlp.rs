@@ -3,9 +3,9 @@ use serde_json::Value;
 use std::process::Stdio;
 use tokio::process::Command;
 
-use crate::signals::{YtdlFormat, YtdlQueryOutput, YtdlSearchResult};
+use crate::signals::{YtdlFormat, QueryYtdlResponse, YtdlSearchResult};
 
-pub async fn get_ytdl_info(url: &str) -> Result<YtdlQueryOutput, String> {
+pub async fn get_ytdl_info(url: &str) -> Result<QueryYtdlResponse, String> {
     let output = Command::new("yt-dlp")
         .arg("--dump-json")
         .arg(url)
@@ -67,7 +67,11 @@ pub async fn get_ytdl_info(url: &str) -> Result<YtdlQueryOutput, String> {
         return Err("No JSON data found in yt-dlp output".to_string());
     }
 
-    Ok(YtdlQueryOutput { items, error: None })
+    Ok(QueryYtdlResponse {
+        id: String::new(),
+        items,
+        error: None,
+    })
 }
 
 pub async fn search(query: &str) -> anyhow::Result<Vec<YtdlSearchResult>> {

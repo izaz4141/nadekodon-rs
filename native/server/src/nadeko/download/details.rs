@@ -1,10 +1,11 @@
+use crate::response::json_error;
 use crate::server::SharedState;
 use axum::{
     Json,
     extract::{Path, State},
     response::IntoResponse,
 };
-use nadekodon_core::signals::DownloadDetails;
+use nadekodon_core::signals::GetDownloadDetailsResponse;
 use serde::Deserialize;
 use utoipa::{IntoParams, ToSchema};
 
@@ -21,7 +22,7 @@ pub struct DownloadDetailsPath {
     security(("ApiKeyAuth" = [])),
     params(DownloadDetailsPath),
     responses(
-        (status = 200, description = "Download details", body = DownloadDetails),
+        (status = 200, description = "Download details", body = GetDownloadDetailsResponse),
         (status = 404, description = "Download not found")
     )
 )]
@@ -36,6 +37,9 @@ pub async fn handle_get_download_details(
     .await
     {
         Ok(Some(details)) => Json(details).into_response(),
-        _ => axum::http::StatusCode::NOT_FOUND.into_response(),
+        Ok(None) => json_error(axum::http::StatusCode::NOT_FOUND, "Download not found")
+            .into_response(),
+        Err(_) => json_error(axum::http::StatusCode::NOT_FOUND, "Download not found")
+            .into_response(),
     }
 }

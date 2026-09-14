@@ -115,8 +115,9 @@ pub async fn start_download_manager(
 
 pub async fn query_url_info_internal(
     client: Client,
-    data: signals::QueryUrl,
-) -> Result<signals::UrlQueryOutput> {
+    data: signals::QueryUrlRequest,
+) -> Result<signals::QueryUrlResponse> {
+    let id = data.id;
     let url = data.url;
     let cookie = data.cookie;
     let user_agent = data.user_agent;
@@ -137,7 +138,8 @@ pub async fn query_url_info_internal(
                 }
                 None => true,
             };
-            let output = signals::UrlQueryOutput {
+            let output = signals::QueryUrlResponse {
+                id: id.clone(),
                 url: info.url,
                 name: info.name,
                 total_size: info.total_size,
@@ -151,7 +153,8 @@ pub async fn query_url_info_internal(
         Err(e) => {
             let err_str = format!("Failed to query info for {}: {:?}", url, e);
             logger::error(&err_str);
-            Ok(signals::UrlQueryOutput {
+            Ok(signals::QueryUrlResponse {
+                id,
                 url,
                 name: err_str,
                 total_size: None,
@@ -166,7 +169,7 @@ pub async fn query_url_info_internal(
 
 pub async fn spawn_download_worker_internal(
     manager: &Arc<DownloadManager>,
-    data: signals::DoDownload,
+    data: signals::DoDownloadRequest,
 ) -> Result<()> {
     let mut dest = std::path::PathBuf::from(data.dest);
     let manager = Arc::clone(manager);
@@ -415,8 +418,8 @@ pub async fn spawn_download_worker_internal(
 
 pub async fn get_download_list_internal(
     manager: &Arc<DownloadManager>,
-    query: signals::GetDownloadList,
-) -> Result<signals::DownloadList> {
+    query: signals::GetDownloadListRequest,
+) -> Result<signals::GetDownloadListResponse> {
     match manager.list_all().await {
         Ok(list) => {
             let mut filtered: Vec<DownloadInfo> = list
@@ -534,7 +537,8 @@ pub async fn get_download_list_internal(
                 download_list.push(glance);
             }
 
-            Ok(signals::DownloadList {
+            Ok(signals::GetDownloadListResponse {
+                id: query.id,
                 list: download_list,
                 total_count,
                 start_index: start as u64,
@@ -548,7 +552,7 @@ pub async fn get_download_list_internal(
 pub async fn get_download_details_internal(
     manager: &Arc<DownloadManager>,
     id_str: &str,
-) -> Result<Option<signals::DownloadDetails>> {
+) -> Result<Option<signals::GetDownloadDetailsResponse>> {
     let id = Uuid::parse_str(id_str)?;
 
     match manager.info(id).await {
@@ -596,7 +600,7 @@ pub async fn get_download_details_internal(
                 }
             }
 
-            Ok(Some(signals::DownloadDetails {
+            Ok(Some(signals::GetDownloadDetailsResponse {
                 id: info.id.to_string(),
                 name: info
                     .dest

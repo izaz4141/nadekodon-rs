@@ -1,3 +1,4 @@
+use crate::response::json_error;
 use crate::server::SharedState;
 use axum::{Json, extract::State, response::IntoResponse};
 use nadekodon_core::signals::{EncryptRequest, EncryptResponse};
@@ -23,10 +24,12 @@ pub async fn handle_encrypt(
         Ok(encrypted) => encrypted,
         Err(e) => {
             nadekodon_core::utils::logger::error(&format!("Unable to encrypt text: {:#}", &e));
-            return (axum::http::StatusCode::INTERNAL_SERVER_ERROR,).into_response();
+            return json_error(axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Encryption failed")
+                .into_response();
         }
     };
     Json(EncryptResponse {
+        id: req.id,
         encrypted_key: encrypted_text,
         master_key,
     })

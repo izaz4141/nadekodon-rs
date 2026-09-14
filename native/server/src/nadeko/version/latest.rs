@@ -1,9 +1,10 @@
+use crate::response::json_error;
 use crate::server::SharedState;
 use axum::{
     extract::{Json, Query, State},
     response::IntoResponse,
 };
-use nadekodon_core::utils::version::VersionInfo;
+use nadekodon_core::signals::VersionInfo;
 use serde::Deserialize;
 use utoipa::IntoParams;
 
@@ -57,7 +58,8 @@ pub async fn handle_version_latest(
                 "Error getting latest {}/{}: {:#?}",
                 &repo_owner, &repo_name, &e
             ));
-            (axum::http::StatusCode::BAD_REQUEST, e.to_string()).into_response()
+            json_error(axum::http::StatusCode::BAD_REQUEST, format!("Failed to fetch: {e}"))
+                .into_response()
         }
     }
 }

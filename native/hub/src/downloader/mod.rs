@@ -142,10 +142,11 @@ pub async fn handle_ffmpeg_results() {
 // }
 
 pub async fn query_url_info(client: Client) {
-    let receiver = signals::QueryUrl::get_dart_signal_receiver();
+    let receiver = signals::QueryUrlRequest::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
         let data = signal_pack.message;
-        let core_query = csignals::QueryUrl {
+        let core_query = csignals::QueryUrlRequest {
+            id: data.id.clone(),
             url: data.url,
             cookie: data.cookie,
             user_agent: data.user_agent,
@@ -155,7 +156,8 @@ pub async fn query_url_info(client: Client) {
             if u.error {
                 logger::error(&u.name);
             }
-            signals::UrlQueryOutput {
+            signals::QueryUrlResponse {
+                id: data.id,
                 name: u.name,
                 url: u.url,
                 total_size: u.total_size,
@@ -170,7 +172,7 @@ pub async fn query_url_info(client: Client) {
 }
 
 pub async fn spawn_download_worker(manager: Arc<downloader::DownloadManager>) {
-    let receiver = signals::DoDownload::get_dart_signal_receiver();
+    let receiver = signals::DoDownloadRequest::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
         let drequest = signal_pack.message;
         let video_format: Option<csignals::YtdlFormat> =
@@ -193,7 +195,8 @@ pub async fn spawn_download_worker(manager: Arc<downloader::DownloadManager>) {
                 acodec: af.acodec,
                 note: af.note,
             });
-        let coredrequest = csignals::DoDownload {
+        let coredrequest = csignals::DoDownloadRequest {
+            id: drequest.id.clone(),
             url: drequest.url.clone(),
             dest: drequest.dest,
             video_format,
@@ -205,17 +208,31 @@ pub async fn spawn_download_worker(manager: Arc<downloader::DownloadManager>) {
             category: drequest.category,
         };
         match downloader::spawn_download_worker_internal(&manager, coredrequest).await {
-            Ok(_) => logger::debug(&format!("Spawned worker for {:?}", &drequest.url)),
-            Err(e) => logger::error(&format!(
-                "Failed to spawn worker for {:?}: {:?}",
-                &drequest.url, e
-            )),
+            Ok(_) => {
+                logger::debug(&format!("Spawned worker for {:?}", &drequest.url));
+                signals::DoDownloadResponse {
+                    id: drequest.id,
+                    success: true,
+                }
+                .send_signal_to_dart()
+            }
+            Err(e) => {
+                logger::error(&format!(
+                    "Failed to spawn worker for {:?}: {:?}",
+                    &drequest.url, e
+                ));
+                signals::DoDownloadResponse {
+                    id: drequest.id,
+                    success: false,
+                }
+                .send_signal_to_dart()
+            }
         };
     }
 }
 
 pub async fn pause_download(manager: Arc<downloader::DownloadManager>) {
-    let receiver = signals::PauseDownload::get_dart_signal_receiver();
+    let receiver = signals::PauseDownloadRequest::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
         let data = signal_pack.message;
 
@@ -228,15 +245,21 @@ pub async fn pause_download(manager: Arc<downloader::DownloadManager>) {
         };
 
         let manager = Arc::clone(&manager);
-        match manager.pause(id).await {
+        let result = manager.pause(id).await;
+        match &result {
             Ok(_) => logger::debug(&format!("Paused worker with id {}", id)),
             Err(e) => logger::error(&format!("Failed to pause worker for {:?}", e)),
         }
+        signals::PauseDownloadResponse {
+            id: data.id,
+            success: result.is_ok(),
+        }
+        .send_signal_to_dart();
     }
 }
 
 pub async fn resume_download(manager: Arc<downloader::DownloadManager>) {
-    let receiver = signals::ResumeDownload::get_dart_signal_receiver();
+    let receiver = signals::ResumeDownloadRequest::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
         let data = signal_pack.message;
 
@@ -249,15 +272,21 @@ pub async fn resume_download(manager: Arc<downloader::DownloadManager>) {
         };
 
         let manager = Arc::clone(&manager);
-        match manager.resume(id).await {
+        let result = manager.resume(id).await;
+        match &result {
             Ok(_) => logger::debug(&format!("Resumed worker with id {}", id)),
             Err(e) => logger::error(&format!("Failed to resume worker for {:?}", e)),
         }
+        signals::ResumeDownloadResponse {
+            id: data.id,
+            success: result.is_ok(),
+        }
+        .send_signal_to_dart();
     }
 }
 
 pub async fn cancel_download(manager: Arc<downloader::DownloadManager>) {
-    let receiver = signals::CancelDownload::get_dart_signal_receiver();
+    let receiver = signals::CancelDownloadRequest::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
         let data = signal_pack.message;
 
@@ -270,15 +299,21 @@ pub async fn cancel_download(manager: Arc<downloader::DownloadManager>) {
         };
 
         let manager = Arc::clone(&manager);
-        match manager.cancel(id).await {
+        let result = manager.cancel(id).await;
+        match &result {
             Ok(_) => logger::debug(&format!("Canceled worker with id {}", id)),
             Err(e) => logger::error(&format!("Failed to cancel worker for {:?}", e)),
         }
+        signals::CancelDownloadResponse {
+            id: data.id,
+            success: result.is_ok(),
+        }
+        .send_signal_to_dart();
     }
 }
 
 pub async fn delete_download(manager: Arc<downloader::DownloadManager>) {
-    let receiver = signals::DeleteDownload::get_dart_signal_receiver();
+    let receiver = signals::DeleteDownloadRequest::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
         let data = signal_pack.message;
 
@@ -291,13 +326,18 @@ pub async fn delete_download(manager: Arc<downloader::DownloadManager>) {
         };
 
         let manager = Arc::clone(&manager);
-        let _ = manager.delete_worker(id, data.delete_file).await;
+        let result = manager.delete_worker(id, data.delete_file).await;
         logger::debug(&format!("Deleted worker with id {}", id));
+        signals::DeleteDownloadResponse {
+            id: data.id,
+            success: result.is_ok(),
+        }
+        .send_signal_to_dart();
     }
 }
 
 pub async fn handle_update_download_url(manager: Arc<downloader::DownloadManager>) {
-    let receiver = signals::UpdateDownloadUrl::get_dart_signal_receiver();
+    let receiver = signals::UpdateDownloadUrlRequest::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
         let data = signal_pack.message;
 
@@ -310,15 +350,21 @@ pub async fn handle_update_download_url(manager: Arc<downloader::DownloadManager
         };
 
         let manager = Arc::clone(&manager);
-        match manager.update_download_url(id, data.new_url.clone()).await {
+        let result = manager.update_download_url(id, data.new_url.clone()).await;
+        match &result {
             Ok(_) => logger::debug(&format!("Updated URL for worker {}", id)),
             Err(e) => logger::error(&format!("Failed to update URL for worker {}: {:?}", id, e)),
         }
+        signals::UpdateDownloadUrlResponse {
+            id: data.id,
+            success: result.is_ok(),
+        }
+        .send_signal_to_dart();
     }
 }
 
 pub async fn get_download_details(manager: Arc<downloader::DownloadManager>) {
-    let receiver = signals::GetDownloadDetails::get_dart_signal_receiver();
+    let receiver = signals::GetDownloadDetailsRequest::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
         let data = signal_pack.message;
         let manager = Arc::clone(&manager);
@@ -334,7 +380,7 @@ pub async fn get_download_details(manager: Arc<downloader::DownloadManager>) {
                     current: p.current,
                 })
                 .collect();
-            signals::DownloadDetails {
+            signals::GetDownloadDetailsResponse {
                 id: details.id,
                 name: details.name,
                 url: details.url,
@@ -357,10 +403,11 @@ pub async fn get_download_details(manager: Arc<downloader::DownloadManager>) {
 }
 
 pub async fn get_download_list(manager: Arc<downloader::DownloadManager>) {
-    let receiver = signals::GetDownloadList::get_dart_signal_receiver();
+    let receiver = signals::GetDownloadListRequest::get_dart_signal_receiver();
     while let Some(dart_signal) = receiver.recv().await {
         let query = dart_signal.message;
-        let cquery = csignals::GetDownloadList {
+        let cquery = csignals::GetDownloadListRequest {
+            id: query.id.clone(),
             offset_index: query.offset_index,
             before: query.before,
             after: query.after,
@@ -391,7 +438,8 @@ pub async fn get_download_list(manager: Arc<downloader::DownloadManager>) {
                         referer: p.referer,
                     })
                     .collect();
-                signals::DownloadList {
+                signals::GetDownloadListResponse {
+                    id: query.id,
                     list: dl,
                     total_count: list.total_count,
                     start_index: list.start_index,
@@ -405,10 +453,15 @@ pub async fn get_download_list(manager: Arc<downloader::DownloadManager>) {
 }
 
 pub async fn handle_init_torrent_persistence(manager: Arc<downloader::DownloadManager>) {
-    let receiver = signals::InitTorrentPersistence::get_dart_signal_receiver();
+    let receiver = signals::InitTorrentPersistenceRequest::get_dart_signal_receiver();
     while let Some(signal) = receiver.recv().await {
-        let persistence_path = std::path::PathBuf::from(signal.message.path);
+        let persistence_path = std::path::PathBuf::from(signal.message.path.clone());
         manager.init_torrent_session(persistence_path).await;
+        signals::InitTorrentPersistenceResponse {
+            id: signal.message.id,
+            success: true,
+        }
+        .send_signal_to_dart();
     }
 }
 
@@ -433,8 +486,9 @@ pub async fn listen_worker_events(manager: Arc<downloader::DownloadManager>) {
 }
 
 pub async fn get_categories(manager: Arc<downloader::DownloadManager>) {
-    let receiver = signals::GetCategories::get_dart_signal_receiver();
-    while let Some(_signal_pack) = receiver.recv().await {
+    let receiver = signals::GetCategoriesRequest::get_dart_signal_receiver();
+    while let Some(signal_pack) = receiver.recv().await {
+        let id = signal_pack.message.id;
         let categories = manager.list_categories().await;
         let category_list: Vec<signals::CategoryDisplay> = categories
             .into_iter()
@@ -443,7 +497,8 @@ pub async fn get_categories(manager: Arc<downloader::DownloadManager>) {
                 save_path: c.save_path.map(|p| p.to_string_lossy().to_string()),
             })
             .collect();
-        signals::CategoriesOutput {
+        signals::GetCategoriesResponse {
+            id,
             categories: category_list,
         }
         .send_signal_to_dart();
@@ -451,7 +506,7 @@ pub async fn get_categories(manager: Arc<downloader::DownloadManager>) {
 }
 
 pub async fn update_categories(manager: Arc<downloader::DownloadManager>) {
-    let receiver = signals::UpdateCategories::get_dart_signal_receiver();
+    let receiver = signals::UpdateCategoriesRequest::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
         let data = signal_pack.message;
         let category_infos: Vec<core::utils::types::CategoryInfo> = data
@@ -462,8 +517,14 @@ pub async fn update_categories(manager: Arc<downloader::DownloadManager>) {
                 save_path: c.save_path.map(std::path::PathBuf::from),
             })
             .collect();
-        if let Err(e) = manager.update_categories(category_infos).await {
+        let result = manager.update_categories(category_infos).await;
+        if let Err(e) = &result {
             logger::error(&format!("Failed to update categories: {:?}", e));
         }
+        signals::UpdateCategoriesResponse {
+            id: data.id,
+            success: result.is_ok(),
+        }
+        .send_signal_to_dart();
     }
 }

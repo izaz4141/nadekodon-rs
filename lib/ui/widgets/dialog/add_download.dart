@@ -11,9 +11,7 @@ import 'package:nadekodon/ui/widgets/view/query_view.dart';
 import 'package:nadekodon/ui/widgets/view/query_result_view.dart';
 import 'package:nadekodon/ui/widgets/view/ytdlp_view.dart';
 import 'package:nadekodon/ui/widgets/dialog/replace_file.dart';
-import 'package:nadekodon/utils/download_service.dart';
-
-import 'package:nadekodon/src/bindings/bindings.dart';
+import 'package:nadekodon/utils/bridge_service.dart';
 
 Future<void> showAddDownloadDialog(
   BuildContext context, {
@@ -125,15 +123,10 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
 
     YtdlQueryOutput? result;
 
-    if (widget.forceLocal) {
-      QueryYtdl(url: _urlController.text.trim()).sendSignalToRust();
-      final signal = await YtdlQueryOutput.rustSignalStream.first;
-      result = signal.message;
-    } else {
-      result = await DownloadService().queryYtdl(
-        url: _urlController.text.trim(),
-      );
-    }
+    result = await BridgeService.queryYtdl(
+      url: _urlController.text.trim(),
+      forceLocal: widget.forceLocal,
+    );
 
     if (mounted) {
       setState(() {
@@ -168,23 +161,13 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
 
     UrlQueryOutput? result;
 
-    if (widget.forceLocal) {
-      QueryUrl(
-        url: url,
-        cookie: widget.cookie,
-        userAgent: widget.userAgent,
-        referer: widget.referer,
-      ).sendSignalToRust();
-      final signal = await UrlQueryOutput.rustSignalStream.first;
-      result = signal.message;
-    } else {
-      result = await DownloadService().queryUrl(
-        url: url,
-        cookie: widget.cookie,
-        userAgent: widget.userAgent,
-        referer: widget.referer,
-      );
-    }
+    result = await BridgeService.queryUrl(
+      url: url,
+      cookie: widget.cookie,
+      userAgent: widget.userAgent,
+      referer: widget.referer,
+      forceLocal: widget.forceLocal,
+    );
 
     if (mounted) {
       setState(() {
@@ -221,29 +204,21 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
     if (!mounted) return;
     Navigator.pop(context);
 
-    if (widget.forceLocal) {
-      DoDownload(
-        url: url,
-        dest: "${_selectedDir.value}/$name",
-        isYtdl: false,
-        cookie: widget.cookie,
-        userAgent: widget.userAgent,
-        referer: widget.referer,
-        category: _selectedCategory.value,
-      ).sendSignalToRust();
-      AppSnackBar.show(context, "Added local download");
-    } else {
-      DownloadService().addDownload(
-        url: url,
-        dest: "${_selectedDir.value}/$name",
-        isYtdl: false,
-        cookie: widget.cookie,
-        userAgent: widget.userAgent,
-        referer: widget.referer,
-        category: _selectedCategory.value,
-      );
-      AppSnackBar.show(context, "Added download");
-    }
+    await BridgeService.addDownload(
+      url: url,
+      dest: "${_selectedDir.value}/$name",
+      isYtdl: false,
+      cookie: widget.cookie,
+      userAgent: widget.userAgent,
+      referer: widget.referer,
+      category: _selectedCategory.value,
+      forceLocal: widget.forceLocal,
+    );
+    if (!mounted) return;
+    AppSnackBar.show(
+      context,
+      widget.forceLocal ? "Added local download" : "Added download",
+    );
   }
 
   Future<void> _handleYtdlDownload() async {
@@ -283,7 +258,7 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
     if (!mounted) return;
     Navigator.pop(context);
 
-    DownloadService().addDownload(
+    BridgeService.addDownload(
       url: null,
       dest: "${_selectedDir.value}/${_nameController.text}",
       videoFormat: vFormat,

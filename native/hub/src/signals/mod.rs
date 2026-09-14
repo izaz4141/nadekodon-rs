@@ -2,7 +2,8 @@ use rinf::{DartSignal, RustSignal, SignalPiece};
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, DartSignal)]
-pub struct UpdateSettings {
+pub struct UpdateSettingsRequest {
+    pub id: String,
     pub download_dir: Option<String>,
     pub speed_limit: Option<u64>,
     pub download_threads: Option<u8>,
@@ -14,8 +15,15 @@ pub struct UpdateSettings {
     pub stalled_time: Option<u64>,
 }
 
+#[derive(Serialize, RustSignal)]
+pub struct UpdateSettingsResponse {
+    pub id: String,
+    pub success: bool,
+}
+
 #[derive(Deserialize, DartSignal)]
-pub struct QueryUrl {
+pub struct QueryUrlRequest {
+    pub id: String,
     pub url: String,
     pub cookie: Option<String>,
     pub user_agent: Option<String>,
@@ -23,12 +31,14 @@ pub struct QueryUrl {
 }
 
 #[derive(Deserialize, DartSignal)]
-pub struct QueryYtdl {
+pub struct QueryYtdlRequest {
+    pub id: String,
     pub url: String,
 }
 
 #[derive(Serialize, RustSignal)]
-pub struct UrlQueryOutput {
+pub struct QueryUrlResponse {
+    pub id: String,
     pub url: String,
     pub name: String,
     pub total_size: Option<u64>,
@@ -39,7 +49,8 @@ pub struct UrlQueryOutput {
 }
 
 #[derive(Serialize, RustSignal)]
-pub struct YtdlQueryOutput {
+pub struct QueryYtdlResponse {
+    pub id: String,
     pub items: Vec<YtdlItem>,
     pub error: Option<String>,
 }
@@ -64,7 +75,8 @@ pub struct YtdlFormat {
 }
 
 #[derive(Deserialize, DartSignal)]
-pub struct SearchYtdl {
+pub struct SearchYtdlRequest {
+    pub id: String,
     pub query: String,
 }
 
@@ -80,13 +92,15 @@ pub struct YtdlSearchResult {
 }
 
 #[derive(Serialize, RustSignal)]
-pub struct YtdlSearchOutput {
+pub struct SearchYtdlResponse {
+    pub id: String,
     pub results: Vec<YtdlSearchResult>,
     pub error: Option<String>,
 }
 
 #[derive(Deserialize, DartSignal)]
-pub struct DoDownload {
+pub struct DoDownloadRequest {
+    pub id: String,
     pub url: Option<String>,
     pub dest: String,
     pub video_format: Option<YtdlFormat>,
@@ -98,8 +112,15 @@ pub struct DoDownload {
     pub category: Option<String>,
 }
 
+#[derive(Serialize, RustSignal)]
+pub struct DoDownloadResponse {
+    pub id: String,
+    pub success: bool,
+}
+
 #[derive(Deserialize, DartSignal)]
-pub struct GetDownloadList {
+pub struct GetDownloadListRequest {
+    pub id: String,
     pub offset_index: u32,
     pub before: u32,
     pub after: u32,
@@ -112,12 +133,14 @@ pub struct GetDownloadList {
 }
 
 #[derive(Serialize, RustSignal)]
-pub struct DownloadList {
+pub struct GetDownloadListResponse {
+    pub id: String,
     pub list: Vec<DownloadGlance>,
     pub total_count: u64,
     pub start_index: u64,
     pub tag: Option<i32>,
 }
+
 #[derive(Serialize, SignalPiece)]
 pub struct DownloadGlance {
     pub id: String,
@@ -134,12 +157,12 @@ pub struct DownloadGlance {
 }
 
 #[derive(Deserialize, DartSignal)]
-pub struct GetDownloadDetails {
+pub struct GetDownloadDetailsRequest {
     pub id: String,
 }
 
 #[derive(Serialize, RustSignal)]
-pub struct DownloadDetails {
+pub struct GetDownloadDetailsResponse {
     pub id: String,
     pub name: String,
     pub url: String,
@@ -165,24 +188,48 @@ pub struct PartInfo {
 }
 
 #[derive(Deserialize, DartSignal)]
-pub struct PauseDownload {
+pub struct PauseDownloadRequest {
     pub id: String,
 }
 
-#[derive(Deserialize, DartSignal)]
-pub struct ResumeDownload {
+#[derive(Serialize, RustSignal)]
+pub struct PauseDownloadResponse {
     pub id: String,
+    pub success: bool,
 }
 
 #[derive(Deserialize, DartSignal)]
-pub struct CancelDownload {
+pub struct ResumeDownloadRequest {
     pub id: String,
 }
 
+#[derive(Serialize, RustSignal)]
+pub struct ResumeDownloadResponse {
+    pub id: String,
+    pub success: bool,
+}
+
 #[derive(Deserialize, DartSignal)]
-pub struct DeleteDownload {
+pub struct CancelDownloadRequest {
+    pub id: String,
+}
+
+#[derive(Serialize, RustSignal)]
+pub struct CancelDownloadResponse {
+    pub id: String,
+    pub success: bool,
+}
+
+#[derive(Deserialize, DartSignal)]
+pub struct DeleteDownloadRequest {
     pub id: String,
     pub delete_file: bool,
+}
+
+#[derive(Serialize, RustSignal)]
+pub struct DeleteDownloadResponse {
+    pub id: String,
+    pub success: bool,
 }
 
 #[derive(Serialize, RustSignal)]
@@ -192,23 +239,44 @@ pub struct LogSignal {
 }
 
 #[derive(Deserialize, DartSignal)]
-pub struct InitTorrentPersistence {
+pub struct InitTorrentPersistenceRequest {
+    pub id: String,
     pub path: String,
 }
 
-#[derive(Deserialize, DartSignal)]
-pub struct InitDatabase {
-    pub path: String,
+#[derive(Serialize, RustSignal)]
+pub struct InitTorrentPersistenceResponse {
+    pub id: String,
+    pub success: bool,
 }
 
 #[derive(Deserialize, DartSignal)]
-pub struct UpdateDownloadUrl {
+pub struct InitDatabaseRequest {
+    pub id: String,
+    pub path: String,
+}
+
+#[derive(Serialize, RustSignal)]
+pub struct InitDatabaseResponse {
+    pub id: String,
+    pub success: bool,
+}
+
+#[derive(Deserialize, DartSignal)]
+pub struct UpdateDownloadUrlRequest {
     pub id: String,
     pub new_url: String,
 }
 
+#[derive(Serialize, RustSignal)]
+pub struct UpdateDownloadUrlResponse {
+    pub id: String,
+    pub success: bool,
+}
+
 #[derive(Serialize, Deserialize, RustSignal)]
-pub struct RequestAddDownload {
+pub struct AddDownloadRequest {
+    pub id: String,
     pub url: String,
     pub filename: Option<String>,
     pub user_agent: Option<String>,
@@ -217,7 +285,14 @@ pub struct RequestAddDownload {
 }
 
 #[derive(Deserialize, DartSignal)]
-pub struct StartServer {
+pub struct AddDownloadResponse {
+    pub id: String,
+    pub success: bool,
+}
+
+#[derive(Deserialize, DartSignal)]
+pub struct StartServerRequest {
+    pub id: String,
     pub port: u16,
     pub api_key: String,
     pub master_key: String,
@@ -226,14 +301,20 @@ pub struct StartServer {
     pub config_path: String,
 }
 
+#[derive(Serialize, RustSignal)]
+pub struct StartServerResponse {
+    pub id: String,
+    pub success: bool,
+}
+
 #[derive(Deserialize, DartSignal)]
-pub struct RequestNewApiKey {
+pub struct NewApiKeyRequest {
     pub id: String,
     pub master_key: Option<String>,
 }
 
 #[derive(Serialize, RustSignal)]
-pub struct NewApiKey {
+pub struct NewApiKeyResponse {
     pub id: String,
     pub encrypted_api_key: String,
     pub decrypted_api_key: String,
@@ -267,33 +348,27 @@ pub struct EncryptResponse {
     pub master_key: String,
 }
 
-// #[derive(Serialize, RustSignal)]
-// pub struct RequestFfmpeg {
-//     pub id: String,
-//     pub args: Vec<String>,
-// }
-
 #[derive(Deserialize, DartSignal)]
 pub struct FfmpegResult {
     pub id: String,
-    // pub success: bool,
-    // pub log: String,
+    pub success: bool,
+    pub log: String,
 }
 
 #[derive(Deserialize, DartSignal)]
-pub struct HashPassword {
+pub struct HashRequest {
     pub id: String,
     pub plain_text: String,
 }
 
 #[derive(Serialize, RustSignal)]
-pub struct HashingOutput {
+pub struct HashResponse {
     pub id: String,
     pub hashed_text: Option<String>,
 }
 
 #[derive(Deserialize, DartSignal)]
-pub struct Login {
+pub struct LoginRequest {
     pub id: String,
     pub iuser: String,
     pub ipass: String,
@@ -302,20 +377,20 @@ pub struct Login {
 }
 
 #[derive(Serialize, RustSignal)]
-pub struct LoginResult {
+pub struct LoginResponse {
     pub id: String,
     pub success: bool,
 }
 
 #[derive(Deserialize, DartSignal)]
-pub struct VerifyPassword {
+pub struct VerifyPasswordRequest {
     pub id: String,
     pub input: String,
     pub reference: String,
 }
 
 #[derive(Serialize, RustSignal)]
-pub struct VerifyPasswordResult {
+pub struct VerifyPasswordResponse {
     pub id: String,
     pub success: bool,
 }
@@ -347,15 +422,25 @@ pub struct PutTaggingResponse {
 }
 
 #[derive(Deserialize, DartSignal)]
-pub struct GetCategories {}
+pub struct GetCategoriesRequest {
+    pub id: String,
+}
 
 #[derive(Deserialize, DartSignal)]
-pub struct UpdateCategories {
+pub struct UpdateCategoriesRequest {
+    pub id: String,
     pub categories: Vec<CategoryDisplay>,
 }
 
 #[derive(Serialize, RustSignal)]
-pub struct CategoriesOutput {
+pub struct UpdateCategoriesResponse {
+    pub id: String,
+    pub success: bool,
+}
+
+#[derive(Serialize, RustSignal)]
+pub struct GetCategoriesResponse {
+    pub id: String,
     pub categories: Vec<CategoryDisplay>,
 }
 

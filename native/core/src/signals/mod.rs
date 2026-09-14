@@ -2,7 +2,8 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
-pub struct UpdateSettings {
+pub struct UpdateSettingsRequest {
+    pub id: String,
     pub download_dir: Option<String>,
     pub speed_limit: Option<u64>,
     pub download_threads: Option<u8>,
@@ -14,8 +15,15 @@ pub struct UpdateSettings {
     pub stalled_time: Option<u64>,
 }
 
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct UpdateSettingsResponse {
+    pub id: String,
+    pub success: bool,
+}
+
 #[derive(Debug, Clone, Deserialize, ToSchema)]
-pub struct QueryUrl {
+pub struct QueryUrlRequest {
+    pub id: String,
     pub url: String,
     pub cookie: Option<String>,
     pub user_agent: Option<String>,
@@ -23,12 +31,14 @@ pub struct QueryUrl {
 }
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
-pub struct QueryYtdl {
+pub struct QueryYtdlRequest {
+    pub id: String,
     pub url: String,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
-pub struct UrlQueryOutput {
+pub struct QueryUrlResponse {
+    pub id: String,
     pub url: String,
     pub name: String,
     pub total_size: Option<u64>,
@@ -39,7 +49,8 @@ pub struct UrlQueryOutput {
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
-pub struct YtdlQueryOutput {
+pub struct QueryYtdlResponse {
+    pub id: String,
     pub items: Vec<YtdlItem>,
     pub error: Option<String>,
 }
@@ -64,7 +75,8 @@ pub struct YtdlFormat {
 }
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
-pub struct SearchYtdl {
+pub struct SearchYtdlRequest {
+    pub id: String,
     pub query: String,
 }
 
@@ -80,13 +92,15 @@ pub struct YtdlSearchResult {
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
-pub struct YtdlSearchOutput {
+pub struct SearchYtdlResponse {
+    pub id: String,
     pub results: Vec<YtdlSearchResult>,
     pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
-pub struct DoDownload {
+pub struct DoDownloadRequest {
+    pub id: String,
     pub url: Option<String>,
     pub dest: String,
     pub video_format: Option<YtdlFormat>,
@@ -98,21 +112,29 @@ pub struct DoDownload {
     pub category: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct DoDownloadResponse {
+    pub id: String,
+    pub success: bool,
+}
+
 #[derive(Debug, Clone, Deserialize, ToSchema)]
-pub struct GetDownloadList {
+pub struct GetDownloadListRequest {
+    pub id: String,
     pub offset_index: u32,
     pub before: u32,
     pub after: u32,
     pub statuses: Vec<String>,
     pub tag: Option<i32>,
     pub search_query: Option<String>,
-    pub sort_by: Option<i32>, // 0: Date, 1: Name, 2: Size, 3: Speed
+    pub sort_by: Option<i32>,
     pub ascending: Option<bool>,
     pub categories: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
-pub struct DownloadList {
+pub struct GetDownloadListResponse {
+    pub id: String,
     pub list: Vec<DownloadGlance>,
     pub total_count: u64,
     pub start_index: u64,
@@ -135,12 +157,12 @@ pub struct DownloadGlance {
 }
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
-pub struct GetDownloadDetails {
+pub struct GetDownloadDetailsRequest {
     pub id: String,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
-pub struct DownloadDetails {
+pub struct GetDownloadDetailsResponse {
     pub id: String,
     pub name: String,
     pub url: String,
@@ -166,24 +188,48 @@ pub struct PartInfo {
 }
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
-pub struct PauseDownload {
+pub struct PauseDownloadRequest {
     pub id: String,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct PauseDownloadResponse {
+    pub id: String,
+    pub success: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
-pub struct ResumeDownload {
+pub struct ResumeDownloadRequest {
     pub id: String,
 }
 
-#[derive(Deserialize, ToSchema)]
-pub struct CancelDownload {
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct ResumeDownloadResponse {
     pub id: String,
+    pub success: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
-pub struct DeleteDownload {
+pub struct CancelDownloadRequest {
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct CancelDownloadResponse {
+    pub id: String,
+    pub success: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+pub struct DeleteDownloadRequest {
     pub id: String,
     pub delete_file: bool,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct DeleteDownloadResponse {
+    pub id: String,
+    pub success: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -192,24 +238,45 @@ pub struct LogSignal {
     pub message: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct InitTorrentPersistence {
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+pub struct InitTorrentPersistenceRequest {
+    pub id: String,
     pub path: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct InitDatabase {
-    pub path: String,
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct InitTorrentPersistenceResponse {
+    pub id: String,
+    pub success: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
-pub struct UpdateDownloadUrl {
+pub struct InitDatabaseRequest {
+    pub id: String,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct InitDatabaseResponse {
+    pub id: String,
+    pub success: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+pub struct UpdateDownloadUrlRequest {
     pub id: String,
     pub new_url: String,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
-pub struct RequestAddDownload {
+pub struct UpdateDownloadUrlResponse {
+    pub id: String,
+    pub success: bool,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct AddDownloadRequest {
+    pub id: String,
     pub url: String,
     pub filename: Option<String>,
     pub user_agent: Option<String>,
@@ -217,22 +284,38 @@ pub struct RequestAddDownload {
     pub referer: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct StartServer {
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+pub struct AddDownloadResponse {
+    pub id: String,
+    pub success: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+pub struct StartServerRequest {
+    pub id: String,
     pub port: u16,
     pub api_key: String,
     pub username: String,
     pub password: String,
     pub master_key: String,
+    pub config_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct StartServerResponse {
+    pub id: String,
+    pub success: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
-pub struct RequestNewApiKey {
+pub struct NewApiKeyRequest {
+    pub id: String,
     pub master_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
-pub struct NewApiKey {
+pub struct NewApiKeyResponse {
+    pub id: String,
     pub encrypted_api_key: String,
     pub decrypted_api_key: String,
     pub master_key: String,
@@ -240,23 +323,27 @@ pub struct NewApiKey {
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct DecryptRequest {
+    pub id: String,
     pub encrypted_key: String,
     pub master_key: String,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct DecryptResponse {
+    pub id: String,
     pub decrypted_key: String,
 }
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct EncryptRequest {
+    pub id: String,
     pub plain_key: String,
     pub master_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct EncryptResponse {
+    pub id: String,
     pub encrypted_key: String,
     pub master_key: String,
 }
@@ -274,16 +361,38 @@ pub struct FfmpegResult {
     pub log: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct GetCategories {}
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+pub struct HashRequest {
+    pub id: String,
+    pub plain_text: String,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct HashResponse {
+    pub id: String,
+    pub hashed_text: Option<String>,
+}
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
-pub struct UpdateCategories {
+pub struct GetCategoriesRequest {
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+pub struct UpdateCategoriesRequest {
+    pub id: String,
     pub categories: Vec<CategoryDisplay>,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
-pub struct CategoriesOutput {
+pub struct UpdateCategoriesResponse {
+    pub id: String,
+    pub success: bool,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct GetCategoriesResponse {
+    pub id: String,
     pub categories: Vec<CategoryDisplay>,
 }
 
@@ -291,4 +400,72 @@ pub struct CategoriesOutput {
 pub struct CategoryDisplay {
     pub name: String,
     pub save_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct AuthResponse {
+    pub api_key: String,
+    pub access_token: String,
+    pub csrf_token: String,
+    pub expires_in: u64,
+}
+
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+pub struct ChangeCredentialsRequest {
+    pub new_username: Option<String>,
+    pub new_password: Option<String>,
+    pub server_port: Option<u16>,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct ChangeCredentialsResponse {
+    pub access_token: String,
+    pub csrf_token: String,
+    pub expires_in: u64,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct OkResponse {
+    pub success: bool,
+}
+
+impl OkResponse {
+    pub fn success() -> Self {
+        OkResponse { success: true }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct ErrorResponse {
+    pub error: String,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct ServerStatus {
+    pub status: String,
+    pub version: String,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct VersionCurrentResponse {
+    pub version: String,
+}
+
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+pub struct CompareVersionsRequest {
+    pub versions: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct CompareVersionsResponse {
+    pub latest: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct VersionInfo {
+    pub version: String,
+    pub tag_name: String,
+    pub release_notes: String,
+    pub published_at: String,
+    pub error: Option<String>,
 }

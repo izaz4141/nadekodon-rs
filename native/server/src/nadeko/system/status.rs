@@ -1,20 +1,13 @@
 use crate::server::SharedState;
 use axum::{Json, extract::State, response::IntoResponse};
-use serde::Serialize;
-use utoipa::ToSchema;
-
-#[derive(Serialize, ToSchema)]
-pub struct StatusResponse {
-    pub status: String,
-    pub version: String,
-}
+use nadekodon_core::signals::ServerStatus;
 
 #[utoipa::path(
     get,
     path = "/api/nadeko/system/status",
     tags = ["nadeko.system"],
     responses(
-        (status = 200, description = "Server status", body = StatusResponse)
+        (status = 200, description = "Server status", body = ServerStatus)
     )
 )]
 pub async fn handle_status(State(state): State<SharedState>) -> impl IntoResponse {
@@ -42,7 +35,7 @@ pub async fn handle_status(State(state): State<SharedState>) -> impl IntoRespons
             v_str
         }
     };
-    let res = StatusResponse {
+    let res = ServerStatus {
         status: "Online".to_string(),
         version: version,
     };

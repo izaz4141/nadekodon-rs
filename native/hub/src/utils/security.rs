@@ -1,13 +1,13 @@
 extern crate nadekodon_core as core;
 use crate::signals::{
-    HashPassword, HashingOutput, Login, LoginResult, VerifyPassword, VerifyPasswordResult,
+    HashRequest, HashResponse, LoginRequest, LoginResponse, VerifyPasswordRequest, VerifyPasswordResponse,
 };
 use crate::utils::logger;
 use core::utils::security::{hash_password, validate_password};
 use rinf::{DartSignal, RustSignal};
 
 pub async fn handle_password_security() {
-    let encrypt_receiver = HashPassword::get_dart_signal_receiver();
+    let encrypt_receiver = HashRequest::get_dart_signal_receiver();
 
     while let Some(signal_pack) = encrypt_receiver.recv().await {
         let signal = signal_pack.message;
@@ -18,7 +18,7 @@ pub async fn handle_password_security() {
                 signal.plain_text
             }
         };
-        HashingOutput {
+        HashResponse {
             id: signal.id,
             hashed_text: Some(hashed),
         }
@@ -27,14 +27,14 @@ pub async fn handle_password_security() {
 }
 
 pub async fn handle_login() {
-    let receiver = Login::get_dart_signal_receiver();
+    let receiver = LoginRequest::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
         let msg = signal_pack.message;
 
         let success =
             validate_password(&msg.rpass, &msg.ipass).unwrap_or(false) & (msg.iuser == msg.ruser);
 
-        LoginResult {
+        LoginResponse {
             id: msg.id.clone(),
             success,
         }
@@ -43,12 +43,12 @@ pub async fn handle_login() {
 }
 
 pub async fn verify_pass() {
-    let receiver = VerifyPassword::get_dart_signal_receiver();
+    let receiver = VerifyPasswordRequest::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
         let msg = signal_pack.message;
         let success = validate_password(&msg.reference, &msg.input).unwrap_or(false);
 
-        VerifyPasswordResult {
+        VerifyPasswordResponse {
             id: msg.id.clone(),
             success: success,
         }

@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use crate::downloader::manager::DownloadManager;
-use crate::signals::UpdateSettings;
+use crate::signals::UpdateSettingsRequest;
 use crate::utils::logger;
 use crate::utils::types::DMSettings;
 
 pub async fn update_settings_internal(
     dm: Arc<DownloadManager>,
-    settings: UpdateSettings,
+    settings: UpdateSettingsRequest,
 ) -> DMSettings {
     let dm_old = dm.settings.read().await;
     let dm_new = DMSettings {

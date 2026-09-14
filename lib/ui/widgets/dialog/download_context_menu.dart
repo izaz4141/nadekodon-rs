@@ -5,7 +5,7 @@ import 'package:open_filex/open_filex.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'package:nadekodon/utils/platform_service.dart';
-import 'package:nadekodon/utils/api_service.dart';
+import 'package:nadekodon/utils/bridge_service.dart';
 import 'package:nadekodon/ui/widgets/app_snackbar.dart';
 import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/utils/helper.dart';
@@ -190,7 +190,7 @@ Future<void> showDownloadContextMenu(
       }
       break;
     case 'download':
-      final url = APIService.getDownloadUrl(item.id);
+      final url = BridgeService.getDownloadUrl(item.id);
       if (kIsWeb) {
         await launchUrl(Uri.parse(url));
       } else {

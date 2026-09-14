@@ -4,8 +4,7 @@ import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/utils/helper.dart';
 import 'package:nadekodon/ui/widgets/components/dir_choose.dart';
 import 'package:nadekodon/utils/system_service.dart';
-
-import 'package:nadekodon/src/bindings/bindings.dart';
+import 'package:nadekodon/utils/bridge_service.dart';
 
 class QueryResultView extends StatefulWidget {
   final TextEditingController urlController;

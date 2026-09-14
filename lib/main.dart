@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'package:rinf/rinf.dart';
-import 'package:nadekodon/src/bindings/bindings.dart';
+import 'package:nadekodon/utils/rinf_service/rinf_service.dart';
 
 import 'package:nadekodon/ui/app.dart';
 import 'package:nadekodon/utils/notification_service.dart';
@@ -14,7 +14,7 @@ import 'package:nadekodon/utils/settings.dart';
 import 'package:nadekodon/utils/logger.dart';
 import 'package:nadekodon/utils/system_service.dart';
 import 'package:nadekodon/utils/updater.dart';
-import 'package:nadekodon/utils/api_service.dart';
+import 'package:nadekodon/utils/bridge_service.dart';
 import 'package:nadekodon/utils/single_instance.dart';
 import 'package:nadekodon/utils/app_lifecycle.dart';
 import 'package:nadekodon/utils/platform_service.dart';
@@ -40,7 +40,7 @@ Future<void> main() async {
         initRustSignalLogger();
       }
 
-      await APIService.init();
+      await BridgeService.init();
       await SettingsManager.init();
       await SystemService().init();
 
@@ -48,12 +48,16 @@ Future<void> main() async {
         await cleanupOldFiles();
         await SettingsManager.sendAllSettings();
         final torrentPath = await SettingsManager.getTorrentPersistencePath();
-        InitTorrentPersistence(path: torrentPath).sendSignalToRust();
+        InitTorrentPersistenceRequest(
+          id: newSignalId(),
+          path: torrentPath,
+        ).sendSignalToRust();
         final dbPath = await SettingsManager.getDatabasePath();
-        InitDatabase(path: dbPath).sendSignalToRust();
+        InitDatabaseRequest(id: newSignalId(), path: dbPath).sendSignalToRust();
         NotificationService().startListening();
         final masterKey = await getMasterKey();
-        StartServer(
+        StartServerRequest(
+          id: newSignalId(),
           port: SettingsManager.serverPort.value,
           apiKey: SettingsManager.serverApiKey.value,
           masterKey: masterKey!,

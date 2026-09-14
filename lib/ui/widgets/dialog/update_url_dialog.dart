@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:nadekodon/ui/widgets/app_snackbar.dart';
 import 'package:nadekodon/ui/theme/app_theme.dart';
-import 'package:nadekodon/src/bindings/bindings.dart';
-import 'package:nadekodon/utils/download_service.dart';
+import 'package:nadekodon/utils/bridge_service.dart';
 
 class UpdateUrlDialog extends StatefulWidget {
   final String id;
@@ -40,8 +39,7 @@ class _UpdateUrlDialogState extends State<UpdateUrlDialog> {
   }
 
   void _listenToSignals() {
-    _addDownloadSub = RequestAddDownload.rustSignalStream.listen((signal) {
-      final message = signal.message;
+    _addDownloadSub = BridgeService.addDownloadRequests.listen((message) {
       if (mounted) {
         setState(() {
           _controller.text = message.url.trim();
@@ -62,7 +60,7 @@ class _UpdateUrlDialogState extends State<UpdateUrlDialog> {
   Future<void> _handleUpdate() async {
     final url = _controller.text.trim();
     if (url.isNotEmpty) {
-      DownloadService().updateUrl(widget.id, url);
+      BridgeService.updateUrl(widget.id, url);
       if (mounted) {
         Navigator.of(context).pop(url);
       }

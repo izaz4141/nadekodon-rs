@@ -1,14 +1,8 @@
+use crate::response::{json_error, json_ok};
 use crate::server::SharedState;
 use axum::{Json, extract::State, response::IntoResponse};
-use serde::Deserialize;
-use utoipa::ToSchema;
+use nadekodon_core::signals::DeleteDownloadRequest;
 use uuid::Uuid;
-
-#[derive(Deserialize, ToSchema)]
-pub struct DeleteDownloadRequest {
-    pub id: String,
-    pub delete_file: bool,
-}
 
 #[utoipa::path(
     post,
@@ -32,8 +26,8 @@ pub async fn handle_delete_download(
             .await
             .delete_worker(id, payload.delete_file)
             .await;
-        axum::http::StatusCode::OK
+        json_ok().into_response()
     } else {
-        axum::http::StatusCode::BAD_REQUEST
+        json_error(axum::http::StatusCode::BAD_REQUEST, "Invalid ID").into_response()
     }
 }

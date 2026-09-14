@@ -1,18 +1,9 @@
 use reqwest;
 use semver::Version;
-use serde::Serialize;
 use serde_json::{Value, json};
 use tokio::process::Command;
-use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Serialize, ToSchema)]
-pub struct VersionInfo {
-    pub version: String,
-    pub tag_name: String,
-    pub release_notes: String,
-    pub published_at: String,
-    pub error: Option<String>,
-}
+pub use crate::signals::VersionInfo;
 
 pub async fn get_latest_release(
     client: &reqwest::Client,

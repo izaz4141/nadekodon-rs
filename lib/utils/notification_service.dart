@@ -6,8 +6,7 @@ import 'dart:isolate';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:nadekodon/utils/helper.dart';
-import 'package:nadekodon/src/bindings/bindings.dart';
-import 'package:rinf/rinf.dart';
+import 'package:nadekodon/utils/bridge_service.dart';
 // ignore: implementation_imports
 import 'package:flutter_local_notifications_linux/src/model/hint.dart';
 import 'package:window_manager/window_manager.dart';
@@ -27,7 +26,7 @@ Future<void> notificationTapBackground(NotificationResponse details) async {
       sendPort.send([actionId, payload]);
     } else {
       // Main isolate is dead, initialize Rust and handle directly
-      initializeRust(assignRustSignal);
+      await BridgeService.initNativeRuntime();
       await _handleAction(actionId, payload);
     }
   }
@@ -65,13 +64,13 @@ Future<void> _handleAction(String? actionId, String? payload) async {
       }
       break;
     case 'pause':
-      PauseDownload(id: id).sendSignalToRust();
+      BridgeService.pauseDownload(id);
       break;
     case 'resume':
-      ResumeDownload(id: id).sendSignalToRust();
+      BridgeService.resumeDownload(id);
       break;
     case 'cancel':
-      CancelDownload(id: id).sendSignalToRust();
+      BridgeService.cancelDownload(id);
       break;
   }
 }
@@ -184,7 +183,7 @@ class NotificationService {
 
     // Poll every second ONLY for Running downloads
     _pollTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      GetDownloadList(
+      BridgeService.getDownloadList(
         offsetIndex: 0,
         before: 0,
         after: 100,
@@ -194,12 +193,12 @@ class NotificationService {
         sortBy: 0,
         ascending: false,
         categories: [],
-      ).sendSignalToRust();
+      );
     });
 
-    _signalSubscription = DownloadList.rustSignalStream.listen((signal) {
-      if (signal.message.tag == 2) {
-        _updateNotifications(signal.message.list);
+    _signalSubscription = BridgeService.downloadListStream.listen((message) {
+      if (message.tag == 2) {
+        _updateNotifications(message.list);
       }
     });
   }
@@ -264,47 +263,35 @@ class NotificationService {
   }
 
   Future<void> _checkFinalStatus(String id) async {
-    final completer = Completer<void>();
-    StreamSubscription? subscription;
+    DownloadDetails? item;
+    try {
+      item = await BridgeService.getDownloadDetails(
+        id,
+      ).timeout(const Duration(seconds: 5));
+    } catch (_) {
+      // Ignore timeouts/errors; no final-status notification then.
+      return;
+    }
+    if (item == null) return;
 
-    // Send request
-    GetDownloadDetails(id: id).sendSignalToRust();
+    final status = parseDownloadStatus(item.state);
+    final name = item.name;
+    final notificationId = id.hashCode;
 
-    // Listen for response
-    subscription = DownloadDetails.rustSignalStream.listen((signal) {
-      if (signal.message.id == id) {
-        final item = signal.message;
-        final status = parseDownloadStatus(item.state);
-        final name = item.name;
-        final notificationId = id.hashCode;
-
-        showDownloadNotification(
-          id: notificationId,
-          title: name,
-          progress:
-              (item.totalSize != null &&
-                  item.totalSize!.toBigInt() > BigInt.zero)
-              ? (item.downloaded.toBigInt().toDouble() /
-                        item.totalSize!.toBigInt().toDouble() *
-                        100)
-                    .toInt()
-              : 0,
-          speed: "", // No speed for stopped items
-          status: status,
-          payload: jsonEncode({'id': id, 'path': item.dest}),
-        );
-
-        subscription?.cancel();
-        completer.complete();
-      }
-    });
-
-    // Timeout to clean up if no response
-    Future.delayed(const Duration(seconds: 5), () {
-      if (!completer.isCompleted) {
-        subscription?.cancel();
-      }
-    });
+    showDownloadNotification(
+      id: notificationId,
+      title: name,
+      progress:
+          (item.totalSize != null && item.totalSize!.toBigInt() > BigInt.zero)
+          ? (item.downloaded.toBigInt().toDouble() /
+                    item.totalSize!.toBigInt().toDouble() *
+                    100)
+                .toInt()
+          : 0,
+      speed: "", // No speed for stopped items
+      status: status,
+      payload: jsonEncode({'id': id, 'path': item.dest}),
+    );
   }
 
   Future<void> showDownloadNotification({

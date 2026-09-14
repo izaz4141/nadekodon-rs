@@ -7,14 +7,14 @@ class WasmIOService implements IOService {
   @override
   Future<String> getConfigDir() async {
     throw UnsupportedError(
-      'Filesystem access is not supported in WASM. Use APIService for settings.',
+      'Filesystem access is not supported in WASM. Use BridgeService for settings.',
     );
   }
 
   @override
   Future<String> getDownloadsDir() async {
     throw UnsupportedError(
-      'Filesystem access is not supported in WASM. Use APIService for settings.',
+      'Filesystem access is not supported in WASM. Use BridgeService for settings.',
     );
   }
 
@@ -36,14 +36,14 @@ class WasmIOService implements IOService {
   @override
   Future<String> readFile(String path) async {
     throw UnsupportedError(
-      'Filesystem access is not supported in WASM. Use APIService for settings.',
+      'Filesystem access is not supported in WASM. Use BridgeService for settings.',
     );
   }
 
   @override
   Future<void> writeFile(String path, String content) async {
     throw UnsupportedError(
-      'Filesystem access is not supported in WASM. Use APIService for settings.',
+      'Filesystem access is not supported in WASM. Use BridgeService for settings.',
     );
   }
 

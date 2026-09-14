@@ -15,9 +15,7 @@ import 'package:nadekodon/utils/helper.dart';
 import 'package:nadekodon/utils/logger.dart';
 import 'package:nadekodon/utils/settings.dart';
 import 'package:nadekodon/utils/platform_service.dart';
-
-import 'package:rinf/rinf.dart';
-import 'package:nadekodon/src/bindings/bindings.dart';
+import 'package:nadekodon/utils/bridge_service.dart';
 
 // Global navigator key for accessing context from intent handlers
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -43,7 +41,7 @@ class _NadekoDonState extends State<NadekoDon> {
     _listener = AppLifecycleListener(
       onExitRequested: () async {
         if (!kIsWeb) {
-          finalizeRust(); // This line shuts down the async Rust runtime.
+          BridgeService.shutdownNative(); // Shuts down the async Rust runtime.
         }
         return AppExitResponse.exit;
       },
@@ -73,8 +71,7 @@ class _NadekoDonState extends State<NadekoDon> {
 
   void _initExtSignals() {
     if (kIsWeb) return;
-    RequestAddDownload.rustSignalStream.listen((signal) async {
-      final message = signal.message;
+    BridgeService.addDownloadRequests.listen((message) async {
       await PlatformService().focusWindow();
 
       if (UpdateUrlDialog.isOpen) {

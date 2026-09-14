@@ -1,3 +1,4 @@
+use crate::response::json_ok;
 use crate::server::{SharedState, nadeko_home};
 use axum::{Json, extract::State, response::IntoResponse};
 use nadekodon_core::utils::types::DMSettings;
@@ -118,5 +119,5 @@ pub async fn handle_update_settings(
     state.save_config(&cfg_clone);
     *state.config.write().await = cfg_clone;
 
-    axum::http::StatusCode::OK
+    json_ok().into_response()
 }

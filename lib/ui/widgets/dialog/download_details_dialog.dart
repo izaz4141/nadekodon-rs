@@ -2,11 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:nadekodon/src/bindings/bindings.dart';
 import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/utils/helper.dart';
 import 'package:nadekodon/ui/widgets/app_snackbar.dart';
-import 'package:nadekodon/utils/download_service.dart';
+import 'package:nadekodon/utils/bridge_service.dart';
 
 class DownloadDetailsDialog extends StatefulWidget {
   final DownloadItem item;
@@ -19,13 +18,14 @@ class DownloadDetailsDialog extends StatefulWidget {
 
 class _DownloadDetailsDialogState extends State<DownloadDetailsDialog> {
   Timer? _timer;
+  DownloadDetails? _details;
 
   @override
   void initState() {
     super.initState();
-    _sendSignal();
+    _fetchDetails();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      _sendSignal();
+      _fetchDetails();
     });
   }
 
@@ -35,8 +35,12 @@ class _DownloadDetailsDialogState extends State<DownloadDetailsDialog> {
     super.dispose();
   }
 
-  void _sendSignal() {
-    DownloadService().fetchDetails(widget.item.id);
+  void _fetchDetails() {
+    BridgeService.getDownloadDetails(widget.item.id).then((details) {
+      if (!mounted) return;
+      if (details == null || details.id != widget.item.id) return;
+      setState(() => _details = details);
+    });
   }
 
   @override
@@ -54,47 +58,33 @@ class _DownloadDetailsDialogState extends State<DownloadDetailsDialog> {
       ),
       content: SizedBox(
         width: AppTheme.dialogWidth(context),
-        child: StreamBuilder<DownloadDetails>(
-          stream: DownloadService().getDetailsStream(widget.item.id),
-          builder: (context, snapshot) {
-            final details = snapshot.data;
-            if (details == null) {
-              return const SizedBox(
+        child: _details == null
+            ? const SizedBox(
                 height: 100,
                 child: Center(child: CircularProgressIndicator()),
-              );
-            }
-            if (details.id != widget.item.id) {
-              return const SizedBox(
-                height: 100,
-                child: Center(child: CircularProgressIndicator()),
-              );
-            }
-
-            return SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppTheme.spaceLG,
-                ),
-                child: SelectionArea(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildInfoSection(details, textTheme, colorScheme),
-                      const SizedBox(height: AppTheme.spaceMD),
-                      const Divider(),
-                      const SizedBox(height: AppTheme.spaceMD),
-                      Text('Parts Progress', style: textTheme.titleSmall),
-                      const SizedBox(height: AppTheme.spaceSM),
-                      _buildPartsList(details.partInfo, colorScheme),
-                    ],
+              )
+            : SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppTheme.spaceLG,
+                  ),
+                  child: SelectionArea(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildInfoSection(_details!, textTheme, colorScheme),
+                        const SizedBox(height: AppTheme.spaceMD),
+                        const Divider(),
+                        const SizedBox(height: AppTheme.spaceMD),
+                        Text('Parts Progress', style: textTheme.titleSmall),
+                        const SizedBox(height: AppTheme.spaceSM),
+                        _buildPartsList(_details!.partInfo, colorScheme),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            );
-          },
-        ),
       ),
       actions: [
         TextButton(

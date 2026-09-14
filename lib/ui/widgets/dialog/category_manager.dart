@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:nadekodon/utils/platform_service.dart';
 
 import 'package:nadekodon/ui/theme/app_theme.dart';
-import 'package:nadekodon/src/bindings/bindings.dart';
-import 'package:nadekodon/utils/api_service.dart';
+import 'package:nadekodon/utils/bridge_service.dart';
 import 'package:nadekodon/ui/widgets/app_snackbar.dart';
 
 class CategoryManagerDialog extends StatefulWidget {
@@ -27,23 +25,12 @@ class _CategoryManagerDialogState extends State<CategoryManagerDialog> {
   Future<void> _loadCategories() async {
     setState(() => _loading = true);
 
-    if (PlatformService().isRemote) {
-      final result = await APIService.getCategories();
-      if (mounted) {
-        setState(() {
-          _categories = result ?? [];
-          _loading = false;
-        });
-      }
-    } else {
-      GetCategories().sendSignalToRust();
-      final signal = await CategoriesOutput.rustSignalStream.first;
-      if (mounted) {
-        setState(() {
-          _categories = signal.message.categories;
-          _loading = false;
-        });
-      }
+    final result = await BridgeService.getCategories();
+    if (mounted) {
+      setState(() {
+        _categories = result ?? [];
+        _loading = false;
+      });
     }
   }
 
@@ -51,12 +38,7 @@ class _CategoryManagerDialogState extends State<CategoryManagerDialog> {
     setState(() => _saving = true);
 
     bool success;
-    if (PlatformService().isRemote) {
-      success = await APIService.updateCategories(_categories);
-    } else {
-      UpdateCategories(categories: _categories).sendSignalToRust();
-      success = true;
-    }
+    success = await BridgeService.updateCategories(_categories);
 
     if (mounted) {
       setState(() => _saving = false);

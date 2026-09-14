@@ -4,19 +4,10 @@ use axum::Json;
 use axum::extract::State;
 use axum::response::IntoResponse;
 use axum_extra::extract::CookieJar;
+use nadekodon_core::signals::AuthResponse;
 use nadekodon_core::utils::encryption;
-use serde::Serialize;
 use serde_json::json;
-use utoipa::ToSchema;
 use uuid::Uuid;
-
-#[derive(Serialize, ToSchema)]
-pub struct ApiKeyResponse {
-    pub api_key: String,
-    pub access_token: String,
-    pub csrf_token: String,
-    pub expires_in: u64,
-}
 
 #[utoipa::path(
     get,
@@ -24,7 +15,7 @@ pub struct ApiKeyResponse {
     tags = ["nadeko.auth"],
     security(("ApiKeyAuth" = [])),
     responses(
-        (status = 200, description = "API key generated successfully", body = ApiKeyResponse)
+        (status = 200, description = "API key generated successfully", body = AuthResponse)
     )
 )]
 pub async fn handle_generate_api(
@@ -45,7 +36,7 @@ pub async fn handle_generate_api(
     let jwt_response = create_jwt_response(&state, &username).await.unwrap();
     let jar = build_jwt_cookie(jar, &jwt_response);
 
-    let json_response = ApiKeyResponse {
+    let json_response = AuthResponse {
         api_key: state.api_key.read().await.clone(),
         access_token: jwt_response.access_token,
         csrf_token: jwt_response.csrf_token,

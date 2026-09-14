@@ -1,18 +1,19 @@
-use crate::signals::InitDatabase;
+use crate::signals::{InitDatabaseRequest, InitDatabaseResponse};
 use crate::utils::{logger, tagging::handle_tagging};
 
 extern crate nadekodon_core as core;
 use core::app_context::AppContext;
-use rinf::DartSignal;
+use rinf::{DartSignal, RustSignal};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::{spawn, sync::Notify};
 
 pub async fn start_database_manager(context: Arc<AppContext>, db_done_signal: Arc<Notify>) {
     spawn(handle_tagging());
-    let receiver = InitDatabase::get_dart_signal_receiver();
+    let receiver = InitDatabaseRequest::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
-        let path = signal_pack.message.path;
+        let message = signal_pack.message;
+        let path = message.path;
         let db_path = PathBuf::from(path);
         if let Some(parent) = db_path.parent() {
             unsafe {
@@ -31,5 +32,11 @@ pub async fn start_database_manager(context: Arc<AppContext>, db_done_signal: Ar
                 logger::error(&format!("Failed to start database manager: {:?}", e));
             }
         });
+
+        InitDatabaseResponse {
+            id: message.id,
+            success: true,
+        }
+        .send_signal_to_dart();
     }
 }

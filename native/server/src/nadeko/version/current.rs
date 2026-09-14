@@ -1,15 +1,12 @@
+use crate::response::json_error;
 use axum::{Json, extract::Query, response::IntoResponse};
-use serde::{Deserialize, Serialize};
-use utoipa::{IntoParams, ToSchema};
+use nadekodon_core::signals::VersionCurrentResponse;
+use serde::Deserialize;
+use utoipa::IntoParams;
 
 #[derive(Deserialize, IntoParams)]
 pub struct VersionCurrentQuery {
     pub app: String,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct VersionCurrentResponse {
-    pub version: String,
 }
 
 #[utoipa::path(
@@ -33,7 +30,8 @@ pub async fn handle_version_current(
         Ok(version) => Json(VersionCurrentResponse { version: version }).into_response(),
         Err(e) => {
             nadekodon_core::utils::logger::error(&format!("Cant get local {}: {:#?}", &app, &e));
-            (axum::http::StatusCode::NOT_FOUND, e).into_response()
+            json_error(axum::http::StatusCode::NOT_FOUND, format!("App not found: {e}"))
+                .into_response()
         }
     }
 }

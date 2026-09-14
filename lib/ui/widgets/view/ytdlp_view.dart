@@ -3,12 +3,10 @@ import 'package:flutter/material.dart';
 
 import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/utils/helper.dart';
-import 'package:nadekodon/utils/api_service.dart';
+import 'package:nadekodon/utils/bridge_service.dart';
 import 'package:nadekodon/utils/logger.dart';
 import 'package:nadekodon/utils/settings.dart';
 import 'package:nadekodon/ui/widgets/components/dir_choose.dart';
-
-import 'package:nadekodon/src/bindings/bindings.dart';
 
 class YtdlpView extends StatefulWidget {
   final TextEditingController nameController;
@@ -84,7 +82,7 @@ class _YtdlpView extends State<YtdlpView> {
     final isDesktop = AppTheme.isDesktop(context);
 
     Widget buildThumbnail() => Image.network(
-      APIService.wrapImageUrl(item.thumbnail!),
+      BridgeService.wrapImageUrl(item.thumbnail!),
       fit: BoxFit.contain,
       headers: kIsWeb
           ? {'X-API-Key': SettingsManager.serverApiKey.value}

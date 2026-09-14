@@ -11,8 +11,8 @@ use ncore::app_context::AppContext;
 use ncore::utils::security;
 
 use crate::signals::{
-    DecryptRequest, DecryptResponse, EncryptRequest, EncryptResponse, NewApiKey,
-    RequestAddDownload, RequestNewApiKey, StartServer,
+    AddDownloadRequest, DecryptRequest, DecryptResponse, EncryptRequest, EncryptResponse,
+    NewApiKeyRequest, NewApiKeyResponse, StartServerRequest, StartServerResponse,
 };
 use crate::utils::logger;
 use axum::Router;
@@ -36,7 +36,7 @@ use tower_governor::GovernorLayer;
 use uuid::Uuid;
 
 pub async fn handle_api_key_generation() {
-    let receiver = RequestNewApiKey::get_dart_signal_receiver();
+    let receiver = NewApiKeyRequest::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
         let msg = signal_pack.message;
         let master_key = match &msg.master_key {
@@ -51,7 +51,7 @@ pub async fn handle_api_key_generation() {
             Ok(encrypted) => encrypted,
             Err(e) => {
                 logger::error(&format!("Encryption failed: {}", e));
-                NewApiKey {
+                NewApiKeyResponse {
                     id: msg.id,
                     encrypted_api_key: String::new(),
                     decrypted_api_key: String::new(),
@@ -61,7 +61,7 @@ pub async fn handle_api_key_generation() {
                 continue;
             }
         };
-        NewApiKey {
+        NewApiKeyResponse {
             id: msg.id,
             encrypted_api_key,
             decrypted_api_key: api_key,
@@ -121,7 +121,7 @@ pub async fn handle_encrypt_request() {
 
 async fn handle_add_download(
     State(_state): State<SharedState>,
-    Json(payload): Json<RequestAddDownload>,
+    Json(payload): Json<AddDownloadRequest>,
 ) -> impl IntoResponse {
     payload.send_signal_to_dart();
     (StatusCode::OK, "Download request sent".to_string())
@@ -130,7 +130,7 @@ async fn handle_add_download(
 pub async fn start_server_listener(context: Arc<AppContext>) {
     let mut current_server: Option<(tokio::task::JoinHandle<()>, Arc<tokio::sync::Notify>)> = None;
     let mut cleanup_handle: Option<tokio::task::JoinHandle<()>> = None;
-    let receiver = StartServer::get_dart_signal_receiver();
+    let receiver = StartServerRequest::get_dart_signal_receiver();
 
     while let Some(signal_pack) = receiver.recv().await {
         let msg = signal_pack.message;
@@ -215,5 +215,11 @@ pub async fn start_server_listener(context: Arc<AppContext>) {
             run_server(router, msg.port, rs_clone, ss_clone).await;
         });
         current_server = Some((new_handle, restart_signal));
+
+        StartServerResponse {
+            id: msg.id,
+            success: true,
+        }
+        .send_signal_to_dart();
     }
 }

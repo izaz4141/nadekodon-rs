@@ -1,3 +1,4 @@
+use crate::response::json_error;
 use crate::security::create_jwt_response;
 use crate::server::{SharedState, build_jwt_cookie, normalize_secret};
 use axum::{
@@ -8,26 +9,10 @@ use axum::{
     response::IntoResponse,
 };
 use axum_extra::extract::CookieJar;
+use nadekodon_core::signals::{ChangeCredentialsRequest, ChangeCredentialsResponse};
 use nadekodon_core::utils::{logger, security};
-use serde::Deserialize;
-use serde::Serialize;
-use utoipa::ToSchema;
 
 const X_PASSWORD: HeaderName = HeaderName::from_static("x-password");
-
-#[derive(Deserialize, ToSchema)]
-pub struct ChangeCredentialsRequest {
-    pub new_username: Option<String>,
-    pub new_password: Option<String>,
-    pub server_port: Option<u16>,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct ChangeCredentialsResponse {
-    pub access_token: String,
-    pub csrf_token: String,
-    pub expires_in: u64,
-}
 
 #[utoipa::path(
     post,
@@ -39,7 +24,7 @@ pub struct ChangeCredentialsResponse {
     ),
     request_body = ChangeCredentialsRequest,
     responses(
-        (status = 200, description = "Credentials changed successfully"),
+        (status = 200, description = "Credentials changed successfully", body = ChangeCredentialsResponse),
         (status = 401, description = "Invalid current password"),
         (status = 500, description = "Server error")
     ),
@@ -61,7 +46,7 @@ pub async fn handle_change_credentials(
     let is_valid = security::validate_password(&current_hash, current_password).unwrap_or(false);
 
     if !is_valid {
-        return (StatusCode::UNAUTHORIZED,).into_response();
+        return json_error(StatusCode::UNAUTHORIZED, "Invalid current password").into_response();
     }
 
     let mut new_username = current_username.clone();
@@ -79,7 +64,8 @@ pub async fn handle_change_credentials(
                 Ok(hashed) => new_password_hash = hashed,
                 Err(e) => {
                     logger::error(&format!("Failed to hash password: {}", e));
-                    return (StatusCode::INTERNAL_SERVER_ERROR,).into_response();
+                    return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to hash password")
+                        .into_response();
                 }
             }
         }

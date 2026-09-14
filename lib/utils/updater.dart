@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:nadekodon/utils/api_service.dart';
+import 'package:nadekodon/utils/bridge_service.dart';
 import 'package:nadekodon/utils/logger.dart';
 import 'package:nadekodon/utils/app_lifecycle.dart';
 import 'package:nadekodon/utils/system_service.dart';
@@ -23,7 +23,7 @@ Future<VersionInfo?> checkForUpdate({bool checkNightly = false}) async {
     final isNightly = currentVersion.version.contains("-");
     final shouldCheckNightly = isNightly || checkNightly;
 
-    final latestVersion = await APIService.getLatestVersion(
+    final latestVersion = await BridgeService.getLatestVersion(
       _githubOwner,
       _githubRepo,
       nightly: shouldCheckNightly,
@@ -33,7 +33,7 @@ Future<VersionInfo?> checkForUpdate({bool checkNightly = false}) async {
       return null;
     }
 
-    final compareResult = await APIService.compareVersions([
+    final compareResult = await BridgeService.compareVersions([
       latestVersion.version,
       "${currentVersion.version}+${currentVersion.buildNumber}",
     ]);

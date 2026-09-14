@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/ui/widgets/app_snackbar.dart';
-import 'package:nadekodon/utils/api_service.dart';
-import 'package:nadekodon/utils/platform_service.dart';
-import 'package:nadekodon/utils/settings.dart';
-import 'package:nadekodon/src/bindings/bindings.dart';
+import 'package:nadekodon/utils/bridge_service.dart';
 
 class VerifyPasswordDialog extends StatefulWidget {
   const VerifyPasswordDialog({super.key});
@@ -49,21 +46,7 @@ class _VerifyPasswordDialogState extends State<VerifyPasswordDialog> {
     });
 
     bool isValid;
-    if (PlatformService().isRemote) {
-      isValid = await APIService.verifyPassword(_passwordController.text);
-    } else {
-      final id = DateTime.now().millisecondsSinceEpoch.toString();
-      VerifyPassword(
-        id: id,
-        input: _passwordController.text,
-        reference: SettingsManager.password.value,
-      ).sendSignalToRust();
-      final stream = VerifyPasswordResult.rustSignalStream.where(
-        (signal) => signal.message.id == id,
-      );
-      final result = await stream.first;
-      isValid = result.message.success;
-    }
+    isValid = await BridgeService.verifyPassword(_passwordController.text);
 
     setState(() {
       _isLoading = false;

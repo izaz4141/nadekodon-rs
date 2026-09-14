@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nadekodon/models/account.dart';
-import 'package:nadekodon/utils/api_service.dart';
+import 'package:nadekodon/utils/bridge_service.dart';
 import 'package:nadekodon/utils/settings.dart';
 import 'package:nadekodon/utils/helper.dart';
 // ignore: unused_import
@@ -215,7 +215,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
     final password = _passwordCtrl.text;
 
     try {
-      final success = await APIService.testLogin(
+      final success = await BridgeService.testLogin(
         host: host,
         port: int.parse(port),
         username: username,

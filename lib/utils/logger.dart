@@ -1,5 +1,5 @@
 import 'package:intl/intl.dart';
-import 'package:nadekodon/src/bindings/bindings.dart';
+import 'package:nadekodon/utils/bridge_service.dart';
 
 void log(String message, {bool isError = false}) {
   final level = isError ? 'ERROR' : 'DEBUG';
@@ -9,8 +9,8 @@ void log(String message, {bool isError = false}) {
 }
 
 void initRustSignalLogger() {
-  LogSignal.rustSignalStream.listen((signalPack) {
-    final isError = signalPack.message.level == "ERROR";
-    log(signalPack.message.message, isError: isError);
+  BridgeService.rustLogMessages.listen((m) {
+    final isError = m.level == "ERROR";
+    log(m.message, isError: isError);
   });
 }

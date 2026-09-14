@@ -1,6 +1,8 @@
+use crate::response::{json_error, json_ok};
 use crate::server::SharedState;
-use axum::{Json, extract::State, response::IntoResponse};
-use nadekodon_core::signals::{CategoriesOutput, CategoryDisplay, UpdateCategories};
+use axum::{Json, extract::Query, extract::State, response::IntoResponse};
+use nadekodon_core::signals::{GetCategoriesResponse, CategoryDisplay, UpdateCategoriesRequest};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 #[utoipa::path(
@@ -8,12 +10,17 @@ use std::path::PathBuf;
     path = "/api/nadeko/download/categories",
     tags = ["nadeko.download"],
     security(("ApiKeyAuth" = [])),
+    params(("id" = String, Query, description = "Request correlation id")),
     responses(
-        (status = 200, description = "Categories list", body = CategoriesOutput),
+        (status = 200, description = "Categories list", body = GetCategoriesResponse),
         (status = 500, description = "Server error")
     )
 )]
-pub async fn handle_get_categories(State(state): State<SharedState>) -> impl IntoResponse {
+pub async fn handle_get_categories(
+    State(state): State<SharedState>,
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let id = params.get("id").cloned().unwrap_or_default();
     let dm = state.context.dm().await;
     let categories = dm.list_categories().await;
     let category_list: Vec<CategoryDisplay> = categories
@@ -23,7 +30,8 @@ pub async fn handle_get_categories(State(state): State<SharedState>) -> impl Int
             save_path: c.save_path.map(|p| p.to_string_lossy().to_string()),
         })
         .collect();
-    Json(CategoriesOutput {
+    Json(GetCategoriesResponse {
+        id,
         categories: category_list,
     })
 }
@@ -33,7 +41,7 @@ pub async fn handle_get_categories(State(state): State<SharedState>) -> impl Int
     path = "/api/nadeko/download/categories",
     tags = ["nadeko.download"],
     security(("ApiKeyAuth" = [])),
-    request_body = UpdateCategories,
+    request_body = UpdateCategoriesRequest,
     responses(
         (status = 200, description = "Categories updated"),
         (status = 500, description = "Server error")
@@ -41,7 +49,7 @@ pub async fn handle_get_categories(State(state): State<SharedState>) -> impl Int
 )]
 pub async fn handle_update_categories(
     State(state): State<SharedState>,
-    Json(payload): Json<UpdateCategories>,
+    Json(payload): Json<UpdateCategoriesRequest>,
 ) -> impl IntoResponse {
     let dm = state.context.dm().await;
     let category_infos: Vec<nadekodon_core::utils::types::CategoryInfo> = payload
@@ -53,7 +61,8 @@ pub async fn handle_update_categories(
         })
         .collect();
     match dm.update_categories(category_infos).await {
-        Ok(_) => (axum::http::StatusCode::OK, "Categories updated".to_string()),
-        Err(e) => (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+        Ok(_) => json_ok().into_response(),
+        Err(e) => json_error(axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+            .into_response(),
     }
 }

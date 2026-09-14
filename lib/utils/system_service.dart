@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:nadekodon/utils/api_service.dart';
+import 'package:nadekodon/utils/bridge_service.dart';
 
 class VersionInfo {
   final String version;
@@ -46,12 +46,12 @@ class SystemService {
     _packageInfo = await PackageInfo.fromPlatform();
 
     // Listen to online status to fetch versions accurately
-    APIService.isOnline.addListener(_onStatusChanged);
+    BridgeService.isOnline.addListener(_onStatusChanged);
     _onStatusChanged();
   }
 
   void _onStatusChanged() {
-    if (APIService.isOnline.value) {
+    if (BridgeService.isOnline.value) {
       fetchVersions();
     }
   }
@@ -72,38 +72,38 @@ class SystemService {
     latestYtdlpVersion.value = null;
     latestFfmpegVersion.value = null;
 
-    if (APIService.isOnline.value) {
+    if (BridgeService.isOnline.value) {
       fetchVersions();
     }
   }
 
   Future<void> fetchVersions() async {
     // Local tool versions
-    ytdlpVersion.value = await APIService.getCurrentVersion('yt-dlp');
-    ffmpegVersion.value = await APIService.getCurrentVersion('ffmpeg');
+    ytdlpVersion.value = await BridgeService.getCurrentVersion('yt-dlp');
+    ffmpegVersion.value = await BridgeService.getCurrentVersion('ffmpeg');
 
     // Latest app version
-    latestAppVersion.value = await APIService.getLatestVersion(
+    latestAppVersion.value = await BridgeService.getLatestVersion(
       'izaz4141',
       'nadekodon-rs',
       nightly: true,
     );
 
     // Latest tool versions
-    latestYtdlpVersion.value = await APIService.getLatestVersion(
+    latestYtdlpVersion.value = await BridgeService.getLatestVersion(
       'yt-dlp',
       'yt-dlp',
     );
-    latestFfmpegVersion.value = await APIService.getLatestVersion(
+    latestFfmpegVersion.value = await BridgeService.getLatestVersion(
       'Ffmpeg',
       'Ffmpeg',
       nightly: true,
     );
   }
 
-  String? get serverVersion => APIService.serverVersion.value;
+  String? get serverVersion => BridgeService.serverVersion.value;
 
-  Future<String?> getServerVersion() => APIService.getServerVersion();
+  Future<String?> getServerVersion() => BridgeService.getServerVersion();
 
   String get versionString =>
       '${packageInfo.version}+${packageInfo.buildNumber}';

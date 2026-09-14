@@ -1,16 +1,5 @@
 use axum::{Json, response::IntoResponse};
-use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
-
-#[derive(Deserialize, ToSchema)]
-pub struct CompareVersionsRequest {
-    pub versions: Vec<String>,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct CompareVersionsResponse {
-    pub latest: Option<String>,
-}
+use nadekodon_core::signals::{CompareVersionsRequest, CompareVersionsResponse};
 
 #[utoipa::path(
     post,

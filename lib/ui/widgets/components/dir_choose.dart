@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:nadekodon/utils/io_service.dart';
 import 'package:nadekodon/utils/settings.dart';
-import 'package:nadekodon/utils/platform_service.dart';
 
 import 'package:nadekodon/ui/theme/app_theme.dart';
-import 'package:nadekodon/src/bindings/bindings.dart';
-import 'package:nadekodon/utils/api_service.dart';
+import 'package:nadekodon/utils/bridge_service.dart';
 
 class DirChoose extends StatefulWidget {
   final ValueNotifier<String> selectedDir;
@@ -35,23 +33,11 @@ class _DirChooseState extends State<DirChoose> {
   Future<void> _loadCategories() async {
     setState(() => _loadingCategories = true);
 
-    if (PlatformService().isRemote) {
-      final result = await APIService.getCategories();
-      if (mounted) {
-        setState(() {
-          _categories = result ?? [];
-          _loadingCategories = false;
-        });
-      }
-    } else {
-      GetCategories().sendSignalToRust();
-      CategoriesOutput.rustSignalStream.first.then((signal) {
-        if (mounted) {
-          setState(() {
-            _categories = signal.message.categories;
-            _loadingCategories = false;
-          });
-        }
+    final result = await BridgeService.getCategories();
+    if (mounted) {
+      setState(() {
+        _categories = result ?? [];
+        _loadingCategories = false;
       });
     }
   }

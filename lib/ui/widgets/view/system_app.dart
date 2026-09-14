@@ -11,7 +11,7 @@ import 'package:nadekodon/utils/settings.dart';
 import 'package:nadekodon/utils/updater.dart';
 import 'package:nadekodon/utils/system_service.dart';
 import 'package:nadekodon/utils/platform_service.dart';
-import 'package:nadekodon/utils/api_service.dart';
+import 'package:nadekodon/utils/bridge_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -130,7 +130,7 @@ class _SystemAppState extends State<SystemApp> {
           if (PlatformService().isRemote) ...[
             SizedBox(height: AppTheme.spaceSM),
             Text(
-              'Remote Version: ${APIService.serverVersion.value ?? "Unknown"}',
+              'Remote Version: ${BridgeService.serverVersion.value ?? "Unknown"}',
               style: textTheme.bodyMedium,
             ),
           ],
@@ -194,7 +194,7 @@ class _SystemAppState extends State<SystemApp> {
               label: 'Docs',
               tooltip: 'Open API documentation',
               onPressed: () =>
-                  launchUrl(Uri.parse('${APIService.baseUrl}/api/docs')),
+                  launchUrl(Uri.parse('${BridgeService.baseUrl}/api/docs')),
             ),
           ),
         ],

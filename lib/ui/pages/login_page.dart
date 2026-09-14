@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/utils/settings.dart';
-import 'package:nadekodon/utils/api_service.dart';
+import 'package:nadekodon/utils/bridge_service.dart';
 import 'package:nadekodon/ui/widgets/dialog/account_manager_dialog.dart';
 
 class LoginPage extends StatefulWidget {
@@ -40,7 +40,7 @@ class _LoginPageState extends State<LoginPage> {
       _errorMessage = null;
     });
 
-    final success = await APIService.login(
+    final success = await BridgeService.login(
       username: _usernameController.text,
       password: _passwordController.text,
     );

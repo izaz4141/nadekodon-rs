@@ -1,3 +1,4 @@
+use crate::response::{json_error, json_ok};
 use crate::server::SharedState;
 use axum::{
     extract::State,
@@ -33,8 +34,8 @@ pub async fn handle_verify_password(
     let is_valid = security::validate_password(&current_hash, password).unwrap_or(false);
 
     if is_valid {
-        (StatusCode::OK,).into_response()
+        json_ok().into_response()
     } else {
-        (StatusCode::UNAUTHORIZED,).into_response()
+        json_error(StatusCode::UNAUTHORIZED, "Invalid password").into_response()
     }
 }

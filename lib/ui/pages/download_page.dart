@@ -6,10 +6,9 @@ import 'package:nadekodon/ui/widgets/dialog/delete_download.dart';
 
 import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/utils/helper.dart';
-import 'package:nadekodon/src/bindings/bindings.dart';
+import 'package:nadekodon/utils/bridge_service.dart';
 import 'package:nadekodon/ui/widgets/dialog/add_download.dart';
 import 'package:nadekodon/ui/widgets/dialog/download_context_menu.dart';
-import 'package:nadekodon/utils/download_service.dart';
 
 class DownloadPage extends StatefulWidget {
   const DownloadPage({super.key});
@@ -46,7 +45,6 @@ class _DownloadListState {
 class _DownloadPageState extends State<DownloadPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  late StreamSubscription<DownloadList> _dListSubs;
   Timer? _pollTimer;
 
   final _activeState = _DownloadListState();
@@ -64,10 +62,6 @@ class _DownloadPageState extends State<DownloadPage>
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
 
-    // DownloadService is initialized in its singleton constructor.
-    // Listen for updates from DownloadService
-    _dListSubs = DownloadService().listStream.listen(_onDownloadListReceived);
-
     // Start polling
     _pollTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
       _pollDownloads();
@@ -81,7 +75,6 @@ class _DownloadPageState extends State<DownloadPage>
   void dispose() {
     _pollTimer?.cancel();
     _tabController.dispose();
-    _dListSubs.cancel();
     _activeState.scrollController.dispose();
     _completedState.scrollController.dispose();
     _searchController.dispose();
@@ -189,19 +182,19 @@ class _DownloadPageState extends State<DownloadPage>
       }
     }).toList();
 
-    DownloadService().fetchList(
-      GetDownloadList(
-        offsetIndex: firstVisibleIndex,
-        before: beforeCount,
-        after: afterCount,
-        statuses: statusStrings,
-        tag: tag,
-        searchQuery: _searchQuery.isNotEmpty ? _searchQuery : null,
-        sortBy: _sortBy,
-        ascending: _ascending,
-        categories: [],
-      ),
-    );
+    BridgeService.getDownloadList(
+      id: null,
+      offsetIndex: firstVisibleIndex,
+      before: beforeCount,
+      after: afterCount,
+      statuses: statusStrings,
+      tag: tag,
+      searchQuery: _searchQuery.isNotEmpty ? _searchQuery : null,
+      sortBy: _sortBy,
+      ascending: _ascending,
+    ).then((list) {
+      if (list != null) _onDownloadListReceived(list);
+    });
   }
 
   void _toggleSelection(_DownloadListState state, String id) {
@@ -243,7 +236,7 @@ class _DownloadPageState extends State<DownloadPage>
 
     for (final item in selectedItems) {
       if (DownloadPage.activeStatuses.contains(item.status)) {
-        DownloadService().cancelDownload(item.id);
+        BridgeService.cancelDownload(item.id);
       }
     }
     _unselectAll(state);
@@ -690,14 +683,14 @@ class _DownloadListTabState extends State<_DownloadListTab>
                     if (item.status == DownloadStatus.running ||
                         item.status == DownloadStatus.seeding ||
                         item.status == DownloadStatus.queued) {
-                      DownloadService().pauseDownload(item.id);
+                      BridgeService.pauseDownload(item.id);
                     } else {
-                      DownloadService().resumeDownload(item.id);
+                      BridgeService.resumeDownload(item.id);
                     }
                   },
                   onCancel: () {
                     if (DownloadPage.activeStatuses.contains(item.status)) {
-                      DownloadService().cancelDownload(item.id);
+                      BridgeService.cancelDownload(item.id);
                     }
                   },
                 ),

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
 import 'package:nadekodon/utils/helper.dart';
+import 'package:nadekodon/utils/bridge_service.dart';
 import 'package:nadekodon/ui/widgets/app_snackbar.dart';
 import 'package:nadekodon/ui/theme/app_theme.dart';
-import 'package:nadekodon/utils/download_service.dart';
 
 /// Shows a dialog to confirm deletion of one or more downloads
 Future<void> showDeleteDownloadsDialog(
@@ -94,7 +94,7 @@ Future<void> showDeleteDownloadsDialog(
   int successCount = 0;
   for (final item in items) {
     if (deleteFromList) {
-      DownloadService().deleteDownload(item.id, deleteFile);
+      BridgeService.deleteDownload(item.id, deleteFile);
     }
     successCount++;
   }

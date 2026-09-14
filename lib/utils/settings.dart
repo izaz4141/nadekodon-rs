@@ -4,12 +4,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'package:nadekodon/src/bindings/bindings.dart';
 import 'package:nadekodon/utils/platform_service.dart';
 import 'package:nadekodon/utils/logger.dart';
 import 'package:nadekodon/utils/speed_scheduler.dart';
 import 'package:nadekodon/utils/io_service.dart';
-import 'package:nadekodon/utils/api_service.dart';
+import 'package:nadekodon/utils/bridge_service.dart';
 import 'package:nadekodon/utils/system_service.dart';
 import 'package:nadekodon/utils/helper.dart';
 import 'package:nadekodon/models/account.dart';
@@ -142,7 +141,7 @@ class SettingsManager {
         String? masterKey;
         if (masterKeyExists) {
           final encoded = await _ioService.readFile(masterKeyPath);
-          masterKey = await d0(encoded);
+          masterKey = await BridgeService.d0(encoded);
         }
         if (masterKey != null) {
           if (storedApiKey.startsWith('NDK:')) {
@@ -173,8 +172,9 @@ class SettingsManager {
 
     if (json.containsKey('username')) {
       final user = json['username'] as String?;
-      username.value =
-          (user == null || user.isEmpty) ? defaults['username'] : user;
+      username.value = (user == null || user.isEmpty)
+          ? defaults['username']
+          : user;
     }
 
     if (!isRemote) {
@@ -377,7 +377,7 @@ class SettingsManager {
   static void _sendSettings(String key, dynamic value) {
     switch (key) {
       case 'download_folder':
-        UpdateSettings(downloadDir: value).sendSignalToRust();
+        BridgeService.updateSettings(downloadDir: value);
         break;
       case 'speed_limit':
         if (speedMode.value == SpeedMode.fixed) {
@@ -385,57 +385,47 @@ class SettingsManager {
         }
         break;
       case 'download_threads':
-        UpdateSettings(downloadThreads: value).sendSignalToRust();
+        BridgeService.updateSettings(downloadThreads: value);
         break;
       case 'concurrency_limit':
-        UpdateSettings(concurrencyLimit: value).sendSignalToRust();
+        BridgeService.updateSettings(concurrencyLimit: value);
         break;
       case 'download_retries':
-        UpdateSettings(downloadRetries: value).sendSignalToRust();
+        BridgeService.updateSettings(downloadRetries: value);
         break;
       case 'download_timeout':
-        UpdateSettings(
-          downloadTimeout: Uint64.fromBigInt(BigInt.from(value)),
-        ).sendSignalToRust();
+        BridgeService.updateSettings(downloadTimeout: value);
         break;
       case 'seeding_ratio':
-        UpdateSettings(seedingRatio: value).sendSignalToRust();
+        BridgeService.updateSettings(seedingRatio: value);
         break;
       case 'seeding_time':
-        UpdateSettings(
-          seedingTime: Uint64.fromBigInt(BigInt.from(value)),
-        ).sendSignalToRust();
+        BridgeService.updateSettings(seedingTime: value);
         break;
       case 'stalled_time':
-        UpdateSettings(
-          stalledTime: Uint64.fromBigInt(BigInt.from(value)),
-        ).sendSignalToRust();
+        BridgeService.updateSettings(stalledTime: value);
         break;
     }
   }
 
   static Future<void> sendAllSettings() async {
     if (kIsWeb) return;
-    UpdateSettings(
+    await BridgeService.updateSettings(
       downloadDir: downloadFolder.value,
-      speedLimit: Uint64.fromBigInt(
-        BigInt.from((SpeedScheduler.currentSpeed.value * 1024 * 1024).round()),
-      ),
+      speedLimit: (SpeedScheduler.currentSpeed.value * 1024 * 1024).round(),
       downloadThreads: downloadThreads.value,
       concurrencyLimit: concurrencyLimit.value,
       downloadRetries: downloadRetries.value,
-      downloadTimeout: Uint64.fromBigInt(BigInt.from(downloadTimeout.value)),
+      downloadTimeout: downloadTimeout.value,
       seedingRatio: seedingRatio.value,
-      seedingTime: Uint64.fromBigInt(BigInt.from(seedingTime.value)),
-      stalledTime: Uint64.fromBigInt(BigInt.from(stalledTime.value)),
-    ).sendSignalToRust();
+      seedingTime: seedingTime.value,
+      stalledTime: stalledTime.value,
+    );
   }
 
   static void sendSpeedLimit(double value) {
     if (kIsWeb) return;
-    UpdateSettings(
-      speedLimit: Uint64.fromBigInt(BigInt.from((value * 1024 * 1024).round())),
-    ).sendSignalToRust();
+    BridgeService.updateSettings(speedLimit: (value * 1024 * 1024).round());
   }
 
   static Future<void> applyDefaultSettings() async {
@@ -474,119 +464,27 @@ class SettingsManager {
     return _ioService.getTorrentPersistencePath();
   }
 
-  static Future<String?> decryptKey(
-    String encryptedKey,
-    String masterKey,
-  ) async {
-    final id = DateTime.now().microsecondsSinceEpoch.toString();
-    final stream = DecryptResponse.rustSignalStream.where(
-      (signal) => signal.message.id == id,
-    );
-    DecryptRequest(
-      id: id,
-      encryptedKey: encryptedKey,
-      masterKey: masterKey,
-    ).sendSignalToRust();
-    try {
-      final signal = await stream.first;
-      return signal.message.decryptedKey.isNotEmpty
-          ? signal.message.decryptedKey
-          : null;
-    } catch (e) {
-      log('Failed to decrypt API key: $e', isError: true);
-      return null;
-    }
-  }
+  static Future<String?> decryptKey(String encryptedKey, String masterKey) =>
+      BridgeService.decryptKey(encryptedKey, masterKey);
 
   static Future<String?> encryptKey(
     String plainKey,
     String? existingMasterKey,
-  ) async {
-    final id = DateTime.now().microsecondsSinceEpoch.toString();
-    final stream = EncryptResponse.rustSignalStream.where(
-      (signal) => signal.message.id == id,
-    );
-    EncryptRequest(
-      id: id,
-      plainKey: plainKey,
-      masterKey: existingMasterKey,
-    ).sendSignalToRust();
-    try {
-      final signal = await stream.first;
-      return signal.message.encryptedKey.isNotEmpty
-          ? signal.message.encryptedKey
-          : null;
-    } catch (e) {
-      log('Failed to encrypt key: $e', isError: true);
-      return null;
-    }
-  }
+  ) => BridgeService.encryptKey(plainKey, existingMasterKey);
 
   static Future<void> regenerateApiKey() async {
-    if (PlatformService().isRemote) {
-      await APIService.regenerateApiKey();
-      return;
-    }
-    final configDir = await _ioService.getConfigDir();
-    final masterKeyPath = '$configDir/$masterKeyFile';
-    final masterKeyExists = await _ioService.fileExists(masterKeyPath);
-    String? existingMasterKey;
-    if (masterKeyExists) {
-      final encoded = await _ioService.readFile(masterKeyPath);
-      existingMasterKey = await d0(encoded);
-    }
-    final id = DateTime.now().microsecondsSinceEpoch.toString();
-    final stream = NewApiKey.rustSignalStream.where(
-      (signal) => signal.message.id == id,
-    );
-    RequestNewApiKey(id: id, masterKey: existingMasterKey).sendSignalToRust();
-    final signal = await stream.first;
-
-    final encodedKey = await x0(signal.message.masterKey);
-    await _ioService.writeFile(masterKeyPath, encodedKey);
-    await _ioService.setPermissions(masterKeyPath, '0600');
-    serverApiKey.value = signal.message.decryptedApiKey;
-    encryptedServerApiKey.value = signal.message.encryptedApiKey;
-    await saveChanged('server_api_key', signal.message.encryptedApiKey);
+    await BridgeService.regenerateApiKey();
   }
 
   static Future<void> restartServer() async {
-    if (PlatformService().isRemote) {
-      await APIService.restartServer();
-      return;
-    }
-    final masterKey = await getMasterKey();
-    StartServer(
-      port: serverPort.value,
-      apiKey: serverApiKey.value,
-      masterKey: masterKey!,
-      username: username.value,
-      password: password.value,
-      configPath: configPath,
-    ).sendSignalToRust();
+    await BridgeService.restartServer();
   }
 
   static Future<String> hashPassword(String plainText) async {
     if (plainText.isEmpty) return '';
     try {
-      if (PlatformService().isRemote) {
-        final hashed = await APIService.hashPassword(plainText);
-        if (hashed != null) return hashed;
-      } else {
-        final id = DateTime.now().microsecondsSinceEpoch.toString();
-        final stream = HashingOutput.rustSignalStream.where(
-          (signal) => signal.message.id == id,
-        );
-        HashPassword(
-          id: id,
-          plainText: plainText,
-        ).sendSignalToRust();
-        final signal = await stream.first;
-        if (signal.message.hashedText != null) {
-          return signal.message.hashedText!;
-        }
-      }
-      return plainText;
+      final hashed = await BridgeService.hashPassword(plainText);
+      return hashed ?? plainText;
     } catch (e) {
       log("Hashing error: $e", isError: true);
       return plainText;
@@ -595,7 +493,7 @@ class SettingsManager {
 
   static Future<void> loadFromBackend() async {
     if (!PlatformService().isRemote) return;
-    final data = await APIService.getSettings();
+    final data = await BridgeService.getSettings();
     if (data != null) {
       await _applyFromJson(data);
     } else {
@@ -611,7 +509,7 @@ class SettingsManager {
       jsonMap.remove('server_port');
       jsonMap.remove('require_login');
     }
-    final success = await APIService.saveSettings(jsonMap);
+    final success = await BridgeService.saveSettings(jsonMap);
     if (!success) {
       log('Failed to save settings to backend', isError: true);
     }
@@ -652,12 +550,12 @@ class SettingsManager {
     }
     encryptedServerApiKey.value = account.encryptedApiKey;
 
-    APIService.isOnline.value = false;
-    APIService.serverVersion.value = null;
+    BridgeService.isOnline.value = false;
+    BridgeService.serverVersion.value = null;
     SystemService().refreshVersions();
     await loadFromBackend();
     attachAutoSave();
-    APIService.restartPolling();
+    BridgeService.restartPolling();
   }
 
   static Future<void> switchToLocal() async {
@@ -679,10 +577,10 @@ class SettingsManager {
     } else {
       await applyDefaultSettings();
     }
-    APIService.isOnline.value = false;
-    APIService.serverVersion.value = null;
+    BridgeService.isOnline.value = false;
+    BridgeService.serverVersion.value = null;
     SystemService().refreshVersions();
     attachAutoSave();
-    APIService.restartPolling();
+    BridgeService.restartPolling();
   }
 }
