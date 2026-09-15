@@ -201,7 +201,7 @@ class BridgeService {
 
   static String getDownloadUrl(String id) => impl.getDownloadUrl(id);
 
-  static Future<bool> addDownload({
+  static Future<List<String>?> addDownload({
     String? url,
     required String dest,
     bool isYtdl = false,

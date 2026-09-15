@@ -78,7 +78,7 @@ abstract class ApiServiceContract {
   });
   Future<DownloadDetails?> getDownloadDetails(String id);
   String getDownloadUrl(String id);
-  Future<bool> addDownload({
+  Future<List<String>?> addDownload({
     String? url,
     required String dest,
     bool isYtdl,

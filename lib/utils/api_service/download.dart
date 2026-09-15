@@ -123,7 +123,7 @@ mixin DownloadHttpApi {
     return null;
   }
 
-  Future<bool> addDownload({
+  Future<List<String>?> addDownload({
     String? url,
     required String dest,
     bool isYtdl = false,
@@ -165,7 +165,20 @@ mixin DownloadHttpApi {
         },
     };
 
-    return _sendAction('download/create', payload);
+    try {
+      final response = await HttpTransport.post(
+        '/api/nadeko/download/create',
+        body: payload,
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final ids = data['download_ids'] as List?;
+        return ids?.cast<String>();
+      }
+    } catch (e) {
+      log("Error adding download: $e", isError: true);
+    }
+    return null;
   }
 
   Future<bool> pauseDownload(String id) async {

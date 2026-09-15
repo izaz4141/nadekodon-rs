@@ -208,11 +208,12 @@ pub async fn spawn_download_worker(manager: Arc<downloader::DownloadManager>) {
             category: drequest.category,
         };
         match downloader::spawn_download_worker_internal(&manager, coredrequest).await {
-            Ok(_) => {
+            Ok(ids) => {
                 logger::debug(&format!("Spawned worker for {:?}", &drequest.url));
                 signals::DoDownloadResponse {
                     id: drequest.id,
                     success: true,
+                    download_ids: ids.into_iter().map(|id| id.to_string()).collect(),
                 }
                 .send_signal_to_dart()
             }
@@ -224,6 +225,7 @@ pub async fn spawn_download_worker(manager: Arc<downloader::DownloadManager>) {
                 signals::DoDownloadResponse {
                     id: drequest.id,
                     success: false,
+                    download_ids: vec![],
                 }
                 .send_signal_to_dart()
             }

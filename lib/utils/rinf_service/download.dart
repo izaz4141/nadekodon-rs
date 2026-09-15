@@ -43,7 +43,7 @@ mixin DownloadRinfApi {
     );
   }
 
-  Future<bool> addDownload({
+  Future<List<String>?> addDownload({
     String? url,
     required String dest,
     bool isYtdl = false,
@@ -53,20 +53,25 @@ mixin DownloadRinfApi {
     String? userAgent,
     String? referer,
     String? category,
-  }) {
-    DoDownloadRequest(
-      id: newSignalId(),
-      url: url,
-      dest: dest,
-      isYtdl: isYtdl,
-      videoFormat: videoFormat,
-      audioFormat: audioFormat,
-      cookie: cookie,
-      userAgent: userAgent,
-      referer: referer,
-      category: category,
-    ).sendSignalToRust();
-    return Future.value(true);
+  }) async {
+    final requestId = newSignalId();
+    final result = await awaitRustPush<DoDownloadResponse>(
+      DoDownloadResponse.rustSignalStream,
+      matches: (m) => m.id == requestId,
+      send: () => DoDownloadRequest(
+        id: requestId,
+        url: url,
+        dest: dest,
+        isYtdl: isYtdl,
+        videoFormat: videoFormat,
+        audioFormat: audioFormat,
+        cookie: cookie,
+        userAgent: userAgent,
+        referer: referer,
+        category: category,
+      ).sendSignalToRust(),
+    );
+    return result != null && result.success ? result.downloadIds : null;
   }
 
   Future<bool> pauseDownload(String id) {

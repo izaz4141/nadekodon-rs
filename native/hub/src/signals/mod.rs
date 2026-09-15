@@ -116,6 +116,7 @@ pub struct DoDownloadRequest {
 pub struct DoDownloadResponse {
     pub id: String,
     pub success: bool,
+    pub download_ids: Vec<String>,
 }
 
 #[derive(Deserialize, DartSignal)]

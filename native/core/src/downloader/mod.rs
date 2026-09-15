@@ -170,92 +170,100 @@ pub async fn query_url_info_internal(
 pub async fn spawn_download_worker_internal(
     manager: &Arc<DownloadManager>,
     data: signals::DoDownloadRequest,
-) -> Result<()> {
+) -> Result<Vec<Uuid>> {
     let mut dest = std::path::PathBuf::from(data.dest);
     let manager = Arc::clone(manager);
 
     if data.is_ytdl {
-        tokio::spawn(async move {
-            let video_format = data.video_format;
-            let audio_format = data.audio_format;
+        let video_format = data.video_format;
+        let audio_format = data.audio_format;
 
-            let temp_dest_base = dest.clone();
+        let temp_dest_base = dest.clone();
 
-            let mut video_dest: Option<std::path::PathBuf> = None;
-            let mut audio_dest: Option<std::path::PathBuf> = None;
+        let mut video_dest: Option<std::path::PathBuf> = None;
+        let mut audio_dest: Option<std::path::PathBuf> = None;
 
-            let mut audio_path_base = temp_dest_base.clone();
-            let mut video_path_base = temp_dest_base.clone();
+        let mut audio_path_base = temp_dest_base.clone();
+        let mut video_path_base = temp_dest_base.clone();
 
-            if audio_format.is_some() && video_format.is_some() {
-                if let Some(mut file_name) = audio_path_base
-                    .file_name()
-                    .and_then(|s| s.to_string_lossy().into_owned().into())
-                {
-                    file_name.push_str("_audio");
-                    audio_path_base.set_file_name(file_name);
-                }
-                if let Some(mut file_name) = video_path_base
-                    .file_name()
-                    .and_then(|s| s.to_string_lossy().into_owned().into())
-                {
-                    file_name.push_str("_video");
-                    video_path_base.set_file_name(file_name);
-                }
-
-                if let Some(format) = &video_format {
-                    dest = dest.with_extension(format.ext.clone());
-                }
+        if audio_format.is_some() && video_format.is_some() {
+            if let Some(mut file_name) = audio_path_base
+                .file_name()
+                .and_then(|s| s.to_string_lossy().into_owned().into())
+            {
+                file_name.push_str("_audio");
+                audio_path_base.set_file_name(file_name);
+            }
+            if let Some(mut file_name) = video_path_base
+                .file_name()
+                .and_then(|s| s.to_string_lossy().into_owned().into())
+            {
+                file_name.push_str("_video");
+                video_path_base.set_file_name(file_name);
             }
 
-            let audio_id = if let Some(format) = audio_format {
-                let path = audio_path_base.with_extension(format.ext);
-                audio_dest = Some(path.clone());
-                match manager
-                    .add_download(
-                        format.url.clone(),
-                        path,
-                        None,
-                        None,
-                        data.referer.clone(),
-                        data.category.clone(),
-                    )
-                    .await
-                {
-                    Ok(id) => Some(id),
-                    Err(e) => {
-                        logger::error(&format!("Failed to spawn ytdl audio worker: {:?}", e));
-                        None
-                    }
-                }
-            } else {
-                None
-            };
+            if let Some(format) = &video_format {
+                dest = dest.with_extension(format.ext.clone());
+            }
+        }
 
-            let video_id = if let Some(format) = video_format {
-                let path = video_path_base.with_extension(format.ext);
-                video_dest = Some(path.clone());
-                match manager
-                    .add_download(
-                        format.url.clone(),
-                        path,
-                        None,
-                        None,
-                        data.referer.clone(),
-                        data.category.clone(),
-                    )
-                    .await
-                {
-                    Ok(id) => Some(id),
-                    Err(e) => {
-                        logger::error(&format!("Failed to spawn ytdl video worker: {:?}", e));
-                        None
-                    }
-                }
-            } else {
-                None
-            };
+        let mut created_ids = Vec::new();
 
+        let audio_id = if let Some(format) = audio_format {
+            let path = audio_path_base.with_extension(format.ext);
+            audio_dest = Some(path.clone());
+            match manager
+                .add_download(
+                    format.url.clone(),
+                    path,
+                    None,
+                    None,
+                    data.referer.clone(),
+                    data.category.clone(),
+                )
+                .await
+            {
+                Ok(id) => {
+                    created_ids.push(id);
+                    Some(id)
+                }
+                Err(e) => {
+                    logger::error(&format!("Failed to spawn ytdl audio worker: {:?}", e));
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        let video_id = if let Some(format) = video_format {
+            let path = video_path_base.with_extension(format.ext);
+            video_dest = Some(path.clone());
+            match manager
+                .add_download(
+                    format.url.clone(),
+                    path,
+                    None,
+                    None,
+                    data.referer.clone(),
+                    data.category.clone(),
+                )
+                .await
+            {
+                Ok(id) => {
+                    created_ids.push(id);
+                    Some(id)
+                }
+                Err(e) => {
+                    logger::error(&format!("Failed to spawn ytdl video worker: {:?}", e));
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        tokio::spawn(async move {
             let mut handles = Vec::new();
             if let Some(vid) = video_id {
                 let manager_clone = Arc::clone(&manager);
@@ -389,7 +397,7 @@ pub async fn spawn_download_worker_internal(
                 }
             }
         });
-        Ok(())
+        Ok(created_ids)
     } else if let Some(url) = data.url {
         match manager
             .add_download(
@@ -404,7 +412,7 @@ pub async fn spawn_download_worker_internal(
         {
             Ok(id) => {
                 logger::debug(&format!("Spawned worker for {} with id {}", url, id));
-                Ok(())
+                Ok(vec![id])
             }
             Err(e) => {
                 logger::error(&format!("Failed to spawn worker for {}: {:?}", url, e));
