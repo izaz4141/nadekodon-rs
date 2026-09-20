@@ -36,3 +36,4 @@ utoipa = { version = "5.4.0", features = ["macros", "axum_extras"] }
 utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
 headers = "0.4.1"
 jsonwebtoken = { version = "10.3.0", features = ["rust_crypto"] }
+tower-http = { version = "0.7.1", features = ["fs"] }

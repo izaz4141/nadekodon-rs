@@ -1,14 +1,14 @@
 use crate::server::SharedState;
 use axum::{
     body::Body,
-    extract::{Path, State},
-    http::{HeaderMap, HeaderValue, StatusCode, header},
+    extract::{Path, Request, State},
+    http::{header, HeaderValue, StatusCode},
     response::IntoResponse,
 };
 use nadekodon_core::utils::{logger, types::DownloadState};
 use serde::Deserialize;
 use std::path::PathBuf;
-use tokio::fs::File;
+use tower_http::services::fs::ServeFile;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -26,6 +26,7 @@ pub struct DownloadFilePath {
     params(DownloadFilePath),
     responses(
         (status = 200, description = "File downloaded", body = Vec<u8>),
+        (status = 206, description = "Partial content"),
         (status = 400, description = "Invalid ID"),
         (status = 403, description = "Download not completed"),
         (status = 404, description = "File not found")
@@ -34,6 +35,7 @@ pub struct DownloadFilePath {
 pub async fn handle_download_file(
     State(state): State<SharedState>,
     Path(payload): Path<DownloadFilePath>,
+    request: Request<Body>,
 ) -> impl IntoResponse {
     let uuid = match Uuid::parse_str(&payload.id) {
         Ok(u) => u,
@@ -68,8 +70,8 @@ pub async fn handle_download_file(
         return (StatusCode::NOT_FOUND, "File not found on disk").into_response();
     }
 
-    if path.is_dir() {
-        let (temp_file, _temp_path) = match tempfile::NamedTempFile::new() {
+    let (serve_path, filename) = if path.is_dir() {
+        let (temp_file, temp_path) = match tempfile::NamedTempFile::new() {
             Ok(tf) => {
                 let path = tf.path().to_path_buf();
                 (tf, path)
@@ -107,12 +109,12 @@ pub async fn handle_download_file(
             }
             zip.finish()?;
             file.rewind()?;
-            Ok::<std::fs::File, anyhow::Error>(file)
+            Ok::<tempfile::NamedTempFile, anyhow::Error>(temp_file)
         })
         .await;
 
-        let std_file = match zip_res {
-            Ok(Ok(file)) => file,
+        let _temp_file = match zip_res {
+            Ok(Ok(tf)) => tf,
             Ok(Err(e)) => {
                 logger::error(&format!("Failed to zip directory {:?}: {}", path, e));
                 return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to zip directory")
@@ -125,84 +127,35 @@ pub async fn handle_download_file(
             }
         };
 
-        let content_length = match std_file.metadata() {
-            Ok(m) => m.len(),
-            Err(e) => {
-                logger::error(&format!("Failed to get metadata for zipped file: {}", e));
-                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get metadata")
-                    .into_response();
-            }
-        };
-
-        let file = tokio::fs::File::from_std(std_file);
-
-        let stream = tokio_util::io::ReaderStream::new(file);
-        let body = Body::from_stream(stream);
-
-        let filename = path
+        let dir_name = path
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("download");
-        let zip_filename = format!("{}.zip", filename);
-
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            header::CONTENT_TYPE,
-            HeaderValue::from_static("application/zip"),
-        );
-        headers.insert(
-            header::CONTENT_DISPOSITION,
-            HeaderValue::from_str(&format!("attachment; filename=\"{}\"", zip_filename)).unwrap(),
-        );
-        headers.insert(
-            header::CONTENT_LENGTH,
-            HeaderValue::from_str(&content_length.to_string()).unwrap(),
-        );
-
-        (headers, body).into_response()
+        let zip_filename = format!("{}.zip", dir_name);
+        (temp_path, zip_filename)
     } else {
-        let file = match File::open(&path).await {
-            Ok(file) => file,
-            Err(e) => {
-                logger::error(&format!("Failed to open file {:?}: {}", path, e));
-                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to open file").into_response();
-            }
-        };
-
-        let content_length = match file.metadata().await {
-            Ok(m) => m.len(),
-            Err(e) => {
-                logger::error(&format!(
-                    "Failed to get metadata for file {:?}: {}",
-                    path, e
-                ));
-                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get metadata")
-                    .into_response();
-            }
-        };
-
-        let stream = tokio_util::io::ReaderStream::new(file);
-        let body = Body::from_stream(stream);
-
         let filename = path
             .file_name()
             .and_then(|n| n.to_str())
-            .unwrap_or("download");
+            .unwrap_or("download")
+            .to_string();
+        (path, filename)
+    };
 
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            header::CONTENT_TYPE,
-            HeaderValue::from_static("application/octet-stream"),
-        );
-        headers.insert(
-            header::CONTENT_DISPOSITION,
-            HeaderValue::from_str(&format!("attachment; filename=\"{}\"", filename)).unwrap(),
-        );
-        headers.insert(
-            header::CONTENT_LENGTH,
-            HeaderValue::from_str(&content_length.to_string()).unwrap(),
-        );
+    let mut svc = ServeFile::new(&serve_path);
+    let res = match svc.try_call(request).await {
+        Ok(res) => res,
+        Err(e) => {
+            logger::error(&format!("Failed to serve file {:?}: {}", serve_path, e));
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to serve file").into_response();
+        }
+    };
 
-        (headers, body).into_response()
-    }
+    let mut res = res.map(Body::new);
+    res.headers_mut().insert(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_str(&format!("attachment; filename=\"{}\"", filename)).unwrap(),
+    );
+
+    res.into_response()
 }

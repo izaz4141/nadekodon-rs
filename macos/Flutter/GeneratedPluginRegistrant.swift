@@ -8,7 +8,7 @@ import Foundation
 import app_links
 import device_info_plus
 import dynamic_color
-import file_picker
+import file_picker_darwin
 import flutter_local_notifications
 import package_info_plus
 import screen_retriever_macos
