@@ -3,7 +3,7 @@ use anyhow::Result;
 use librqbit::{AddTorrent, AddTorrentOptions, AddTorrentResponse, Session, SessionOptions};
 use percent_encoding::percent_decode_str;
 use reqwest::{Client, Url, header};
-use std::time::Duration;
+use std::{path::Path, time::Duration};
 use uuid::Uuid;
 
 pub async fn build_browser_client() -> Client {
@@ -72,6 +72,19 @@ pub async fn get_url_info(
 ) -> Result<UrlInfo> {
     if is_magnet_url(url) {
         let (name, total_size) = resolve_torrent_info(AddTorrent::from_url(url)).await?;
+
+        return Ok(UrlInfo {
+            url: url.to_string(),
+            name,
+            total_size,
+            accept_ranges: true,
+            content_type: Some("application/x-bittorrent".to_string()),
+        });
+    }
+
+    if is_local_torrent_file(url) {
+        let bytes = tokio::fs::read(url).await?;
+        let (name, total_size) = resolve_torrent_info(AddTorrent::from_bytes(bytes)).await?;
 
         return Ok(UrlInfo {
             url: url.to_string(),
@@ -232,11 +245,16 @@ pub fn is_magnet_url(url: &str) -> bool {
 }
 
 pub fn is_torrent_file(url: &str, content_type: &Option<String>) -> bool {
-    url.ends_with(".torrent")
+    url.to_ascii_lowercase().ends_with(".torrent")
         || match content_type {
             Some(ct) => ct.eq_ignore_ascii_case("application/x-bittorrent"),
             None => false,
         }
+}
+
+/// Whether the given string points at a `.torrent` file that exists on this machine.
+pub fn is_local_torrent_file(url: &str) -> bool {
+    is_torrent_file(url, &None) && Path::new(url).is_file()
 }
 
 pub async fn resolve_torrent_info<'a>(

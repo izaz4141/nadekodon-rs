@@ -109,9 +109,9 @@ impl DownloadWorker {
                     for i in 0..threads {
                         let start = i * part_size;
                         let end = if i == threads - 1 {
-                            size - 1
+                            size.saturating_sub(1)
                         } else {
-                            start + part_size - 1
+                            start.saturating_add(part_size).saturating_sub(1)
                         };
                         info.parts.push(PartInfo {
                             start,

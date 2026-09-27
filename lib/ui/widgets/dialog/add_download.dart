@@ -12,6 +12,7 @@ import 'package:nadekodon/ui/widgets/view/query_result_view.dart';
 import 'package:nadekodon/ui/widgets/view/ytdlp_view.dart';
 import 'package:nadekodon/ui/widgets/dialog/replace_file.dart';
 import 'package:nadekodon/utils/bridge_service.dart';
+import 'package:nadekodon/utils/platform_service.dart';
 
 Future<void> showAddDownloadDialog(
   BuildContext context, {
@@ -86,7 +87,7 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
       _fetchLocalDownloadDir();
     }
     // Prioritize initialUrl over clipboard content
-    if (widget.initialUrl != null && isUrl(widget.initialUrl!)) {
+    if (widget.initialUrl != null && isValidDownloadInput(widget.initialUrl!)) {
       _urlController.text = widget.initialUrl!;
     } else {
       _getClipboardContent();
@@ -96,11 +97,37 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
   Future<void> _getClipboardContent() async {
     final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
     final clipboardText = clipboardData?.text;
-    if (clipboardText != null && isUrl(clipboardText)) {
+    if (clipboardText != null && isValidDownloadInput(clipboardText)) {
       setState(() {
         _urlController.text = clipboardText;
       });
     }
+  }
+
+  /// Picking a `.torrent` reads from the local disk, so it only makes sense
+  /// when the bridge talks to the local engine.
+  bool get _canPickTorrent => !PlatformService().isRemote;
+
+  Future<void> _browseTorrent() async {
+    if (!_canPickTorrent) {
+      AppSnackBar.show(
+        context,
+        "Opening local torrent files is not supported in remote mode",
+        type: SnackType.error,
+      );
+      return;
+    }
+
+    final path = await IOServiceFactory.create().pickFile(
+      allowedExtensions: ['torrent'],
+      dialogTitle: "Open .torrent file",
+    );
+    if (path == null || !mounted) return;
+
+    setState(() {
+      _urlController.text = path;
+    });
+    _queryUrl();
   }
 
   void _onSelectYtdlVideo(YtdlFormat? video) {
@@ -137,7 +164,7 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
 
   void _queryUrl() async {
     final url = _urlController.text.trim();
-    if (url.isEmpty || !isUrl(url)) {
+    if (url.isEmpty || !isValidDownloadInput(url)) {
       AppSnackBar.show(
         context,
         "Please enter a valid URL",
@@ -349,6 +376,7 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
             selectedDir: _selectedDir,
             selectedCategory: _selectedCategory,
             onQuery: _queryUrl,
+            onBrowseTorrent: _canPickTorrent ? _browseTorrent : null,
           ),
         if (_showQueryInfo.value)
           QueryResultView(

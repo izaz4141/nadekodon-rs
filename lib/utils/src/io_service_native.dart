@@ -89,6 +89,19 @@ class NativeIOService implements IOService {
   }
 
   @override
+  Future<String?> pickFile({
+    List<String>? allowedExtensions,
+    String? dialogTitle,
+  }) async {
+    final file = await FilePicker.pickFile(
+      dialogTitle: dialogTitle,
+      type: allowedExtensions == null ? FileType.any : FileType.custom,
+      allowedExtensions: allowedExtensions,
+    );
+    return file?.path;
+  }
+
+  @override
   Future<void> setPermissions(String path, String mode) async {
     if (!PlatformService.isLinux) return;
     await Process.run('chmod', [mode, path]);

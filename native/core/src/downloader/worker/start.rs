@@ -1,12 +1,9 @@
 use anyhow::Result;
-use std::{
-    path::Path,
-    sync::{Arc, atomic::Ordering},
-};
+use std::sync::{Arc, atomic::Ordering};
 
 use crate::utils::{
     types::{DownloadState, DownloadType, WorkerEvent},
-    url::{is_hls_url, is_magnet_url, is_torrent_file},
+    url::{is_hls_url, is_local_torrent_file, is_magnet_url, is_torrent_file},
 };
 
 use crate::downloader::worker::DownloadWorker;
@@ -26,7 +23,7 @@ impl DownloadWorker {
             tokio::fs::create_dir_all(parent).await?;
         }
 
-        if (Path::new(&url).is_file() && is_torrent_file(&url, &None)) || is_magnet_url(&url) {
+        if is_local_torrent_file(&url) || is_magnet_url(&url) {
             {
                 let mut info = self.info.lock().await;
                 info.download_type = DownloadType::Torrent;

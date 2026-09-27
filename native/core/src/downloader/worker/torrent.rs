@@ -140,7 +140,7 @@ impl DownloadWorker {
                 let len = file.len;
                 parts.push(PartInfo {
                     start: current_pos,
-                    end: current_pos + len - 1,
+                    end: current_pos.saturating_add(len).saturating_sub(1),
                     current: 0,
                 });
                 current_pos += len;

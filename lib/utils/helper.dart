@@ -121,6 +121,17 @@ bool isUrl(String url) {
   return regex.hasMatch(url);
 }
 
+/// A path on this machine pointing at a `.torrent` file.
+bool isLocalTorrentPath(String input) {
+  if (kIsWeb || input.isEmpty) return false;
+  return input.toLowerCase().endsWith('.torrent');
+}
+
+/// Anything the add-download dialog accepts as its source.
+bool isValidDownloadInput(String input) {
+  return isUrl(input) || isLocalTorrentPath(input);
+}
+
 Future<bool> fileExist(String path) async {
   if (kIsWeb) return false;
   final type = await FileSystemEntity.type(path);

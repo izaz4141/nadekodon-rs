@@ -73,6 +73,14 @@ class WasmIOService implements IOService {
   }
 
   @override
+  Future<String?> pickFile({
+    List<String>? allowedExtensions,
+    String? dialogTitle,
+  }) async {
+    throw UnsupportedError('File picker is not supported in WASM.');
+  }
+
+  @override
   Future<void> setPermissions(String path, String mode) async {}
 
   @override

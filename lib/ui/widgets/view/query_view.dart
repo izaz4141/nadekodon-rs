@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/ui/widgets/components/dir_choose.dart';
@@ -8,6 +9,7 @@ class QueryView extends StatelessWidget {
   final ValueNotifier<String> selectedDir;
   final ValueNotifier<String?> selectedCategory;
   final void Function() onQuery;
+  final void Function()? onBrowseTorrent;
 
   const QueryView({
     super.key,
@@ -15,6 +17,7 @@ class QueryView extends StatelessWidget {
     required this.selectedDir,
     required this.selectedCategory,
     required this.onQuery,
+    this.onBrowseTorrent,
   });
 
   @override
@@ -46,18 +49,29 @@ class QueryView extends StatelessWidget {
               horizontal: AppTheme.spaceSM,
               vertical: AppTheme.spaceSM,
             ),
-            suffixIcon: ValueListenableBuilder<TextEditingValue>(
-              valueListenable: urlController,
-              builder: (context, value, child) {
-                if (value.text.isEmpty) {
-                  return const SizedBox.shrink(); // Hide button if empty
-                }
-                return IconButton(
-                  icon: const Icon(Icons.clear),
-                  tooltip: "Clear",
-                  onPressed: () => urlController.clear(),
-                );
-              },
+            suffixIcon: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (onBrowseTorrent != null)
+                  IconButton(
+                    icon: const FaIcon(FontAwesomeIcons.magnet),
+                    tooltip: "Open .torrent file",
+                    onPressed: onBrowseTorrent,
+                  ),
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: urlController,
+                  builder: (context, value, child) {
+                    if (value.text.isEmpty) {
+                      return const SizedBox.shrink(); // Hide button if empty
+                    }
+                    return IconButton(
+                      icon: const Icon(Icons.clear),
+                      tooltip: "Clear",
+                      onPressed: () => urlController.clear(),
+                    );
+                  },
+                ),
+              ],
             ),
           ),
           style: textTheme.bodyMedium,
