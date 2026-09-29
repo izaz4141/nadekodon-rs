@@ -1,24 +1,26 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:window_manager/window_manager.dart';
-
-import 'package:rinf/rinf.dart';
-import 'package:nadekodon/utils/rinf_service/rinf_service.dart';
-
 import 'package:nadekodon/ui/app.dart';
-import 'package:nadekodon/utils/notification_service.dart';
+import 'package:nadekodon/utils/app_lifecycle.dart';
+import 'package:nadekodon/utils/bridge_service.dart';
+import 'package:nadekodon/utils/cli_args.dart';
+import 'package:nadekodon/utils/file_association_service.dart';
+import 'package:nadekodon/utils/helper.dart';
+import 'package:nadekodon/utils/io_service.dart';
 import 'package:nadekodon/utils/log_service.dart';
-import 'package:nadekodon/utils/settings.dart';
 import 'package:nadekodon/utils/logger.dart';
+import 'package:nadekodon/utils/notification_service.dart';
+import 'package:nadekodon/utils/platform_service.dart';
+import 'package:nadekodon/utils/rinf_service/rinf_service.dart';
+import 'package:nadekodon/utils/settings.dart';
+import 'package:nadekodon/utils/single_instance.dart';
 import 'package:nadekodon/utils/system_service.dart';
 import 'package:nadekodon/utils/updater.dart';
-import 'package:nadekodon/utils/bridge_service.dart';
-import 'package:nadekodon/utils/single_instance.dart';
-import 'package:nadekodon/utils/app_lifecycle.dart';
-import 'package:nadekodon/utils/platform_service.dart';
-import 'package:nadekodon/utils/helper.dart';
+import 'package:rinf/rinf.dart';
+import 'package:window_manager/window_manager.dart';
 
 final _windowListener = _WindowListener();
 
@@ -34,10 +36,32 @@ Future<void> main() async {
         yield LicenseEntryWithLineBreaks(['Nadeko~don'], licenseText);
       });
 
+      String? startupTarget;
+
       if (!kIsWeb) {
         await LogService.init();
         await initializeRust(assignRustSignal);
         initRustSignalLogger();
+
+        // Cli args handler
+        final io = IOServiceFactory.create();
+        final action = await parseCliArgs(await io.processArguments(), io);
+        await action.run();
+
+        if (action is OpenTarget) startupTarget = action.target;
+      }
+
+      if (PlatformService.isDesktop) {
+        await SingleInstance.init(
+          onFocus: () async {
+            await PlatformService().focusWindow();
+          },
+          onOpen: (target) async {
+            OpenTargetService.instance.deliver(target);
+          },
+          startupTarget: startupTarget,
+        );
+        OpenTargetService.instance.setStartupTarget(startupTarget);
       }
 
       await BridgeService.init();
@@ -46,6 +70,7 @@ Future<void> main() async {
 
       if (!kIsWeb) {
         await cleanupOldFiles();
+        await _registerFileAssociation();
         await SettingsManager.sendAllSettings();
         final torrentPath = await SettingsManager.getTorrentPersistencePath();
         InitTorrentPersistenceRequest(
@@ -68,9 +93,6 @@ Future<void> main() async {
       }
 
       if (PlatformService.isDesktop) {
-        await SingleInstance.init(() async {
-          await PlatformService().focusWindow();
-        });
         await PlatformService().initWindow(
           listener: _windowListener,
           onReady: () async {
@@ -104,6 +126,18 @@ Future<void> main() async {
       },
     ),
   );
+}
+
+/// Offers this build to Windows in the "Open with" list, if it is not already.
+Future<void> _registerFileAssociation() async {
+  if (!PlatformService.isWindows) return;
+  try {
+    final service = FileAssociationServiceFactory.create();
+    if (service.isRegistered()) return;
+    await service.register();
+  } catch (e) {
+    log('Could not register the file association: $e', isError: true);
+  }
 }
 
 class _WindowListener extends WindowListener {

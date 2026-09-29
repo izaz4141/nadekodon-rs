@@ -1,21 +1,22 @@
-import 'dart:ui';
 import 'dart:async';
-import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
+import 'dart:ui';
+
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:file_share_intent/file_share_intent.dart';
-
-import 'package:nadekodon/ui/theme/app_theme.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:nadekodon/ui/pages/home_page.dart';
 import 'package:nadekodon/ui/pages/login_page.dart';
+import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/ui/widgets/dialog/add_download.dart';
-import 'package:nadekodon/ui/widgets/dialog/update_url_dialog.dart';
 import 'package:nadekodon/ui/widgets/dialog/permission_dialog.dart';
+import 'package:nadekodon/ui/widgets/dialog/update_url_dialog.dart';
+import 'package:nadekodon/utils/bridge_service.dart';
+import 'package:nadekodon/utils/cli_args.dart';
 import 'package:nadekodon/utils/helper.dart';
 import 'package:nadekodon/utils/logger.dart';
-import 'package:nadekodon/utils/settings.dart';
 import 'package:nadekodon/utils/platform_service.dart';
-import 'package:nadekodon/utils/bridge_service.dart';
+import 'package:nadekodon/utils/settings.dart';
 
 // Global navigator key for accessing context from intent handlers
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -34,6 +35,7 @@ class _NadekoDonState extends State<NadekoDon> {
   /// properly dropping Rust objects before shutdown,
   /// creating this listener is not necessary.
   late final AppLifecycleListener _listener;
+  StreamSubscription<String>? _targetSubscription;
 
   @override
   void initState() {
@@ -66,7 +68,51 @@ class _NadekoDonState extends State<NadekoDon> {
       onMediaReceived: (media) => _handleSharedMedia(media),
     );
 
+    _initOpenTargetHandling();
     _initExtSignals();
+  }
+
+  /// Opens whatever the OS asked us to open, both on a cold start and by a
+  /// second instance.
+  ///
+  /// The startup target is read after the first frame because the single
+  /// instance check in `main` runs before `runApp`. Targets forwarded by a
+  /// second instance arrive on [OpenTargetService.targets], which buffers them
+  /// until this subscription exists.
+  void _initOpenTargetHandling() {
+    if (!PlatformService.isDesktop) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final startupTarget = OpenTargetService.instance.takeStartupTarget();
+      if (startupTarget != null) {
+        _openTarget(startupTarget);
+      }
+    });
+
+    _targetSubscription = OpenTargetService.instance.targets.listen(
+      _openTarget,
+    );
+  }
+
+  Future<void> _openTarget(String target) async {
+    await PlatformService().focusWindow();
+
+    if (UpdateUrlDialog.isOpen) {
+      return;
+    }
+
+    final context = navigatorKey.currentContext;
+    if (context == null) {
+      log('No navigator available to open $target');
+      return;
+    }
+    await showAddDownloadDialog(
+      // ignore: use_build_context_synchronously
+      context,
+      initialUrl: target,
+      forceLocal: isLocalTorrentPath(target),
+      autoQuery: true,
+    );
   }
 
   void _initExtSignals() {
@@ -98,7 +144,7 @@ class _NadekoDonState extends State<NadekoDon> {
       final context = navigatorKey.currentContext;
       if (context != null) {
         // ignore: use_build_context_synchronously
-        showAddDownloadDialog(context, initialUrl: url);
+        showAddDownloadDialog(context, initialUrl: url, autoQuery: true);
       }
     });
   }
@@ -133,6 +179,7 @@ class _NadekoDonState extends State<NadekoDon> {
   @override
   void dispose() {
     _listener.dispose();
+    _targetSubscription?.cancel();
     PlatformService().dispose();
     super.dispose();
   }

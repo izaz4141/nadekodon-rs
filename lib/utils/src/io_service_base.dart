@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 abstract class IOService {
   Future<String> getConfigDir();
   Future<String> getDownloadsDir();
+  Future<String> getCurrentDownloadDir();
   Future<String> getDatabasePath();
   Future<String> getTorrentPersistencePath();
   Future<bool> fileExists(String path);
@@ -20,4 +21,7 @@ abstract class IOService {
   });
   Future<void> setPermissions(String path, String mode);
   String? getCookie(String name);
+  Future<List<String>> processArguments();
+  void writeLine(String line);
+  Never exit(int code);
 }

@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:synchronized/synchronized.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'io_service_base.dart';
+import 'package:nadekodon/utils/logger.dart';
 import 'package:nadekodon/utils/platform_service.dart';
 
 class NativeIOService implements IOService {
@@ -23,6 +25,21 @@ class NativeIOService implements IOService {
   Future<String> getDownloadsDir() async {
     final downloads = await getDownloadsDirectory();
     return downloads?.path ?? '';
+  }
+
+  /// `download_folder` as stored in this machine's own config.json, which is
+  /// not the folder a remote engine downloads into.
+  @override
+  Future<String> getCurrentDownloadDir() async {
+    final config = File('${await getConfigDir()}/config.json');
+    if (!await config.exists()) return '';
+    try {
+      final data = jsonDecode(await config.readAsString()) as Map<String, dynamic>;
+      return data['download_folder'] as String? ?? '';
+    } catch (e) {
+      log('Could not read download_folder from config.json: $e', isError: true);
+      return '';
+    }
   }
 
   @override
@@ -111,6 +128,17 @@ class NativeIOService implements IOService {
   String? getCookie(String name) {
     throw UnsupportedError('Theres no cookie in native app.');
   }
+
+  @override
+  Future<List<String>> processArguments() async => Platform.executableArguments;
+
+  /// Deliberately not `print`: the zone in `main` routes that through
+  /// LogService, which has no log file yet when the command line is handled.
+  @override
+  void writeLine(String line) => stdout.writeln(line);
+
+  @override
+  Never exit(int code) => exit(code);
 }
 
 IOService getIOService() => NativeIOService();

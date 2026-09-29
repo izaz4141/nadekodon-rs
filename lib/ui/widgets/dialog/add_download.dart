@@ -1,18 +1,17 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
-import 'package:nadekodon/utils/settings.dart';
-import 'package:nadekodon/utils/io_service.dart';
-
 import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/ui/widgets/app_snackbar.dart';
-import 'package:nadekodon/utils/helper.dart';
-import 'package:nadekodon/ui/widgets/view/query_view.dart';
-import 'package:nadekodon/ui/widgets/view/query_result_view.dart';
-import 'package:nadekodon/ui/widgets/view/ytdlp_view.dart';
 import 'package:nadekodon/ui/widgets/dialog/replace_file.dart';
+import 'package:nadekodon/ui/widgets/view/query_result_view.dart';
+import 'package:nadekodon/ui/widgets/view/query_view.dart';
+import 'package:nadekodon/ui/widgets/view/ytdlp_view.dart';
 import 'package:nadekodon/utils/bridge_service.dart';
+import 'package:nadekodon/utils/helper.dart';
+import 'package:nadekodon/utils/io_service.dart';
 import 'package:nadekodon/utils/platform_service.dart';
+import 'package:nadekodon/utils/settings.dart';
 
 Future<void> showAddDownloadDialog(
   BuildContext context, {
@@ -21,6 +20,7 @@ Future<void> showAddDownloadDialog(
   String? userAgent,
   String? referer,
   bool forceLocal = false,
+  bool autoQuery = false,
 }) async {
   await showDialog(
     context: context,
@@ -31,6 +31,7 @@ Future<void> showAddDownloadDialog(
         userAgent: userAgent,
         referer: referer,
         forceLocal: forceLocal,
+        autoQuery: autoQuery,
       );
     },
   );
@@ -43,6 +44,7 @@ class _AddDownloadDialog extends StatefulWidget {
   final String? userAgent;
   final String? referer;
   final bool forceLocal;
+  final bool autoQuery;
 
   const _AddDownloadDialog({
     this.initialUrl,
@@ -50,6 +52,7 @@ class _AddDownloadDialog extends StatefulWidget {
     this.userAgent,
     this.referer,
     this.forceLocal = false,
+    this.autoQuery = false,
   });
 
   @override
@@ -59,6 +62,10 @@ class _AddDownloadDialog extends StatefulWidget {
 class _AddDownloadDialogState extends State<_AddDownloadDialog> {
   final _urlController = TextEditingController();
   final _nameController = TextEditingController();
+
+  /// Where this download goes. Starts from the configured destination and can
+  /// be overridden per download by [DirChoose], which resolves category paths
+  /// against [SettingsManager.downloadFolder].
   final _selectedDir = ValueNotifier<String>(
     SettingsManager.downloadFolder.value,
   );
@@ -73,25 +80,32 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
   final _queryFinished = ValueNotifier<bool>(false);
   final _isQueryingYtdl = ValueNotifier<bool>(false);
 
-  Future<void> _fetchLocalDownloadDir() async {
-    final dir = await IOServiceFactory.create().getDownloadsDir();
-    if (mounted) {
-      _selectedDir.value = dir;
-    }
-  }
+  /// Resolved once so [_queryUrl] never reads a half filled destination.
+  late final Future<void> _destDirReady;
 
   @override
   void initState() {
     super.initState();
-    if (widget.forceLocal) {
-      _fetchLocalDownloadDir();
-    }
+    _destDirReady = _resolveDestDir();
     // Prioritize initialUrl over clipboard content
     if (widget.initialUrl != null && isValidDownloadInput(widget.initialUrl!)) {
       _urlController.text = widget.initialUrl!;
+      if (widget.autoQuery) _scheduleAutoQuery();
     } else {
       _getClipboardContent();
     }
+  }
+
+  /// Queries the source the dialog was opened with, so the OS file association
+  /// and a deep link do not need a second tap.
+  ///
+  /// Deferred to after the first frame because [BridgeService.queryUrl] reports
+  /// through the context.
+  void _scheduleAutoQuery() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _queryUrl();
+    });
   }
 
   Future<void> _getClipboardContent() async {
@@ -162,6 +176,29 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
     }
   }
 
+  /// Where the download lands depends on which engine runs it. A local engine
+  /// needs a folder on this machine, and the configured one can name a folder
+  /// that only exists on the server, so it is verified before it is used.
+  Future<void> _resolveDestDir() async {
+    if (kIsWeb) return;
+    final io = IOServiceFactory.create();
+
+    if (widget.forceLocal) {
+      final configured = await io.getCurrentDownloadDir();
+      final local =
+          configured.isNotEmpty && await io.directoryExists(configured);
+      final dir = local ? configured : await io.getDownloadsDir();
+      if (mounted) _selectedDir.value = dir;
+      return;
+    }
+
+    // A remote engine downloads on the server, where the local Downloads
+    // folder means nothing.
+    if (_selectedDir.value.isNotEmpty || PlatformService().isRemote) return;
+    final dir = await io.getDownloadsDir();
+    if (mounted) _selectedDir.value = dir;
+  }
+
   void _queryUrl() async {
     final url = _urlController.text.trim();
     if (url.isEmpty || !isValidDownloadInput(url)) {
@@ -172,6 +209,8 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
       );
       return;
     }
+    await _destDirReady;
+    if (!mounted) return;
     if (_selectedDir.value.isEmpty) {
       AppSnackBar.show(
         context,

@@ -1,8 +1,9 @@
 [Desktop Entry]
 Name=Nadeko~don
 Comment=Download Manager
-Exec=nadekodon
+Exec=nadekodon %U
 Icon=nadeko-don
 Type=Application
 Categories=Utility;Network;
 Terminal=false
+MimeType=application/x-bittorrent;x-scheme-handler/magnet;

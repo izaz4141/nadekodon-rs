@@ -19,6 +19,13 @@ class WasmIOService implements IOService {
   }
 
   @override
+  Future<String> getCurrentDownloadDir() async {
+    throw UnsupportedError(
+      'Filesystem access is not supported in WASM. Use BridgeService for settings.',
+    );
+  }
+
+  @override
   Future<String> getDatabasePath() async {
     throw UnsupportedError('Filesystem access is not supported in WASM.');
   }
@@ -98,6 +105,18 @@ class WasmIOService implements IOService {
     }
     return null;
   }
+
+  /// A page is launched with no arguments, so there is nothing to act on. This
+  /// lets callers parse a command line without branching on the platform.
+  @override
+  Future<List<String>> processArguments() async => [];
+
+  @override
+  void writeLine(String line) =>
+      throw UnsupportedError('Cannot write to stdout in WASM');
+
+  @override
+  Never exit(int code) => throw UnsupportedError('Cannot end a WASM process');
 }
 
 IOService getIOService() => WasmIOService();

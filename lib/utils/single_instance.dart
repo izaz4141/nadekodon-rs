@@ -3,21 +3,32 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 
+import 'package:nadekodon/utils/logger.dart';
+
 class SingleInstance {
   static const String _lockFileName = '.instance_lock';
   static const String _focusCommand = 'focus';
+  static const String _openCommand = 'open';
+  static const String _separator = '\n';
   static File? _lockFile;
 
   /// Initializes the single instance mechanism.
   ///
-  /// If another instance is already running, this method will signal it to focus
-  /// and then exit the current process.
+  /// If another instance is already running, the relevant command is forwarded
+  /// to it and this process exits. Otherwise this process becomes the main
+  /// instance and starts listening for commands.
   ///
-  /// If this is the main instance, it will start listening for signals from
-  /// subsequent instances.
+  /// [onFocus] runs when a focus signal arrives with no target to open.
+  /// [onOpen] runs when another instance hands over something to open.
   ///
-  /// [onFocus] is the callback to execute when a focus signal is received.
-  static Future<void> init(Function onFocus) async {
+  /// [startupTarget] is what this process was launched with, or `null`. Only
+  /// meaningful on the main instance, since a second instance exits before
+  /// reaching the caller.
+  static Future<void> init({
+    required Future<void> Function() onFocus,
+    required Future<void> Function(String target) onOpen,
+    String? startupTarget,
+  }) async {
     final appDocDir = await getApplicationSupportDirectory();
     _lockFile = File('${appDocDir.path}/$_lockFileName');
 
@@ -27,7 +38,11 @@ class SingleInstance {
       try {
         final port = int.parse(await _lockFile!.readAsString());
         final socket = await Socket.connect(InternetAddress.loopbackIPv4, port);
-        socket.write(_focusCommand);
+        socket.write(
+          startupTarget != null
+              ? '$_openCommand$_separator$startupTarget'
+              : _focusCommand,
+        );
         await socket.flush();
         await socket.close();
         exit(0);
@@ -41,11 +56,14 @@ class SingleInstance {
     }
 
     if (isMainInstance) {
-      await _becomeMainInstance(onFocus);
+      await _becomeMainInstance(onFocus, onOpen);
     }
   }
 
-  static Future<void> _becomeMainInstance(Function onFocus) async {
+  static Future<void> _becomeMainInstance(
+    Future<void> Function() onFocus,
+    Future<void> Function(String target) onOpen,
+  ) async {
     // Bind to an ephemeral port (port 0)
     final serverSocket = await ServerSocket.bind(
       InternetAddress.loopbackIPv4,
@@ -57,13 +75,35 @@ class SingleInstance {
 
     // Listen for incoming connections
     serverSocket.listen((socket) {
-      socket.listen((data) {
-        final message = utf8.decode(data);
-        if (message.trim() == _focusCommand) {
-          onFocus();
-        }
-      });
+      // A read is not a message: a target can straddle packets, so the chunks
+      // are collected until the sender closes.
+      final chunks = <int>[];
+      socket.listen(
+        chunks.addAll,
+        onDone: () => _handleMessage(utf8.decode(chunks), onFocus, onOpen),
+        onError: (Object e) => log('Single instance socket failed: $e'),
+      );
     });
+  }
+
+  static void _handleMessage(
+    String raw,
+    Future<void> Function() onFocus,
+    Future<void> Function(String target) onOpen,
+  ) {
+    final parts = raw.split(_separator);
+    switch (parts.first.trim()) {
+      case _focusCommand:
+        onFocus();
+      case _openCommand:
+        if (parts.length > 1) {
+          // Never trimmed: spaces and newlines are legal in a path.
+          final target = parts.sublist(1).join(_separator);
+          if (target.isNotEmpty) {
+            onOpen(target);
+          }
+        }
+    }
   }
 
   static Future<void> dispose() async {

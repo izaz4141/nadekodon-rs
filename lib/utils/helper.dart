@@ -124,6 +124,7 @@ bool isUrl(String url) {
 /// A path on this machine pointing at a `.torrent` file.
 bool isLocalTorrentPath(String input) {
   if (kIsWeb || input.isEmpty) return false;
+  if (isUrl(input)) return false;
   return input.toLowerCase().endsWith('.torrent');
 }
 
