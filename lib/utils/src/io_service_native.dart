@@ -34,7 +34,8 @@ class NativeIOService implements IOService {
     final config = File('${await getConfigDir()}/config.json');
     if (!await config.exists()) return '';
     try {
-      final data = jsonDecode(await config.readAsString()) as Map<String, dynamic>;
+      final data =
+          jsonDecode(await config.readAsString()) as Map<String, dynamic>;
       return data['download_folder'] as String? ?? '';
     } catch (e) {
       log('Could not read download_folder from config.json: $e', isError: true);
@@ -128,9 +129,6 @@ class NativeIOService implements IOService {
   String? getCookie(String name) {
     throw UnsupportedError('Theres no cookie in native app.');
   }
-
-  @override
-  Future<List<String>> processArguments() async => Platform.executableArguments;
 
   /// Deliberately not `print`: the zone in `main` routes that through
   /// LogService, which has no log file yet when the command line is handled.

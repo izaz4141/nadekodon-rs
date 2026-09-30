@@ -21,7 +21,6 @@ abstract class IOService {
   });
   Future<void> setPermissions(String path, String mode);
   String? getCookie(String name);
-  Future<List<String>> processArguments();
   void writeLine(String line);
   Never exit(int code);
 }

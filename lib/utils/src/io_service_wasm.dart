@@ -106,11 +106,6 @@ class WasmIOService implements IOService {
     return null;
   }
 
-  /// A page is launched with no arguments, so there is nothing to act on. This
-  /// lets callers parse a command line without branching on the platform.
-  @override
-  Future<List<String>> processArguments() async => [];
-
   @override
   void writeLine(String line) =>
       throw UnsupportedError('Cannot write to stdout in WASM');

@@ -24,7 +24,10 @@ import 'package:window_manager/window_manager.dart';
 
 final _windowListener = _WindowListener();
 
-Future<void> main() async {
+/// [args] is the command line the engine handed us. The Flutter engine never
+/// populates `Platform.executableArguments`, so this is the only way to see
+/// what the process was launched with.
+Future<void> main(List<String> args) async {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
@@ -45,7 +48,7 @@ Future<void> main() async {
 
         // Cli args handler
         final io = IOServiceFactory.create();
-        final action = await parseCliArgs(await io.processArguments(), io);
+        final action = await parseCliArgs(args, io);
         await action.run();
 
         if (action is OpenTarget) startupTarget = action.target;

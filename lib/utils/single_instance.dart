@@ -95,6 +95,7 @@ class SingleInstance {
     switch (parts.first.trim()) {
       case _focusCommand:
         onFocus();
+        return;
       case _openCommand:
         if (parts.length > 1) {
           // Never trimmed: spaces and newlines are legal in a path.
