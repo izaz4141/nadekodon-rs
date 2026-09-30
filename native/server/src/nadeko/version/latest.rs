@@ -58,8 +58,11 @@ pub async fn handle_version_latest(
                 "Error getting latest {}/{}: {:#?}",
                 &repo_owner, &repo_name, &e
             ));
-            json_error(axum::http::StatusCode::BAD_REQUEST, format!("Failed to fetch: {e}"))
-                .into_response()
+            json_error(
+                axum::http::StatusCode::BAD_REQUEST,
+                format!("Failed to fetch: {e}"),
+            )
+            .into_response()
         }
     }
 }

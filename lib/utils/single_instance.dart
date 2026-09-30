@@ -1,16 +1,12 @@
-import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
-import 'package:path_provider/path_provider.dart';
-
-import 'package:nadekodon/utils/logger.dart';
+import 'package:nadekodon/utils/io_service.dart';
 
 class SingleInstance {
   static const String _lockFileName = '.instance_lock';
   static const String _focusCommand = 'focus';
   static const String _openCommand = 'open';
   static const String _separator = '\n';
-  static File? _lockFile;
+  static IOService? _io;
+  static String? _lockFilePath;
 
   /// Initializes the single instance mechanism.
   ///
@@ -29,23 +25,21 @@ class SingleInstance {
     required Future<void> Function(String target) onOpen,
     String? startupTarget,
   }) async {
-    final appDocDir = await getApplicationSupportDirectory();
-    _lockFile = File('${appDocDir.path}/$_lockFileName');
+    _io = IOServiceFactory.create();
+    _lockFilePath = '${await _io!.getConfigDir()}/$_lockFileName';
 
     bool isMainInstance = false;
 
-    if (await _lockFile!.exists()) {
+    if (await _io!.fileExists(_lockFilePath!)) {
       try {
-        final port = int.parse(await _lockFile!.readAsString());
-        final socket = await Socket.connect(InternetAddress.loopbackIPv4, port);
-        socket.write(
+        final port = int.parse(await _io!.readFile(_lockFilePath!));
+        final channel = await _io!.connectLocalChannel(port);
+        await channel.send(
           startupTarget != null
               ? '$_openCommand$_separator$startupTarget'
               : _focusCommand,
         );
-        await socket.flush();
-        await socket.close();
-        exit(0);
+        _io!.exit(0);
       } catch (e) {
         // Connection failed, likely a stale lock file.
         // We will take over as the main instance.
@@ -64,26 +58,12 @@ class SingleInstance {
     Future<void> Function() onFocus,
     Future<void> Function(String target) onOpen,
   ) async {
-    // Bind to an ephemeral port (port 0)
-    final serverSocket = await ServerSocket.bind(
-      InternetAddress.loopbackIPv4,
-      0,
-    );
+    final server = await _io!.bindLocalChannel();
 
-    // Write the assigned port to the lock file
-    await _lockFile!.writeAsString(serverSocket.port.toString(), flush: true);
+    // The port has to be on disk before any second instance can read it.
+    await _io!.writeFile(_lockFilePath!, '${server.port}', flush: true);
 
-    // Listen for incoming connections
-    serverSocket.listen((socket) {
-      // A read is not a message: a target can straddle packets, so the chunks
-      // are collected until the sender closes.
-      final chunks = <int>[];
-      socket.listen(
-        chunks.addAll,
-        onDone: () => _handleMessage(utf8.decode(chunks), onFocus, onOpen),
-        onError: (Object e) => log('Single instance socket failed: $e'),
-      );
-    });
+    server.onMessage((raw) => _handleMessage(raw, onFocus, onOpen));
   }
 
   static void _handleMessage(
@@ -108,10 +88,10 @@ class SingleInstance {
   }
 
   static Future<void> dispose() async {
-    if (_lockFile != null) {
+    if (_io != null && _lockFilePath != null) {
       try {
-        if (await _lockFile!.exists()) {
-          await _lockFile!.delete();
+        if (await _io!.fileExists(_lockFilePath!)) {
+          await _io!.deleteFile(_lockFilePath!);
         }
       } catch (e) {
         // Ignore errors during disposal

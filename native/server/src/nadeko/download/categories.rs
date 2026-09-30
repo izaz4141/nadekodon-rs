@@ -1,7 +1,7 @@
 use crate::response::{json_error, json_ok};
 use crate::server::SharedState;
 use axum::{Json, extract::Query, extract::State, response::IntoResponse};
-use nadekodon_core::signals::{GetCategoriesResponse, CategoryDisplay, UpdateCategoriesRequest};
+use nadekodon_core::signals::{CategoryDisplay, GetCategoriesResponse, UpdateCategoriesRequest};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -62,7 +62,8 @@ pub async fn handle_update_categories(
         .collect();
     match dm.update_categories(category_infos).await {
         Ok(_) => json_ok().into_response(),
-        Err(e) => json_error(axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-            .into_response(),
+        Err(e) => {
+            json_error(axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
+        }
     }
 }

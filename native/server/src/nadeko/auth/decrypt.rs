@@ -24,8 +24,11 @@ pub async fn handle_decrypt(
         Ok(key) => key,
         Err(e) => {
             nadekodon_core::utils::logger::error(&format!("Unable to decrypt key: {:#}", &e));
-            return json_error(axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Decryption failed")
-                .into_response();
+            return json_error(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Decryption failed",
+            )
+            .into_response();
         }
     };
     Json(DecryptResponse {

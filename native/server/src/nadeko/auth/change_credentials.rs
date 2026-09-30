@@ -64,8 +64,11 @@ pub async fn handle_change_credentials(
                 Ok(hashed) => new_password_hash = hashed,
                 Err(e) => {
                     logger::error(&format!("Failed to hash password: {}", e));
-                    return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to hash password")
-                        .into_response();
+                    return json_error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Failed to hash password",
+                    )
+                    .into_response();
                 }
             }
         }

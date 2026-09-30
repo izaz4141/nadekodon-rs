@@ -1,7 +1,7 @@
 use crate::response::json_error;
 use crate::server::SharedState;
 use axum::{Json, extract::State, response::IntoResponse};
-use nadekodon_core::signals::{GetDownloadListResponse, GetDownloadListRequest};
+use nadekodon_core::signals::{GetDownloadListRequest, GetDownloadListResponse};
 
 #[utoipa::path(
     post,
@@ -22,7 +22,8 @@ pub async fn handle_get_download_list(
         .await
     {
         Ok(list) => Json(list).into_response(),
-        Err(e) => json_error(axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-            .into_response(),
+        Err(e) => {
+            json_error(axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
+        }
     }
 }

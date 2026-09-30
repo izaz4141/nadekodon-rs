@@ -24,8 +24,11 @@ pub async fn handle_encrypt(
         Ok(encrypted) => encrypted,
         Err(e) => {
             nadekodon_core::utils::logger::error(&format!("Unable to encrypt text: {:#}", &e));
-            return json_error(axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Encryption failed")
-                .into_response();
+            return json_error(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Encryption failed",
+            )
+            .into_response();
         }
     };
     Json(EncryptResponse {

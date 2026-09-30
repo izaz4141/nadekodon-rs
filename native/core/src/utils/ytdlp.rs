@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::process::Stdio;
 use tokio::process::Command;
 
-use crate::signals::{YtdlFormat, QueryYtdlResponse, YtdlSearchResult};
+use crate::signals::{QueryYtdlResponse, YtdlFormat, YtdlSearchResult};
 
 pub async fn get_ytdl_info(url: &str) -> Result<QueryYtdlResponse, String> {
     let output = Command::new("yt-dlp")

@@ -30,8 +30,11 @@ pub async fn handle_version_current(
         Ok(version) => Json(VersionCurrentResponse { version: version }).into_response(),
         Err(e) => {
             nadekodon_core::utils::logger::error(&format!("Cant get local {}: {:#?}", &app, &e));
-            json_error(axum::http::StatusCode::NOT_FOUND, format!("App not found: {e}"))
-                .into_response()
+            json_error(
+                axum::http::StatusCode::NOT_FOUND,
+                format!("App not found: {e}"),
+            )
+            .into_response()
         }
     }
 }

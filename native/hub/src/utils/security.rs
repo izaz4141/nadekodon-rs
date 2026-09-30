@@ -1,6 +1,7 @@
 extern crate nadekodon_core as core;
 use crate::signals::{
-    HashRequest, HashResponse, LoginRequest, LoginResponse, VerifyPasswordRequest, VerifyPasswordResponse,
+    HashRequest, HashResponse, LoginRequest, LoginResponse, VerifyPasswordRequest,
+    VerifyPasswordResponse,
 };
 use crate::utils::logger;
 use core::utils::security::{hash_password, validate_password};

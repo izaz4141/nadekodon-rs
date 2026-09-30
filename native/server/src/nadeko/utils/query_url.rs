@@ -25,7 +25,8 @@ pub async fn handle_query_url(
     .await
     {
         Ok(info) => Json(info).into_response(),
-        Err(e) => json_error(axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-            .into_response(),
+        Err(e) => {
+            json_error(axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
+        }
     }
 }

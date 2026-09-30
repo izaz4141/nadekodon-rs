@@ -48,10 +48,19 @@ class WasmIOService implements IOService {
   }
 
   @override
-  Future<void> writeFile(String path, String content) async {
+  Future<void> writeFile(
+    String path,
+    String content, {
+    bool flush = false,
+  }) async {
     throw UnsupportedError(
       'Filesystem access is not supported in WASM. Use BridgeService for settings.',
     );
+  }
+
+  @override
+  Future<void> deleteFile(String path) async {
+    throw UnsupportedError('Filesystem access is not supported in WASM.');
   }
 
   @override
@@ -112,6 +121,16 @@ class WasmIOService implements IOService {
 
   @override
   Never exit(int code) => throw UnsupportedError('Cannot end a WASM process');
+
+  @override
+  Future<LocalChannel> connectLocalChannel(int port) async {
+    throw UnsupportedError('Sockets are not supported in WASM.');
+  }
+
+  @override
+  Future<LocalServer> bindLocalChannel() async {
+    throw UnsupportedError('Sockets are not supported in WASM.');
+  }
 }
 
 IOService getIOService() => WasmIOService();

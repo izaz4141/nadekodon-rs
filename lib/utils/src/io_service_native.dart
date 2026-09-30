@@ -1,13 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' as io;
 import 'dart:io';
-import 'package:flutter/foundation.dart';
-import 'package:synchronized/synchronized.dart';
-import 'package:path_provider/path_provider.dart';
+
 import 'package:file_picker/file_picker.dart';
-import 'io_service_base.dart';
+import 'package:flutter/foundation.dart';
 import 'package:nadekodon/utils/logger.dart';
 import 'package:nadekodon/utils/platform_service.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:synchronized/synchronized.dart';
+
+import 'io_service_base.dart';
 
 class NativeIOService implements IOService {
   final Map<String, Lock> _fileLocks = {};
@@ -68,10 +71,21 @@ class NativeIOService implements IOService {
   }
 
   @override
-  Future<void> writeFile(String path, String content) async {
+  Future<void> writeFile(
+    String path,
+    String content, {
+    bool flush = false,
+  }) async {
     await File(path).parent.create(recursive: true);
     await _getLock(path).synchronized(() async {
-      await File(path).writeAsString(content);
+      await File(path).writeAsString(content, flush: flush);
+    });
+  }
+
+  @override
+  Future<void> deleteFile(String path) async {
+    await _getLock(path).synchronized(() async {
+      await File(path).delete();
     });
   }
 
@@ -136,7 +150,59 @@ class NativeIOService implements IOService {
   void writeLine(String line) => stdout.writeln(line);
 
   @override
-  Never exit(int code) => exit(code);
+  Never exit(int code) => io.exit(code);
+
+  @override
+  Future<LocalChannel> connectLocalChannel(int port) async {
+    final socket = await Socket.connect(InternetAddress.loopbackIPv4, port);
+    return _NativeLocalChannel(socket);
+  }
+
+  @override
+  Future<LocalServer> bindLocalChannel() async {
+    // Port 0 asks the OS for an ephemeral port, reported by `LocalServer.port`.
+    final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    return _NativeLocalServer(server);
+  }
+}
+
+class _NativeLocalChannel implements LocalChannel {
+  _NativeLocalChannel(this._socket);
+
+  final Socket _socket;
+
+  @override
+  Future<void> send(String message) async {
+    _socket.write(message);
+    await _socket.flush();
+    await _socket.close();
+  }
+}
+
+class _NativeLocalServer implements LocalServer {
+  _NativeLocalServer(this._server);
+
+  final ServerSocket _server;
+
+  @override
+  int get port => _server.port;
+
+  @override
+  void onMessage(void Function(String message) onMessage) {
+    _server.listen((socket) {
+      // A read is not a message: a target can straddle packets, so the chunks
+      // are collected until the sender closes.
+      final chunks = <int>[];
+      socket.listen(
+        chunks.addAll,
+        onDone: () => onMessage(utf8.decode(chunks)),
+        onError: (Object e) => log('Local channel socket failed: $e'),
+      );
+    });
+  }
+
+  @override
+  Future<void> close() => _server.close();
 }
 
 IOService getIOService() => NativeIOService();

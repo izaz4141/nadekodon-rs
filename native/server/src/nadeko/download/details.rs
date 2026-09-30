@@ -37,9 +37,11 @@ pub async fn handle_get_download_details(
     .await
     {
         Ok(Some(details)) => Json(details).into_response(),
-        Ok(None) => json_error(axum::http::StatusCode::NOT_FOUND, "Download not found")
-            .into_response(),
-        Err(_) => json_error(axum::http::StatusCode::NOT_FOUND, "Download not found")
-            .into_response(),
+        Ok(None) => {
+            json_error(axum::http::StatusCode::NOT_FOUND, "Download not found").into_response()
+        }
+        Err(_) => {
+            json_error(axum::http::StatusCode::NOT_FOUND, "Download not found").into_response()
+        }
     }
 }

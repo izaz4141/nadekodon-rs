@@ -22,7 +22,8 @@ pub async fn handle_search_ytdl(Json(payload): Json<SearchYtdlRequest>) -> impl 
             error: None,
         })
         .into_response(),
-        Err(e) => json_error(axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-            .into_response(),
+        Err(e) => {
+            json_error(axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
+        }
     }
 }

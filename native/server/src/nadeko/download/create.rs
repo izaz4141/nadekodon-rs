@@ -31,7 +31,8 @@ pub async fn handle_create_download(
             download_ids: ids.into_iter().map(|id| id.to_string()).collect(),
         })
         .into_response(),
-        Err(e) => json_error(axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-            .into_response(),
+        Err(e) => {
+            json_error(axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
+        }
     }
 }
