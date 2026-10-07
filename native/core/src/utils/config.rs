@@ -8,6 +8,7 @@ use std::{
 
 use crate::utils::encryption::{decrypt, encrypt, valid_encryption_format};
 use crate::utils::logger;
+use crate::utils::security;
 
 /// Default config JSON, embedded so it works from any working directory.
 const DEFAULT_CONFIG_JSON: &str = include_str!("../../../../assets/docs/default.json");
@@ -79,15 +80,20 @@ fn decrypt_secrets(value: &mut Value, master_key: &str) {
     }
 }
 
-/// Encrypts every secret in `value` not already encrypted.
-fn encrypt_secrets(value: &mut Value, master_key: &str) {
+/// Hashes the password and encrypts API keys; errors instead of writing secrets unprotected.
+fn protect_secrets(value: &mut Value, master_key: &str) -> Result<()> {
+    if let Some(password) = value.get("password").and_then(|v| v.as_str())
+        && !password.is_empty()
+    {
+        value["password"] = Value::String(security::hash_password(password)?);
+    }
+
     for key in ENCRYPTED_CONFIG_KEYS {
         if let Some(plain) = value.get(key).and_then(|v| v.as_str())
             && !plain.is_empty()
             && !valid_encryption_format(plain)
-            && let Ok(encrypted) = encrypt(plain, master_key)
         {
-            value[*key] = Value::String(encrypted);
+            value[*key] = Value::String(encrypt(plain, master_key).map_err(anyhow::Error::msg)?);
         }
     }
 
@@ -99,12 +105,13 @@ fn encrypt_secrets(value: &mut Value, master_key: &str) {
             if let Some(plain) = account.get("api_key").and_then(|v| v.as_str())
                 && !plain.is_empty()
                 && !valid_encryption_format(plain)
-                && let Ok(encrypted) = encrypt(plain, master_key)
             {
-                account["api_key"] = Value::String(encrypted);
+                account["api_key"] =
+                    Value::String(encrypt(plain, master_key).map_err(anyhow::Error::msg)?);
             }
         }
     }
+    Ok(())
 }
 
 /// Writes `contents` to `path` atomically (temp file + rename).
@@ -145,14 +152,14 @@ pub async fn load_config(path: String, master_key: String) -> Result<Arc<AppConf
 /// Loads the config at `path`, bootstrapping embedded defaults when missing.
 /// Returns `(config, first_run)`.
 pub async fn load_or_bootstrap(path: String, master_key: String) -> Result<(Arc<AppConfig>, bool)> {
-    match load_config(path.clone(), master_key).await {
+    match load_config(path.clone(), master_key.clone()).await {
         Ok(app_config) => Ok((app_config, false)),
         Err(e) => {
             logger::warn(&format!(
                 "Can't load config at {}: {}; creating a default one",
                 path, e
             ));
-            Ok((load_default_config(path).await?, true))
+            Ok((load_default_config(path, master_key).await?, true))
         }
     }
 }
@@ -166,16 +173,16 @@ pub fn merge_settings_json(value: &mut Value, settings_json: &str) -> Result<()>
     Ok(())
 }
 
-/// Persists `settings` to `path`, encrypting secrets; written atomically.
+/// Persists `settings` to `path`, hashing and encrypting secrets; written atomically.
 pub async fn save_config(path: &Path, settings: &Value, master_key: &str) -> Result<()> {
     let mut new_settings = settings.clone();
-    encrypt_secrets(&mut new_settings, master_key);
+    protect_secrets(&mut new_settings, master_key)?;
     let json_str = serde_json::to_string_pretty(&new_settings)?;
     write_atomic(path, &json_str).await
 }
 
 /// Writes the embedded default config to `path` (first run bootstrap).
-pub async fn load_default_config(path: String) -> Result<Arc<AppConfig>> {
+pub async fn load_default_config(path: String, master_key: String) -> Result<Arc<AppConfig>> {
     let config_path = PathBuf::from(&path);
     let mut config_value: Value = serde_json::from_str(DEFAULT_CONFIG_JSON)?;
     if !config_value.is_object() {
@@ -185,6 +192,7 @@ pub async fn load_default_config(path: String) -> Result<Arc<AppConfig>> {
     if config_value["server_api_key"].as_str() == Some(SAMPLE_API_KEY) {
         config_value["server_api_key"] = Value::String(String::new());
     }
+    protect_secrets(&mut config_value, &master_key)?;
 
     let json_str = serde_json::to_string_pretty(&config_value)?;
     write_atomic(&config_path, &json_str).await?;
