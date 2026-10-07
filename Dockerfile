@@ -34,6 +34,7 @@ RUN apk add --no-cache \
 COPY Cargo.toml Cargo.lock ./
 COPY native/server ./native/server
 COPY native/core ./native/core
+COPY assets ./assets
 
 RUN cargo build --release -p nadekodon-server && \
     strip /app/target/release/nadekodon-server
