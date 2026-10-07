@@ -74,7 +74,7 @@ pub async fn handle_change_credentials(
         }
     }
 
-    let mut cfg = state.config.write().await;
+    let mut cfg = state.context.cfg().await.value.clone();
     cfg["username"] = serde_json::json!(new_username);
     cfg["password"] = serde_json::json!(new_password_hash);
 
@@ -82,10 +82,10 @@ pub async fn handle_change_credentials(
         cfg["server_port"] = serde_json::json!(server_port);
     }
 
-    let cfg_clone = cfg.clone();
-    drop(cfg);
-
-    state.save_config(&cfg_clone);
+    if let Err(e) = state.context.save_config(&cfg).await {
+        logger::error(&format!("Failed to save the new credentials: {:?}", e));
+        return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Server error").into_response();
+    }
 
     *state.username.write().await = new_username;
     *state.password.write().await = new_password_hash;

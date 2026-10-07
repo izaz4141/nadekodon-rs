@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'package:nadekodon/utils/platform_service.dart';
 import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/utils/settings.dart';
 import 'package:nadekodon/ui/widgets/app_snackbar.dart';
@@ -29,13 +28,17 @@ class _SettingsSecState extends State<SettingsSec> {
   final _localUsername = ValueNotifier<String>(SettingsManager.username.value);
   final _localPassword = ValueNotifier<String>('');
 
+  /// Plaintext password captured at unlock; the stored value is only a hash.
+  String _currentPassword = '';
+
   Future<void> _handleLockToggle() async {
     if (_isLocked) {
-      final unlocked = await showDialog<bool>(
+      final typedPassword = await showDialog<String>(
         context: context,
         builder: (context) => const VerifyPasswordDialog(),
       );
-      if (unlocked == true) {
+      if (typedPassword != null) {
+        _currentPassword = typedPassword;
         _localRequireLogin.value = SettingsManager.requireLogin.value;
         _localServerPort.value = SettingsManager.serverPort.value;
         _localUsername.value = SettingsManager.username.value;
@@ -48,6 +51,7 @@ class _SettingsSecState extends State<SettingsSec> {
       setState(() {
         _isLocked = true;
       });
+      _currentPassword = '';
     }
   }
 
@@ -55,22 +59,13 @@ class _SettingsSecState extends State<SettingsSec> {
     setState(() {
       _isSaving = true;
     });
-    bool success = false;
-    if (PlatformService().isRemote) {
-      success = await BridgeService.changeCredentials(
-        currentPassword: SettingsManager.password.value,
-        newUsername: _localUsername.value,
-        newPassword: _localPassword.value.isEmpty ? null : _localPassword.value,
-        serverPort: _localServerPort.value,
-      );
-    } else {
-      await SettingsManager.saveChanged('server_port', _localServerPort.value);
-      await SettingsManager.saveChanged('username', _localUsername.value);
-      if (_localPassword.value.isNotEmpty) {
-        await SettingsManager.saveChanged('password', _localPassword.value);
-      }
-      success = true;
-    }
+    // change-credentials updates the running server immediately.
+    bool success = await BridgeService.changeCredentials(
+      currentPassword: _currentPassword,
+      newUsername: _localUsername.value,
+      newPassword: _localPassword.value.isEmpty ? null : _localPassword.value,
+      serverPort: _localServerPort.value,
+    );
 
     await SettingsManager.saveChanged(
       'require_login',

@@ -295,10 +295,7 @@ pub struct AddDownloadResponse {
 pub struct StartServerRequest {
     pub id: String,
     pub port: u16,
-    pub api_key: String,
     pub master_key: String,
-    pub username: String,
-    pub password: String,
     pub config_path: String,
 }
 
@@ -312,6 +309,7 @@ pub struct StartServerResponse {
 pub struct NewApiKeyRequest {
     pub id: String,
     pub master_key: Option<String>,
+    pub config_path: String,
 }
 
 #[derive(Serialize, RustSignal)]
@@ -320,6 +318,39 @@ pub struct NewApiKeyResponse {
     pub encrypted_api_key: String,
     pub decrypted_api_key: String,
     pub master_key: String,
+}
+
+/// Persists a settings patch into `config.json` (Rust owns all writes;
+/// works before the HTTP server starts).
+#[derive(Deserialize, DartSignal)]
+pub struct SaveLocalConfigRequest {
+    pub id: String,
+    pub config_path: String,
+    pub master_key: Option<String>,
+    /// JSON object (`{"key": value, ...}`) merged into the config.
+    pub settings_json: String,
+}
+
+#[derive(Serialize, RustSignal)]
+pub struct SaveLocalConfigResponse {
+    pub id: String,
+    pub success: bool,
+}
+
+/// Reads this device's `config.json`; Rust owns all file I/O.
+#[derive(Deserialize, DartSignal)]
+pub struct LoadLocalConfigRequest {
+    pub id: String,
+    pub config_path: String,
+}
+
+#[derive(Serialize, RustSignal)]
+pub struct LoadLocalConfigResponse {
+    pub id: String,
+    pub success: bool,
+    pub error: Option<String>,
+    /// Raw file contents; `None` when the config does not exist yet.
+    pub settings_json: Option<String>,
 }
 
 #[derive(Deserialize, DartSignal)]

@@ -1,7 +1,6 @@
 extern crate nadekodon_core as ncore;
 use ncore::app_context::AppContext;
 use ncore::utils;
-use ncore::utils::logger;
 
 use crate::security::JwtResponse;
 
@@ -11,7 +10,6 @@ use axum_extra::extract::{
     cookie::{Cookie, SameSite},
 };
 use governor::{clock::QuantaInstant, middleware::NoOpMiddleware};
-use serde_json::Value;
 use std::env;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -25,7 +23,6 @@ use tower_governor::{
     governor::{GovernorConfig, GovernorConfigBuilder},
     key_extractor::SmartIpKeyExtractor,
 };
-use uuid::Uuid;
 
 static NADEKO_HOME: OnceLock<String> = OnceLock::new();
 pub fn nadeko_home() -> &'static String {
@@ -41,28 +38,14 @@ pub fn get_logs_dir() -> String {
 pub struct AppState {
     pub context: Arc<AppContext>,
     pub api_key: Arc<RwLock<String>>,
-    pub master_key: Arc<RwLock<String>>,
     pub username: Arc<RwLock<String>>,
     pub password: Arc<RwLock<String>>,
-    pub config: Arc<RwLock<Value>>,
-    pub config_path: String,
     pub restart_signal: Arc<Notify>,
     pub shutdown_signal: Arc<Notify>,
     pub shutdown_requested: Arc<AtomicBool>,
     pub version: Arc<RwLock<Option<String>>>,
 }
 pub type SharedState = Arc<AppState>;
-
-impl AppState {
-    pub fn save_config(&self, settings: &Value) {
-        if let Some(parent) = std::path::Path::new(&self.config_path).parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        if let Ok(json_str) = serde_json::to_string_pretty(settings) {
-            let _ = std::fs::write(&self.config_path, json_str);
-        }
-    }
-}
 
 pub fn normalize_secret(s: &str) -> &str {
     let s = s.trim();
@@ -79,6 +62,45 @@ pub fn normalize_secret(s: &str) -> &str {
 
 pub fn secure_compare(a: &str, b: &str) -> bool {
     a.as_bytes().ct_eq(b.as_bytes()).into()
+}
+
+/// Default credentials used when none are configured.
+pub const DEFAULT_USERNAME: &str = "admin";
+pub const DEFAULT_PASSWORD: &str = "admin";
+
+/// Falls back to [`DEFAULT_USERNAME`] when no username is configured.
+pub fn resolve_username(raw: &str) -> String {
+    if raw.is_empty() {
+        DEFAULT_USERNAME.to_string()
+    } else {
+        raw.to_string()
+    }
+}
+
+/// Resolves a configured password (plaintext or argon2 hash); falls back to
+/// [`DEFAULT_PASSWORD`] when missing or a hash of the empty string.
+pub fn resolve_password(raw: &str) -> String {
+    let hashes_empty =
+        utils::security::is_valid_hash(raw) && utils::security::validate_password(raw, "")
+            .unwrap_or(false);
+    if raw.is_empty() || hashes_empty {
+        DEFAULT_PASSWORD.to_string()
+    } else {
+        raw.to_string()
+    }
+}
+
+/// Resolves the configured API key; empty, sample, or still-encrypted
+/// (`NDK:`) values are treated as unset.
+pub fn resolve_api_key(raw: &str) -> Option<String> {
+    if raw.is_empty()
+        || raw == ncore::utils::config::SAMPLE_API_KEY
+        || raw.starts_with("NDK:")
+    {
+        None
+    } else {
+        Some(raw.to_string())
+    }
 }
 
 pub fn build_jwt_cookie(jar: CookieJar, jwt: &JwtResponse) -> CookieJar {
@@ -120,24 +142,6 @@ pub fn global_rate_limit_config()
         .key_extractor(SmartIpKeyExtractor)
         .finish()
         .unwrap()
-}
-
-pub fn load_config(path: &str) -> Value {
-    let mut cfg = Value::Null;
-    if let Ok(content) = std::fs::read_to_string("./assets/docs/default.json")
-        && let Ok(mut v) = serde_json::from_str::<Value>(&content)
-    {
-        v["server_api_key"] = Value::String(Uuid::new_v4().to_string());
-        v["password"] = Value::String(utils::security::hash_password("admin").unwrap());
-        cfg = v;
-    }
-    logger::debug(&format!("Loading config from {}", path));
-    if let Ok(content) = std::fs::read_to_string(path)
-        && let Ok(v) = serde_json::from_str(&content)
-    {
-        cfg = v;
-    }
-    cfg
 }
 
 pub fn create_router(
@@ -205,8 +209,8 @@ pub async fn run_server_loop(state: SharedState) {
         });
 
         let port = {
-            let config = state.config.read().await.clone();
-            config["server_port"].as_u64().unwrap_or(8080) as u16
+            let config = state.context.cfg().await;
+            config.value["server_port"].as_u64().unwrap_or(8080) as u16
         };
         let restart_signal = state.restart_signal.clone();
         let shutdown_signal = state.shutdown_signal.clone();

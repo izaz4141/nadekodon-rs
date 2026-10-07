@@ -99,24 +99,26 @@ class SettingsManager {
     }
 
     configPath = '$configDir/config.json';
-    final configExists = await _ioService.fileExists(configPath);
+    final result = await BridgeService.readLocalConfig(configPath);
 
-    if (configExists) {
-      final Map<String, dynamic> data = jsonDecode(
-        await _ioService.readFile(configPath),
-      );
+    if (result.settings != null) {
+      final Map<String, dynamic> data = result.settings!;
       serverHost.value =
           data['server_host'] ?? (defaults['server_host'] ?? '127.0.0.1');
       serverPort.value =
           data['server_port'] ?? (defaults['server_port'] ?? 8080);
       await _applyFromJson(data);
       await _saveAll();
-    } else {
+    } else if (result.success) {
       isFirstRun = true;
       downloadFolder.value = defaultDownloadFolder;
       await applyDefaultSettings();
       await regenerateApiKey();
       await _saveAll();
+    } else {
+      // Don't overwrite an unreadable config; run on in-memory defaults.
+      log('Failed to read config.json: ${result.error}', isError: true);
+      await applyDefaultSettings();
     }
 
     attachAutoSave();
@@ -269,17 +271,16 @@ class SettingsManager {
 
     final configDir = await _ioService.getConfigDir();
     configPath = '$configDir/config.json';
-    final configExists = await _ioService.fileExists(configPath);
-
-    if (configExists) {
-      final Map<String, dynamic> data = jsonDecode(
-        await _ioService.readFile(configPath),
-      );
+    final result = await BridgeService.readLocalConfig(configPath);
+    final data = result.settings;
+    if (data != null) {
       serverHost.value =
           data['server_host'] ?? (defaults['server_host'] ?? '127.0.0.1');
       serverPort.value =
           data['server_port'] ?? (defaults['server_port'] ?? 8080);
       await _applyFromJson(data);
+    } else if (!result.success) {
+      log('Failed to read config.json: ${result.error}', isError: true);
     }
   }
 
@@ -288,11 +289,15 @@ class SettingsManager {
       await _saveToBackend();
       return;
     }
-    final jsonMap = await _toJson();
-    await _ioService.writeFile(
-      configPath,
-      const JsonEncoder.withIndent('  ').convert(jsonMap),
-    );
+    await _persistLocal(await _toJson());
+  }
+
+  /// Persists [settings] into config.json via the hub (Rust owns all writes).
+  static Future<void> _persistLocal(Map<String, dynamic> settings) async {
+    final success = await BridgeService.writeLocalConfig(configPath, settings);
+    if (!success) {
+      log('Failed to persist settings to config.json', isError: true);
+    }
   }
 
   static Future<void> saveChanged(String key, dynamic value) async {
@@ -303,30 +308,15 @@ class SettingsManager {
     } else {
       _sendSettings(key, value);
     }
-
-    Map<String, dynamic> data = {};
-
-    final configExists = await _ioService.fileExists(configPath);
-    if (configExists) {
-      try {
-        data = jsonDecode(await _ioService.readFile(configPath));
-      } catch (e) {
-        log("Error reading config file: $e", isError: true);
-        data = await _toJson();
-      }
-    }
+    if (kIsWeb) return;
 
     if (key == 'password') {
       final hashed = await hashPassword(value);
       hashedPassword.value = hashed;
-      data[key] = hashed;
+      await _persistLocal({key: hashed});
     } else {
-      data[key] = value;
+      await _persistLocal({key: value});
     }
-    await _ioService.writeFile(
-      configPath,
-      const JsonEncoder.withIndent('  ').convert(data),
-    );
   }
 
   static void attachAutoSave() {
@@ -505,9 +495,9 @@ class SettingsManager {
     final jsonMap = await _toJson();
     jsonMap.remove('accounts');
     if (PlatformService().isRemote) {
+      // Device-local: never push host/port to the remote server.
       jsonMap.remove('server_host');
       jsonMap.remove('server_port');
-      jsonMap.remove('require_login');
     }
     final success = await BridgeService.saveSettings(jsonMap);
     if (!success) {
@@ -564,17 +554,18 @@ class SettingsManager {
       isLoggedIn.value = false;
     }
     detachAutoSave();
-    final configExists = await _ioService.fileExists(configPath);
-    if (configExists) {
-      final Map<String, dynamic> data = jsonDecode(
-        await _ioService.readFile(configPath),
-      );
+    final result = await BridgeService.readLocalConfig(configPath);
+    final data = result.settings;
+    if (data != null) {
       serverHost.value =
           data['server_host'] ?? (defaults['server_host'] ?? '127.0.0.1');
       serverPort.value =
           data['server_port'] ?? (defaults['server_port'] ?? 8080);
       await _applyFromJson(data);
     } else {
+      if (!result.success) {
+        log('Failed to read config.json: ${result.error}', isError: true);
+      }
       await applyDefaultSettings();
     }
     BridgeService.isOnline.value = false;

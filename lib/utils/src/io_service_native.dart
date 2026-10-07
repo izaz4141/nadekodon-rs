@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:nadekodon/utils/bridge_service.dart';
 import 'package:nadekodon/utils/logger.dart';
 import 'package:nadekodon/utils/platform_service.dart';
 import 'package:path_provider/path_provider.dart';
@@ -30,20 +31,13 @@ class NativeIOService implements IOService {
     return downloads?.path ?? '';
   }
 
-  /// `download_folder` as stored in this machine's own config.json, which is
-  /// not the folder a remote engine downloads into.
+  /// Local `download_folder`; not the folder a remote engine downloads into.
   @override
   Future<String> getCurrentDownloadDir() async {
-    final config = File('${await getConfigDir()}/config.json');
-    if (!await config.exists()) return '';
-    try {
-      final data =
-          jsonDecode(await config.readAsString()) as Map<String, dynamic>;
-      return data['download_folder'] as String? ?? '';
-    } catch (e) {
-      log('Could not read download_folder from config.json: $e', isError: true);
-      return '';
-    }
+    final result = await BridgeService.readLocalConfig(
+      '${await getConfigDir()}/config.json',
+    );
+    return result.settings?['download_folder'] as String? ?? '';
   }
 
   @override

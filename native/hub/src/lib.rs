@@ -51,10 +51,20 @@ async fn main() {
         context.clone(),
         db_done_signal.clone(),
     ));
-    spawn(utils::server::handle_api_key_generation());
+    let state_slot: utils::server::ServerStateSlot =
+        std::sync::Arc::new(tokio::sync::RwLock::new(None));
+    spawn(utils::server::handle_api_key_generation(
+        context.clone(),
+        state_slot.clone(),
+    ));
     spawn(utils::server::handle_decrypt_request());
     spawn(utils::server::handle_encrypt_request());
-    spawn(utils::server::start_server_listener(context.clone()));
+    spawn(utils::server::handle_save_local_config(context.clone()));
+    spawn(utils::server::handle_load_local_config());
+    spawn(utils::server::start_server_listener(
+        context.clone(),
+        state_slot,
+    ));
     spawn(downloader::query_url_info(rclient.clone()));
     spawn(downloader::spawn_download_worker(dm.clone()));
     spawn(downloader::get_download_list(dm.clone()));

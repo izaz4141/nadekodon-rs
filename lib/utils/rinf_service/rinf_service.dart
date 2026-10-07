@@ -10,6 +10,7 @@ import 'package:nadekodon/utils/rinf_service/utils.dart';
 import 'package:nadekodon/utils/rinf_service/version.dart';
 
 export 'signal_helper.dart';
+export 'config.dart' show readLocalConfig, writeLocalConfig;
 export 'tagging.dart' show x0, d0;
 export 'package:nadekodon/src/bindings/bindings.dart';
 

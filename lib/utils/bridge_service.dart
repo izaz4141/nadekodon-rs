@@ -171,6 +171,18 @@ class BridgeService {
   static Future<bool> saveSettings(Map<String, dynamic> settings) =>
       impl.saveSettings(settings);
 
+  /// Persists [settings] into config.json via the hub (native-only).
+  static Future<bool> writeLocalConfig(
+    String configPath,
+    Map<String, dynamic> settings,
+  ) => rinf_impl.writeLocalConfig(configPath, settings);
+
+  /// Reads [configPath] via the hub (native-only).
+  static Future<
+    ({bool success, String? error, Map<String, dynamic>? settings})
+  >
+  readLocalConfig(String configPath) => rinf_impl.readLocalConfig(configPath);
+
   static Future<bool> restartServer() => impl.restartServer();
   static Future<DownloadList?> getDownloadList({
     String? id,

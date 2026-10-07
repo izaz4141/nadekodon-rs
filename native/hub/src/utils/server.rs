@@ -5,14 +5,18 @@ use nadekodon_server::{
     nadeko::{create_nadeko_router, system::handle_status},
     qbittorrent::get_router,
     security::check_api_key,
-    server::{AppState, SharedState, global_rate_limit_config, load_config, run_server},
+    server::{
+        AppState, SharedState, global_rate_limit_config, normalize_secret, resolve_api_key,
+        resolve_password, resolve_username, run_server,
+    },
 };
 use ncore::app_context::AppContext;
 use ncore::utils::security;
 
 use crate::signals::{
     AddDownloadRequest, DecryptRequest, DecryptResponse, EncryptRequest, EncryptResponse,
-    NewApiKeyRequest, NewApiKeyResponse, StartServerRequest, StartServerResponse,
+    LoadLocalConfigRequest, LoadLocalConfigResponse, NewApiKeyRequest, NewApiKeyResponse,
+    SaveLocalConfigRequest, SaveLocalConfigResponse, StartServerRequest, StartServerResponse,
 };
 use crate::utils::logger;
 use axum::Router;
@@ -35,17 +39,27 @@ use tokio::{
 use tower_governor::GovernorLayer;
 use uuid::Uuid;
 
-pub async fn handle_api_key_generation() {
+/// Running embedded server, shared so key regeneration applies without restart.
+pub type ServerStateSlot = Arc<RwLock<Option<Arc<AppState>>>>;
+
+pub async fn handle_api_key_generation(context: Arc<AppContext>, state_slot: ServerStateSlot) {
     let receiver = NewApiKeyRequest::get_dart_signal_receiver();
     while let Some(signal_pack) = receiver.recv().await {
         let msg = signal_pack.message;
-        let master_key = match &msg.master_key {
-            Some(key) if encryption::is_valid_master_key(key) => key.clone(),
-            _ => {
-                logger::warn("Invalid master key provided, generating new one");
-                encryption::generate_master_key()
-            }
-        };
+
+        // Prefer the loaded key; adopt the caller's only when none is loaded.
+        let mut master_key = context.master_key().await;
+        if master_key.is_empty() {
+            master_key = match &msg.master_key {
+                Some(key) if encryption::is_valid_master_key(key) => key.clone(),
+                _ => {
+                    logger::warn("Invalid master key provided, generating new one");
+                    encryption::generate_master_key()
+                }
+            };
+            context.set_master_key(master_key.clone()).await;
+        }
+
         let api_key = Uuid::new_v4().to_string();
         let encrypted_api_key = match encryption::encrypt(&api_key, &master_key) {
             Ok(encrypted) => encrypted,
@@ -61,6 +75,38 @@ pub async fn handle_api_key_generation() {
                 continue;
             }
         };
+
+        // Persist the key ourselves; on failure keep the old key active.
+        if let Err(e) = context.init_config(msg.config_path).await {
+            logger::error(&format!("Failed to initialize the config: {:?}", e));
+            NewApiKeyResponse {
+                id: msg.id,
+                encrypted_api_key: String::new(),
+                decrypted_api_key: String::new(),
+                master_key: String::new(),
+            }
+            .send_signal_to_dart();
+            continue;
+        }
+        let mut cfg = context.cfg().await.value.clone();
+        cfg["server_api_key"] = encrypted_api_key.as_str().into();
+        if let Err(e) = context.save_config(&cfg).await {
+            logger::error(&format!("Failed to persist the new API key: {:?}", e));
+            NewApiKeyResponse {
+                id: msg.id,
+                encrypted_api_key: String::new(),
+                decrypted_api_key: String::new(),
+                master_key: String::new(),
+            }
+            .send_signal_to_dart();
+            continue;
+        }
+
+        // Refresh the running server so the new key applies immediately.
+        if let Some(state) = state_slot.read().await.clone() {
+            *state.api_key.write().await = api_key.clone();
+        }
+
         NewApiKeyResponse {
             id: msg.id,
             encrypted_api_key,
@@ -68,6 +114,98 @@ pub async fn handle_api_key_generation() {
             master_key,
         }
         .send_signal_to_dart();
+    }
+}
+
+/// Persists a settings patch sent by Dart into `config.json`.
+pub async fn handle_save_local_config(context: Arc<AppContext>) {
+    let receiver = SaveLocalConfigRequest::get_dart_signal_receiver();
+    while let Some(signal_pack) = receiver.recv().await {
+        let msg = signal_pack.message;
+
+        // Adopt the caller's key only when none is loaded; never clobber.
+        if context.master_key().await.is_empty()
+            && let Some(key) = &msg.master_key
+            && encryption::is_valid_master_key(key)
+        {
+            context.set_master_key(key.clone()).await;
+        }
+
+        if !context.is_config_loaded().await
+            && let Err(e) = context.init_config(msg.config_path).await
+        {
+            logger::error(&format!("Failed to load the config: {:?}", e));
+            SaveLocalConfigResponse {
+                id: msg.id,
+                success: false,
+            }
+            .send_signal_to_dart();
+            continue;
+        }
+
+        let mut cfg = context.cfg().await.value.clone();
+        if let Err(e) = ncore::utils::config::merge_settings_json(&mut cfg, &msg.settings_json) {
+            logger::error(&format!("Invalid settings payload: {:?}", e));
+            SaveLocalConfigResponse {
+                id: msg.id,
+                success: false,
+            }
+            .send_signal_to_dart();
+            continue;
+        }
+
+        let success = match context.save_config(&cfg).await {
+            Ok(()) => true,
+            Err(e) => {
+                logger::error(&format!("Failed to save the config: {:?}", e));
+                false
+            }
+        };
+        SaveLocalConfigResponse {
+            id: msg.id,
+            success,
+        }
+        .send_signal_to_dart();
+    }
+}
+
+/// Reads `config.json` for Dart (first run: `settings_json` is `None`).
+pub async fn handle_load_local_config() {
+    let receiver = LoadLocalConfigRequest::get_dart_signal_receiver();
+    while let Some(signal_pack) = receiver.recv().await {
+        let msg = signal_pack.message;
+        let response = match tokio::fs::read_to_string(&msg.config_path).await {
+            Ok(raw) => match serde_json::from_str::<
+                serde_json::Map<String, serde_json::Value>,
+            >(&raw)
+            {
+                Ok(_) => LoadLocalConfigResponse {
+                    id: msg.id,
+                    success: true,
+                    error: None,
+                    settings_json: Some(raw),
+                },
+                Err(e) => LoadLocalConfigResponse {
+                    id: msg.id,
+                    success: false,
+                    error: Some(format!("invalid config JSON: {}", e)),
+                    settings_json: None,
+                },
+            },
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => LoadLocalConfigResponse {
+                id: msg.id,
+                success: true,
+                error: None,
+                settings_json: None,
+            },
+            Err(e) => LoadLocalConfigResponse {
+                id: msg.id,
+                success: false,
+                error: Some(e.to_string()),
+                settings_json: None,
+            },
+        };
+        response.send_signal_to_dart();
     }
 }
 
@@ -127,7 +265,7 @@ async fn handle_add_download(
     (StatusCode::OK, "Download request sent".to_string())
 }
 
-pub async fn start_server_listener(context: Arc<AppContext>) {
+pub async fn start_server_listener(context: Arc<AppContext>, state_slot: ServerStateSlot) {
     let mut current_server: Option<(tokio::task::JoinHandle<()>, Arc<tokio::sync::Notify>)> = None;
     let mut cleanup_handle: Option<tokio::task::JoinHandle<()>> = None;
     let receiver = StartServerRequest::get_dart_signal_receiver();
@@ -146,38 +284,72 @@ pub async fn start_server_listener(context: Arc<AppContext>) {
         }
 
         let config_path = msg.config_path;
-        let config_val = load_config(&config_path);
 
-        let password = if security::is_valid_hash(&msg.password) {
-            msg.password
+        // Load through the context so all writers target the same file.
+        context.set_master_key(msg.master_key).await;
+        if let Err(e) = context.init_config(config_path).await {
+            logger::error(&format!("Failed to initialize the config: {:?}", e));
+            StartServerResponse {
+                id: msg.id,
+                success: false,
+            }
+            .send_signal_to_dart();
+            continue;
+        }
+
+        // Credentials live in config.json; resolve like the standalone binary.
+        let mut cfg = context.cfg().await.value.clone();
+        let username = resolve_username(normalize_secret(
+            cfg["username"].as_str().unwrap_or_default(),
+        ));
+        let password_raw = resolve_password(normalize_secret(
+            cfg["password"].as_str().unwrap_or_default(),
+        ));
+        let api_key = resolve_api_key(normalize_secret(
+            cfg["server_api_key"].as_str().unwrap_or_default(),
+        ))
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
+
+        let password = if security::is_valid_hash(&password_raw) {
+            password_raw
         } else {
-            match security::hash_password(&msg.password) {
+            match security::hash_password(&password_raw) {
                 Ok(v) => v,
                 Err(e) => {
                     logger::error(&format!("Error when hashing password: {:?}", e));
-                    msg.password
+                    password_raw
                 }
             }
         };
 
-        let config = Arc::new(RwLock::new(config_val));
+        // Persist: self-heals poisoned configs and encrypts the key at rest.
+        cfg["username"] = username.as_str().into();
+        cfg["password"] = password.as_str().into();
+        cfg["server_api_key"] = api_key.as_str().into();
+        if let Err(e) = context.save_config(&cfg).await {
+            logger::error(&format!(
+                "Failed to persist the resolved credentials: {:?}",
+                e
+            ));
+        }
+
         let restart_signal = Arc::new(Notify::new());
         let shutdown_signal = Arc::new(Notify::new());
         let shutdown_requested = Arc::new(AtomicBool::new(false));
 
         let state = Arc::new(AppState {
             context: context.clone(),
-            api_key: Arc::new(RwLock::new(msg.api_key)),
-            username: Arc::new(RwLock::new(msg.username)),
+            api_key: Arc::new(RwLock::new(api_key)),
+            username: Arc::new(RwLock::new(username)),
             password: Arc::new(RwLock::new(password)),
-            master_key: Arc::new(RwLock::new(msg.master_key)),
-            config,
-            config_path,
             restart_signal: restart_signal.clone(),
             shutdown_signal: shutdown_signal.clone(),
             shutdown_requested: shutdown_requested.clone(),
             version: Arc::new(RwLock::new(None)),
         });
+
+        // Publish so a later key regeneration applies without restart.
+        *state_slot.write().await = Some(state.clone());
 
         let governor_conf = global_rate_limit_config();
         let governor_limiter = governor_conf.limiter().clone();

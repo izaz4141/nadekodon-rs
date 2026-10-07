@@ -6,6 +6,7 @@ use axum::response::IntoResponse;
 use axum_extra::extract::CookieJar;
 use nadekodon_core::signals::AuthResponse;
 use nadekodon_core::utils::encryption;
+use nadekodon_core::utils::logger;
 use serde_json::json;
 use uuid::Uuid;
 
@@ -23,12 +24,14 @@ pub async fn handle_generate_api(
     jar: CookieJar,
 ) -> impl IntoResponse {
     let key = Uuid::new_v4().to_string();
-    let master_key = state.master_key.read().await.clone();
+    let master_key = state.context.master_key().await;
     let encrypted_key = encryption::encrypt(&key, &master_key).unwrap_or_else(|_| key.clone());
     {
-        let mut cfg = state.config.write().await;
+        let mut cfg = state.context.cfg().await.value.clone();
         cfg["server_api_key"] = json!(encrypted_key);
-        state.save_config(&cfg.clone());
+        if let Err(e) = state.context.save_config(&cfg).await {
+            logger::error(&format!("Failed to persist the new API key: {:?}", e));
+        }
     }
     *state.api_key.write().await = normalize_secret(&key).to_string();
 

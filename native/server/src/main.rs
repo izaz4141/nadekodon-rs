@@ -8,21 +8,39 @@ use uuid::Uuid;
 
 extern crate nadekodon_core as ncore;
 use ncore::app_context::AppContext;
-use ncore::utils::security;
-use ncore::utils::{logger, types::DMSettings};
+use ncore::utils::{config, logger, security, types::DMSettings};
 
 use nadekodon_server::server;
-use nadekodon_server::server::{nadeko_home, normalize_secret};
+use nadekodon_server::server::{
+    DEFAULT_PASSWORD, DEFAULT_USERNAME, nadeko_home, normalize_secret, resolve_password,
+    resolve_username,
+};
 
 #[tokio::main]
 async fn main() {
     logger::debug("Initializing Nadeko~don Server...");
 
     let config_path = server::get_config_path();
-    let mut initial_config = server::load_config(&config_path);
+    let master_key =
+        std::env::var("NADEKO_SERVER_MASTER_KEY").expect("NADEKO_SERVER_MASTER_KEY is not set");
+
+    // Bootstrap the config first: DM settings below derive from it.
+    let preloaded = match config::load_or_bootstrap(config_path.clone(), master_key.clone()).await {
+        Ok((cfg, true)) => {
+            logger::info("No config found, created a default one");
+            cfg
+        }
+        Ok((cfg, false)) => cfg,
+        Err(e) => {
+            logger::error(&format!("Failed to load or create the config: {:?}", e));
+            return;
+        }
+    };
+    let mut initial_config = preloaded.value.clone();
+
     let mut api_key = initial_config["server_api_key"]
         .as_str()
-        .map(|s| s.to_string())
+        .and_then(server::resolve_api_key)
         .unwrap_or_else(|| Uuid::new_v4().to_string());
 
     let get_str = |key: &str| initial_config[key].as_str().unwrap_or("").to_string();
@@ -30,19 +48,48 @@ async fn main() {
     let mut username = get_str("username");
     let mut password = get_str("password");
 
-    if let Ok(env_user) = std::env::var("NADEKO_USERNAME") {
+    // Blank env values are treated as unset.
+    if let Ok(env_user) = std::env::var("NADEKO_USERNAME")
+        && !env_user.trim().is_empty()
+    {
         username = env_user;
     }
-    if let Ok(env_pass) = std::env::var("NADEKO_PASSWORD") {
+    if let Ok(env_pass) = std::env::var("NADEKO_PASSWORD")
+        && !env_pass.trim().is_empty()
+    {
         password = env_pass;
     }
-    if let Ok(env_key) = std::env::var("NADEKO_SERVER_API_KEY") {
+    if let Ok(env_key) = std::env::var("NADEKO_SERVER_API_KEY")
+        && !env_key.trim().is_empty()
+    {
         api_key = env_key;
     }
-    let master_key =
-        std::env::var("NADEKO_SERVER_MASTER_KEY").expect("NADEKO_SERVER_MASTER_KEY is not set");
     username = normalize_secret(&username).to_string();
     password = normalize_secret(&password).to_string();
+
+    // Empty credentials fall back to admin:admin.
+    let had_username = username.clone();
+    let had_password = password.clone();
+    username = resolve_username(&username);
+    password = resolve_password(&password);
+    if username != had_username {
+        logger::warn(&format!(
+            "No username configured, falling back to the default \"{}\"",
+            DEFAULT_USERNAME
+        ));
+    }
+    if password != had_password {
+        logger::warn(&format!(
+            "No usable password configured, falling back to the default \"{}\" password",
+            DEFAULT_PASSWORD
+        ));
+    }
+
+    api_key = normalize_secret(&api_key).to_string();
+    if api_key.is_empty() {
+        api_key = Uuid::new_v4().to_string();
+        logger::warn("No server API key configured, generated a new one");
+    }
     password = if security::is_valid_hash(&password) {
         password
     } else {
@@ -54,7 +101,6 @@ async fn main() {
             }
         }
     };
-    api_key = normalize_secret(&api_key).to_string();
 
     let client = ncore::utils::url::build_browser_client().await;
 
@@ -74,6 +120,12 @@ async fn main() {
     let db_done_signal = Arc::new(tokio::sync::Notify::new());
 
     let context = AppContext::new(client, settings, shutdown_signal).await;
+    context.set_master_key(master_key).await;
+    if let Err(e) = context.init_config(config_path).await {
+        logger::error(&format!("Failed to initialize the config: {:?}", e));
+        return;
+    }
+
     let dm = context.dm().await;
     dm.init_torrent_session(PathBuf::from(format!(
         "{}/config/torrent_data",
@@ -116,11 +168,13 @@ async fn main() {
         }
     };
 
+    // Persist so disk matches what the server is actually using.
+    if let Err(e) = context.save_config(&initial_config).await {
+        logger::error(&format!("Failed to save the config: {:?}", e));
+    }
+
     let state = Arc::new(server::AppState {
-        config: Arc::new(RwLock::new(initial_config.clone())),
-        config_path,
         api_key: Arc::new(RwLock::new(api_key)),
-        master_key: Arc::new(RwLock::new(master_key)),
         username: Arc::new(RwLock::new(username)),
         password: Arc::new(RwLock::new(password)),
         context,
@@ -129,8 +183,6 @@ async fn main() {
         shutdown_requested: Arc::new(AtomicBool::new(false)),
         version: Arc::new(RwLock::new(None)),
     });
-
-    state.save_config(&initial_config);
 
     let state_clone = state.clone();
     tokio::spawn(async move {

@@ -39,19 +39,18 @@ mixin AuthRinfApi {
         send: () => NewApiKeyRequest(
           id: id,
           masterKey: existingMasterKey,
+          configPath: SettingsManager.configPath,
         ).sendSignalToRust(),
       );
-      if (signal == null) return false;
+      // Empty fields mean Rust failed to persist; keep the old key.
+      if (signal == null || signal.decryptedApiKey.isEmpty) return false;
 
       final encodedKey = await x0(signal.masterKey);
       await ioService.writeFile(masterKeyPath, encodedKey);
       await ioService.setPermissions(masterKeyPath, '0600');
       SettingsManager.serverApiKey.value = signal.decryptedApiKey;
       SettingsManager.encryptedServerApiKey.value = signal.encryptedApiKey;
-      await SettingsManager.saveChanged(
-        'server_api_key',
-        signal.encryptedApiKey,
-      );
+      // Rust persists the key in config.json.
       return true;
     } catch (e) {
       log("Regenerate API key error: $e", isError: true);

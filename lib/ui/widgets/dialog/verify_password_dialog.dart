@@ -54,7 +54,8 @@ class _VerifyPasswordDialogState extends State<VerifyPasswordDialog> {
 
     if (isValid) {
       if (mounted) {
-        Navigator.of(context).pop(true);
+        // Return the typed password; the stored value is only a hash.
+        Navigator.of(context).pop(_passwordController.text);
       }
     } else {
       if (!mounted) return;

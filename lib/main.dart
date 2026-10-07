@@ -87,10 +87,7 @@ Future<void> main(List<String> args) async {
         StartServerRequest(
           id: newSignalId(),
           port: SettingsManager.serverPort.value,
-          apiKey: SettingsManager.serverApiKey.value,
           masterKey: masterKey!,
-          username: SettingsManager.username.value,
-          password: SettingsManager.password.value,
           configPath: SettingsManager.configPath,
         ).sendSignalToRust();
       }

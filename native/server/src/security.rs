@@ -34,7 +34,7 @@ pub struct JwtResponse {
 }
 
 async fn get_jwt_secret(state: &SharedState) -> Vec<u8> {
-    state.master_key.read().await.clone().into_bytes()
+    state.context.master_key().await.into_bytes()
 }
 
 fn get_current_timestamp() -> u64 {
