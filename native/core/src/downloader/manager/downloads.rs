@@ -73,6 +73,32 @@ impl DownloadManager {
     pub async fn load_snapshot(self: &Arc<Self>, downloads: Vec<DownloadInfo>) {
         let mut workers = self.workers.lock().await;
 
+        // Drop downloads for pruned torrents — they can never resume.
+        let pruned = self
+            .pruned_torrent_hashes
+            .read()
+            .await
+            .clone()
+            .unwrap_or_default();
+        let is_pruned_orphan = |info: &DownloadInfo| -> Vec<String> {
+            if !matches!(info.download_type, DownloadType::Torrent) {
+                return Vec::new();
+            }
+            let mut matched = Vec::new();
+            if let Some(h) = &info.torrent_hash {
+                if pruned.contains(h) {
+                    matched.push(h.clone());
+                }
+            }
+            let url_lower = info.url.to_lowercase();
+            for h in &pruned {
+                if url_lower.contains(&format!("btih:{}", h)) {
+                    matched.push(h.clone());
+                }
+            }
+            matched
+        };
+
         for info in downloads {
             let id = info.id;
             if info
@@ -86,6 +112,18 @@ impl DownloadManager {
                 ));
                 continue;
             }
+
+            let matched_hashes = is_pruned_orphan(&info);
+            if !matched_hashes.is_empty() {
+                logger::warn(&format!(
+                    "Removing orphaned download {} (torrent {} pruned from session; no restorable .torrent file)",
+                    id,
+                    matched_hashes.join(", ")
+                ));
+                self.pending_deletions.lock().await.push(id);
+                continue;
+            }
+
             let result = DownloadWorker::from_info(
                 info,
                 self.client.clone(),

@@ -30,6 +30,9 @@ pub struct DownloadManager {
     pending_deletions: Arc<Mutex<Vec<Uuid>>>,
     pub torrent_session: Arc<tokio::sync::RwLock<Option<Arc<Session>>>>,
     pub categories: Arc<RwLock<HashMap<String, CategoryInfo>>>,
+    /// Hashes pruned from persistence at startup (`None` until the pre-clean);
+    /// their DB rows are dropped when the database manager loads.
+    pub pruned_torrent_hashes: Arc<RwLock<Option<HashSet<String>>>>,
     context: std::sync::Weak<AppContext>,
 }
 

@@ -1,6 +1,7 @@
 use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use serde_json::Value;
 use tokio::sync::{Notify, RwLock};
@@ -162,6 +163,36 @@ impl AppContext {
             .await;
 
         *self.db.write().await = Some(db.clone());
+
+        // Wait for the pre-clean so pruned rows aren't restored. Poll (not a
+        // one-shot Notify) so an early publish can't be missed.
+        {
+            let dm = self.dm().await;
+            let deadline = std::time::Instant::now() + Duration::from_secs(10);
+            loop {
+                let ready = dm.pruned_torrent_hashes.read().await.is_some();
+                if ready || std::time::Instant::now() >= deadline {
+                    if !ready {
+                        logger::warn(
+                            "Timed out waiting for torrent pre-clean; orphaned torrent rows may remain",
+                        );
+                    }
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            let pruned_count = dm
+                .pruned_torrent_hashes
+                .read()
+                .await
+                .as_ref()
+                .map(|s| s.len())
+                .unwrap_or(0);
+            logger::debug(&format!(
+                "Torrent pre-clean reported {} pruned hash(es)",
+                pruned_count
+            ));
+        }
 
         match db.load_categories().await {
             Ok(categories) => {

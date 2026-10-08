@@ -1,3 +1,4 @@
+use crate::downloader::constants::TORRENT_ADD_TIMEOUT_SECS;
 use crate::utils::logger;
 use crate::utils::{
     types::{DownloadState, PartInfo, WorkerEvent},
@@ -99,16 +100,29 @@ impl DownloadWorker {
                 AddTorrent::from_bytes(bytes)
             };
 
-            let response = session
-                .add_torrent(
+            let response = match tokio::time::timeout(
+                Duration::from_secs(TORRENT_ADD_TIMEOUT_SECS),
+                session.add_torrent(
                     add_torrent,
                     Some(AddTorrentOptions {
                         overwrite: true,
                         output_folder: Some(output_dir.to_string_lossy().to_string()),
                         ..Default::default()
                     }),
-                )
-                .await?;
+                ),
+            )
+            .await
+            {
+                Ok(res) => res?,
+                Err(_) => {
+                    let err_msg = format!(
+                        "Torrent add timed out after {}s (no peers to resolve metadata)",
+                        TORRENT_ADD_TIMEOUT_SECS
+                    );
+                    logger::warn(&format!("{}: {}", err_msg, url));
+                    return Err(anyhow::anyhow!("{}", err_msg));
+                }
+            };
 
             match response {
                 AddTorrentResponse::Added(_, h) => h,
@@ -123,7 +137,23 @@ impl DownloadWorker {
             info.torrent_hash = Some(hex::encode(handle.info_hash().0));
         }
 
-        handle.wait_until_initialized().await?;
+        match tokio::time::timeout(
+            Duration::from_secs(TORRENT_ADD_TIMEOUT_SECS),
+            handle.wait_until_initialized(),
+        )
+        .await
+        {
+            Ok(res) => res?,
+            Err(_) => {
+                let err_msg = format!(
+                    "Torrent {} did not initialize within {}s (no peer metadata)",
+                    hex::encode(handle.info_hash().0),
+                    TORRENT_ADD_TIMEOUT_SECS
+                );
+                logger::warn(&err_msg);
+                return Err(anyhow::anyhow!("{}", err_msg));
+            }
+        }
         if handle.is_paused() {
             session.unpause(&handle).await?;
         }

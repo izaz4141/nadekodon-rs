@@ -17,28 +17,25 @@ use librqbit::{Session, SessionOptions, SessionPersistenceConfig};
 
 use crate::downloader::manager::DownloadManager;
 
-/// Inspects librqbit's `session.json` persistence file and removes entries
-/// that cannot be restored without fetching metadata from the network (i.e.
-/// those whose `<info_hash>.torrent` bytes are missing).
+/// Drops `session.json` entries whose `.torrent` file is missing — librqbit
+/// restores those as magnets and hangs startup on `resolve_magnet`.
 ///
-/// librqbit restores such entries as magnets and blocks inside
-/// `Session::new_with_opts` on `resolve_magnet`, which can wait forever when
-/// DHT is disabled and no peers are reachable — hanging application startup.
-/// Pruning them first makes session initialization structurally unbangable.
-///
-/// Returns `(remaining, skipped)` torrent counts.
-async fn prune_unrestorable_torrents(persistence_dir: &Path) -> anyhow::Result<(usize, usize)> {
+/// Returns `(remaining, skipped_hashes)`.
+async fn prune_unrestorable_torrents(
+    persistence_dir: &Path,
+) -> anyhow::Result<(usize, HashSet<String>)> {
+    let empty = || HashSet::new();
     let session_file = persistence_dir.join("session.json");
     let contents = match tokio::fs::read_to_string(&session_file).await {
         Ok(c) => c,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok((0, 0)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok((0, empty())),
         Err(e) => {
             logger::warn(&format!(
                 "Could not read {} for pre-clean: {}",
                 session_file.display(),
                 e
             ));
-            return Ok((0, 0));
+            return Ok((0, empty()));
         }
     };
 
@@ -49,7 +46,7 @@ async fn prune_unrestorable_torrents(persistence_dir: &Path) -> anyhow::Result<(
                 "session.json is malformed ({}); leaving it untouched",
                 e
             ));
-            return Ok((0, 0));
+            return Ok((0, empty()));
         }
     };
 
@@ -57,12 +54,13 @@ async fn prune_unrestorable_torrents(persistence_dir: &Path) -> anyhow::Result<(
         Some(map) => map,
         None => {
             logger::warn("session.json has no \"torrents\" object; leaving it untouched");
-            return Ok((0, 0));
+            return Ok((0, empty()));
         }
     };
 
     // Compute restorability first (can't await inside `retain`).
     let mut restorable = HashSet::new();
+    let mut skipped_hash_set = HashSet::new();
     let mut skipped: Vec<(String, String)> = Vec::new();
     for (id, entry) in torrents.iter() {
         let hash = entry
@@ -82,12 +80,13 @@ async fn prune_unrestorable_torrents(persistence_dir: &Path) -> anyhow::Result<(
         if is_restorable {
             restorable.insert(id.clone());
         } else {
-            skipped.push((id.clone(), hash));
+            skipped.push((id.clone(), hash.clone()));
+            skipped_hash_set.insert(hash);
         }
     }
 
     if skipped.is_empty() {
-        return Ok((torrents.len(), 0));
+        return Ok((torrents.len(), empty()));
     }
 
     for (id, hash) in &skipped {
@@ -128,7 +127,7 @@ async fn prune_unrestorable_torrents(persistence_dir: &Path) -> anyhow::Result<(
         remaining
     ));
 
-    Ok((remaining, skipped.len()))
+    Ok((remaining, skipped_hash_set))
 }
 
 impl DownloadManager {
@@ -153,6 +152,7 @@ impl DownloadManager {
             pending_deletions: Arc::new(Mutex::new(Vec::new())),
             torrent_session,
             categories: Arc::new(RwLock::new(HashMap::new())),
+            pruned_torrent_hashes: Arc::new(RwLock::new(None)),
             context,
         });
 
@@ -172,18 +172,24 @@ impl DownloadManager {
     pub async fn init_torrent_session(&self, persistence_path: PathBuf) {
         tokio::fs::create_dir_all(&persistence_path).await.ok();
 
-        // Remove persisted entries that can't be restored locally; librqbit
-        // would otherwise block on network metadata resolution (magnet restore)
-        // with no timeout, hanging startup forever.
-        match prune_unrestorable_torrents(&persistence_path).await {
-            Ok((kept, skipped)) => {
+        // Prune unrestorable entries (no local .torrent) so restore can't hang.
+        let pruned_hashes = match prune_unrestorable_torrents(&persistence_path).await {
+            Ok((kept, skipped_hashes)) => {
                 logger::debug(&format!(
                     "Persistence pre-check: {} torrent(s) restorable, {} skipped",
-                    kept, skipped
+                    kept,
+                    skipped_hashes.len()
                 ));
+                skipped_hashes
             }
-            Err(e) => logger::warn(&format!("Persistence pre-check failed: {:?}", e)),
-        }
+            Err(e) => {
+                logger::warn(&format!("Persistence pre-check failed: {:?}", e));
+                HashSet::new()
+            }
+        };
+
+        // Publish early so the DB manager can drop their rows without waiting.
+        *self.pruned_torrent_hashes.write().await = Some(pruned_hashes);
 
         let session = match tokio::time::timeout(
             Duration::from_secs(60),
