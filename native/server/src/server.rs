@@ -188,7 +188,10 @@ pub async fn run_server(
                 }
             }
         }
-        Err(e) => utils::logger::error(&format!("Failed to bind HTTP server: {}", e)),
+        Err(e) => utils::logger::error(&format!(
+            "Failed to bind HTTP server on {}: {}",
+            addr, e
+        )),
     }
 }
 
@@ -212,10 +215,22 @@ pub async fn run_server_loop(state: SharedState) {
             let config = state.context.cfg().await;
             config.value["server_port"].as_u64().unwrap_or(8080) as u16
         };
+        match env::var("NADEKO_SERVER_PORT")
+            .ok()
+            .and_then(|p| p.parse::<u16>().ok())
+        {
+            Some(env_port) if env_port != port => utils::logger::warn(&format!(
+                "config server_port ({}) differs from NADEKO_SERVER_PORT ({}); \
+                 nginx proxies to {}, so the API will be unreachable if the wrong port is bound",
+                port, env_port, env_port
+            )),
+            _ => utils::logger::debug(&format!("Server port from config: {}", port)),
+        }
         let restart_signal = state.restart_signal.clone();
         let shutdown_signal = state.shutdown_signal.clone();
 
         let router = create_router(state.clone(), governor_conf);
+        utils::logger::debug(&format!("Routes registered, attempting to bind port {}", port));
         run_server(router, port, restart_signal, shutdown_signal).await;
 
         cleanup_handle.abort();

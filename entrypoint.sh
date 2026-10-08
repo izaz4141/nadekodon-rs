@@ -76,7 +76,27 @@ echo "Starting API server..."
 $RUN_AS /usr/local/bin/nadekodon-server &
 SERVER_PID=$!
 
-sleep 2
+echo "Waiting for API server on port $NADEKO_SERVER_PORT..."
+SERVER_READY=0
+for i in $(seq 1 30); do
+    if curl -f -s "http://127.0.0.1:$NADEKO_SERVER_PORT/api/nadeko/system/status" >/dev/null 2>&1; then
+        SERVER_READY=1
+        echo "API server is ready (after ${i}s)."
+        break
+    fi
+    if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+        echo "ERROR: API server process exited during startup!" >&2
+        wait "$SERVER_PID"
+        exit 1
+    fi
+    sleep 1
+done
+
+if [ "$SERVER_READY" -ne 1 ]; then
+    echo "ERROR: API server did not become ready within 30s; refusing to start proxying (would return 502)." >&2
+    kill "$SERVER_PID" 2>/dev/null
+    exit 1
+fi
 
 echo "Serving UI and Proxy on port 3000..."
 $RUN_AS nginx -g "daemon off;" &
@@ -85,5 +105,22 @@ NGINX_PID=$!
 echo "Nadeko~don is ready!"
 echo "URL: http://localhost:3000"
 
-trap "kill $SERVER_PID $NGINX_PID 2>/dev/null" EXIT
-wait
+trap 'kill $SERVER_PID $NGINX_PID 2>/dev/null' EXIT
+trap 'exit 0' TERM INT
+
+# Supervise both processes: exit (and let the restart policy bring the
+# container back) instead of silently serving 502s when one of them dies.
+while true; do
+    if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+        echo "ERROR: API server exited unexpectedly; shutting down..." >&2
+        wait "$SERVER_PID"
+        kill "$NGINX_PID" 2>/dev/null
+        exit 1
+    fi
+    if ! kill -0 "$NGINX_PID" 2>/dev/null; then
+        echo "ERROR: nginx exited unexpectedly; shutting down..." >&2
+        kill "$SERVER_PID" 2>/dev/null
+        exit 1
+    fi
+    sleep 5
+done

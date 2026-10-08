@@ -25,6 +25,7 @@ async fn main() {
         std::env::var("NADEKO_SERVER_MASTER_KEY").expect("NADEKO_SERVER_MASTER_KEY is not set");
 
     // Bootstrap the config first: DM settings below derive from it.
+    logger::debug(&format!("Loading config from {}", config_path));
     let preloaded = match config::load_or_bootstrap(config_path.clone(), master_key.clone()).await {
         Ok((cfg, true)) => {
             logger::info("No config found, created a default one");
@@ -37,11 +38,17 @@ async fn main() {
         }
     };
     let mut initial_config = preloaded.value.clone();
+    logger::debug(&format!(
+        "Config loaded (on-disk server_port: {})",
+        preloaded.value["server_port"]
+    ));
 
     let mut api_key = initial_config["server_api_key"]
         .as_str()
         .and_then(server::resolve_api_key)
         .unwrap_or_else(|| Uuid::new_v4().to_string());
+
+    logger::debug("Resolving credentials and API key...");
 
     let get_str = |key: &str| initial_config[key].as_str().unwrap_or("").to_string();
 
@@ -102,7 +109,9 @@ async fn main() {
         }
     };
 
+    logger::debug("Building HTTP client...");
     let client = ncore::utils::url::build_browser_client().await;
+    logger::debug("HTTP client built");
 
     let settings = DMSettings {
         speed_limit: initial_config["speed_limit"].as_u64().unwrap_or(0),
@@ -119,22 +128,28 @@ async fn main() {
     let shutdown_signal = Arc::new(tokio::sync::Notify::new());
     let db_done_signal = Arc::new(tokio::sync::Notify::new());
 
+    logger::debug("Creating app context...");
     let context = AppContext::new(client, settings, shutdown_signal).await;
     context.set_master_key(master_key).await;
+    logger::debug("App context created, initializing config...");
     if let Err(e) = context.init_config(config_path).await {
         logger::error(&format!("Failed to initialize the config: {:?}", e));
         return;
     }
+    logger::debug("Config initialized");
 
     let dm = context.dm().await;
+    logger::debug("Initializing torrent session...");
     dm.init_torrent_session(PathBuf::from(format!(
         "{}/config/torrent_data",
         nadeko_home()
     )))
     .await;
+    logger::debug("Torrent session initialized");
 
     let db_path = PathBuf::from(format!("{}/config/nadekodon.db", nadeko_home()));
 
+    logger::debug("Starting database manager...");
     let context_clone = context.clone();
     tokio::spawn(async move {
         if let Err(e) = context_clone
@@ -142,6 +157,8 @@ async fn main() {
             .await
         {
             logger::error(&format!("Failed to start database manager: {:?}", e));
+        } else {
+            logger::debug("Database manager started");
         }
     });
 
@@ -149,6 +166,7 @@ async fn main() {
         .unwrap_or_else(|_| "8080".to_string())
         .parse()
         .unwrap_or(8080);
+    logger::debug(&format!("Resolved NADEKO_SERVER_PORT: {}", port));
 
     initial_config["download_folder"] = Value::String(format!("{}/downloads", nadeko_home()));
     initial_config["server_api_key"] = Value::String(api_key.clone());
@@ -169,8 +187,9 @@ async fn main() {
     };
 
     // Persist so disk matches what the server is actually using.
-    if let Err(e) = context.save_config(&initial_config).await {
-        logger::error(&format!("Failed to save the config: {:?}", e));
+    match context.save_config(&initial_config).await {
+        Ok(()) => logger::debug("Config saved"),
+        Err(e) => logger::error(&format!("Failed to save the config: {:?}", e)),
     }
 
     let state = Arc::new(server::AppState {
@@ -192,5 +211,6 @@ async fn main() {
         state_clone.shutdown_requested.store(true, Ordering::SeqCst);
     });
 
+    logger::debug("Startup sequence complete, entering server loop");
     server::run_server_loop(state).await;
 }
