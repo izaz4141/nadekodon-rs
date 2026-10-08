@@ -139,13 +139,11 @@ async fn main() {
     logger::debug("Config initialized");
 
     let dm = context.dm().await;
-    logger::debug("Initializing torrent session...");
-    dm.init_torrent_session(PathBuf::from(format!(
-        "{}/config/torrent_data",
-        nadeko_home()
-    )))
-    .await;
-    logger::debug("Torrent session initialized");
+    let torrent_data_dir = PathBuf::from(format!("{}/config/torrent_data", nadeko_home()));
+    logger::debug("Starting torrent session initialization in background...");
+    tokio::spawn(async move {
+        dm.init_torrent_session(torrent_data_dir).await;
+    });
 
     let db_path = PathBuf::from(format!("{}/config/nadekodon.db", nadeko_home()));
 

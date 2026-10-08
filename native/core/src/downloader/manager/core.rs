@@ -1,11 +1,12 @@
 use indexmap::IndexMap;
 use std::{
     collections::{HashMap, HashSet},
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{
         Arc,
         atomic::{AtomicU8, Ordering},
     },
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::sync::{Mutex, RwLock, broadcast, mpsc};
 
@@ -15,6 +16,120 @@ use crate::utils::types::{DMSettings, DownloadState, WorkerEvent};
 use librqbit::{Session, SessionOptions, SessionPersistenceConfig};
 
 use crate::downloader::manager::DownloadManager;
+
+/// Inspects librqbit's `session.json` persistence file and removes entries
+/// that cannot be restored without fetching metadata from the network (i.e.
+/// those whose `<info_hash>.torrent` bytes are missing).
+///
+/// librqbit restores such entries as magnets and blocks inside
+/// `Session::new_with_opts` on `resolve_magnet`, which can wait forever when
+/// DHT is disabled and no peers are reachable — hanging application startup.
+/// Pruning them first makes session initialization structurally unbangable.
+///
+/// Returns `(remaining, skipped)` torrent counts.
+async fn prune_unrestorable_torrents(persistence_dir: &Path) -> anyhow::Result<(usize, usize)> {
+    let session_file = persistence_dir.join("session.json");
+    let contents = match tokio::fs::read_to_string(&session_file).await {
+        Ok(c) => c,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok((0, 0)),
+        Err(e) => {
+            logger::warn(&format!(
+                "Could not read {} for pre-clean: {}",
+                session_file.display(),
+                e
+            ));
+            return Ok((0, 0));
+        }
+    };
+
+    let mut root: serde_json::Value = match serde_json::from_str(&contents) {
+        Ok(v) => v,
+        Err(e) => {
+            logger::warn(&format!(
+                "session.json is malformed ({}); leaving it untouched",
+                e
+            ));
+            return Ok((0, 0));
+        }
+    };
+
+    let torrents = match root.get_mut("torrents").and_then(|v| v.as_object_mut()) {
+        Some(map) => map,
+        None => {
+            logger::warn("session.json has no \"torrents\" object; leaving it untouched");
+            return Ok((0, 0));
+        }
+    };
+
+    // Compute restorability first (can't await inside `retain`).
+    let mut restorable = HashSet::new();
+    let mut skipped: Vec<(String, String)> = Vec::new();
+    for (id, entry) in torrents.iter() {
+        let hash = entry
+            .get("info_hash")
+            .and_then(|h| h.as_str())
+            .unwrap_or("")
+            .to_string();
+        let is_restorable = if hash.is_empty() {
+            false
+        } else {
+            let file = persistence_dir.join(format!("{}.torrent", hash));
+            match tokio::fs::metadata(&file).await {
+                Ok(m) => m.len() > 0,
+                Err(_) => false,
+            }
+        };
+        if is_restorable {
+            restorable.insert(id.clone());
+        } else {
+            skipped.push((id.clone(), hash));
+        }
+    }
+
+    if skipped.is_empty() {
+        return Ok((torrents.len(), 0));
+    }
+
+    for (id, hash) in &skipped {
+        logger::warn(&format!(
+            "Skipping torrent {} ({}): no restorable .torrent file; removing from session.json",
+            id, hash
+        ));
+    }
+
+    // Back the original up before touching it.
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let backup_path = persistence_dir.join(format!("session.json.bak-{}", ts));
+    match tokio::fs::copy(&session_file, &backup_path).await {
+        Ok(_) => logger::info(&format!(
+            "Backed up session.json to {}",
+            backup_path.display()
+        )),
+        Err(e) => logger::warn(&format!(
+            "Failed to back up session.json to {}: {}",
+            backup_path.display(),
+            e
+        )),
+    }
+
+    torrents.retain(|id, _| restorable.contains(id));
+    let remaining = torrents.len();
+
+    let new_contents = serde_json::to_string_pretty(&root)?;
+    let tmp_path = persistence_dir.join("session.json.tmp");
+    tokio::fs::write(&tmp_path, &new_contents).await?;
+    tokio::fs::rename(&tmp_path, &session_file).await?;
+    logger::info(&format!(
+        "Pruned {} unrestorable torrent(s) from session.json ({} remain)",
+        skipped.len(),
+        remaining
+    ));
+
+    Ok((remaining, skipped.len()))
+}
 
 impl DownloadManager {
     pub async fn new(
@@ -57,20 +172,59 @@ impl DownloadManager {
     pub async fn init_torrent_session(&self, persistence_path: PathBuf) {
         tokio::fs::create_dir_all(&persistence_path).await.ok();
 
-        let session = Session::new_with_opts(
-            persistence_path.clone(),
-            SessionOptions {
-                disable_dht: true,
-                disable_dht_persistence: true,
-                fastresume: false,
-                persistence: Some(SessionPersistenceConfig::Json {
-                    folder: Some(persistence_path),
-                }),
-                ..Default::default()
-            },
+        // Remove persisted entries that can't be restored locally; librqbit
+        // would otherwise block on network metadata resolution (magnet restore)
+        // with no timeout, hanging startup forever.
+        match prune_unrestorable_torrents(&persistence_path).await {
+            Ok((kept, skipped)) => {
+                logger::debug(&format!(
+                    "Persistence pre-check: {} torrent(s) restorable, {} skipped",
+                    kept, skipped
+                ));
+            }
+            Err(e) => logger::warn(&format!("Persistence pre-check failed: {:?}", e)),
+        }
+
+        let session = match tokio::time::timeout(
+            Duration::from_secs(60),
+            Session::new_with_opts(
+                persistence_path.clone(),
+                SessionOptions {
+                    disable_dht: true,
+                    disable_dht_persistence: true,
+                    fastresume: false,
+                    persistence: Some(SessionPersistenceConfig::Json {
+                        folder: Some(persistence_path),
+                    }),
+                    ..Default::default()
+                },
+            ),
         )
         .await
-        .expect("Failed to initialize torrent session");
+        {
+            Ok(Ok(s)) => s,
+            Ok(Err(e)) => {
+                logger::error(&format!(
+                    "Failed to initialize torrent session: {:#}",
+                    e
+                ));
+                logger::error(
+                    "Torrent session unavailable; torrent operations will report \
+                     'Torrent session not initialized'",
+                );
+                return;
+            }
+            Err(_) => {
+                logger::error(
+                    "Torrent session initialization timed out after 60s; \
+                     leaving torrent session unavailable instead of hanging startup",
+                );
+                return;
+            }
+        };
+
+        let restored_count = session.with_torrents(|torrents| torrents.count());
+        logger::debug(&format!("Restored {} torrent(s) from persistence", restored_count));
 
         // Pause all torrents on startup
         let handles_to_pause = session.with_torrents(|torrents| {
@@ -84,10 +238,28 @@ impl DownloadManager {
                 })
                 .collect::<Vec<_>>()
         });
+        logger::debug(&format!(
+            "Pausing {} still-active torrent(s)",
+            handles_to_pause.len()
+        ));
         for h in handles_to_pause {
-            let _ = h.wait_until_initialized().await;
-            let _ = session.pause(&h).await;
-            logger::debug(&format!("Paused torrent: {}", h.info_hash().as_string()));
+            let hash = h.info_hash().as_string();
+            logger::debug(&format!("Pausing torrent {}...", hash));
+            match tokio::time::timeout(Duration::from_secs(30), async {
+                let _ = h.wait_until_initialized().await;
+                session.pause(&h).await
+            })
+            .await
+            {
+                Ok(Ok(_)) => logger::debug(&format!("Paused torrent: {}", hash)),
+                Ok(Err(e)) => {
+                    logger::warn(&format!("Failed to pause torrent {}: {:#}", hash, e))
+                }
+                Err(_) => logger::warn(&format!(
+                    "Timed out pausing torrent {} after 30s; continuing startup",
+                    hash
+                )),
+            }
         }
 
         let mut session_guard = self.torrent_session.write().await;
