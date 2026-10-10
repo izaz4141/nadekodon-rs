@@ -19,6 +19,7 @@ services:
       - NADEKO_SERVER_MASTER_KEY=master_key # 64-character hex-encoded master key (required) `openssl rand -hex 32` - CHANGE IN PRODUCTION
       - NADEKO_USERNAME=admin # Web UI login username - CHANGE IN PRODUCTION
       - NADEKO_PASSWORD=admin # Web UI login password - CHANGE IN PRODUCTION
+      - NADEKO_LOG_LEVEL=warn # Minimum log level: debug, info, warn, or error
     volumes:
       - ./data/downloads:/home/nadeko/downloads # Downloaded files storage
       - ./data/config:/home/nadeko/config # Application configuration (settings.json, etc.)

@@ -110,6 +110,19 @@ curl -o docker-compose.yml https://raw.githubusercontent.com/izaz4141/nadekodon-
 docker compose up -d
 ```
 
+##### Environment Variables
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `TZ` | `UTC` | Container timezone. See the [list of tz database time zones](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones). |
+| `NADEKO_HOME` | `/home/nadeko` | Base data folder for downloads and config. |
+| `NADEKO_SERVER_PORT` | `8080` | Internal API server port (inside the container). |
+| `NADEKO_SERVER_API_KEY` | – | API authentication key (required). **Change in production.** |
+| `NADEKO_SERVER_MASTER_KEY` | – | 64-character hex-encoded master key (required). Generate with `openssl rand -hex 32`. **Change in production.** |
+| `NADEKO_USERNAME` | `admin` | Web UI login username. **Change in production.** |
+| `NADEKO_PASSWORD` | `admin` | Web UI login password. **Change in production.** |
+| `NADEKO_LOG_LEVEL` | `warn` | Minimum log level to output. One of `debug`, `info`, `warn`, or `error`. Logs below this level are suppressed. |
+
 ## Notes
 
 - **Default Credentials**: The default username and password is `admin`.
