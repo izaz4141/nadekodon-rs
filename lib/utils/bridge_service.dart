@@ -178,9 +178,7 @@ class BridgeService {
   ) => rinf_impl.writeLocalConfig(configPath, settings);
 
   /// Reads [configPath] via the hub (native-only).
-  static Future<
-    ({bool success, String? error, Map<String, dynamic>? settings})
-  >
+  static Future<({bool success, String? error, Map<String, dynamic>? settings})>
   readLocalConfig(String configPath) => rinf_impl.readLocalConfig(configPath);
 
   static Future<bool> restartServer() => impl.restartServer();

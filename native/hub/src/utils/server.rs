@@ -175,23 +175,22 @@ pub async fn handle_load_local_config() {
     while let Some(signal_pack) = receiver.recv().await {
         let msg = signal_pack.message;
         let response = match tokio::fs::read_to_string(&msg.config_path).await {
-            Ok(raw) => match serde_json::from_str::<
-                serde_json::Map<String, serde_json::Value>,
-            >(&raw)
-            {
-                Ok(_) => LoadLocalConfigResponse {
-                    id: msg.id,
-                    success: true,
-                    error: None,
-                    settings_json: Some(raw),
-                },
-                Err(e) => LoadLocalConfigResponse {
-                    id: msg.id,
-                    success: false,
-                    error: Some(format!("invalid config JSON: {}", e)),
-                    settings_json: None,
-                },
-            },
+            Ok(raw) => {
+                match serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&raw) {
+                    Ok(_) => LoadLocalConfigResponse {
+                        id: msg.id,
+                        success: true,
+                        error: None,
+                        settings_json: Some(raw),
+                    },
+                    Err(e) => LoadLocalConfigResponse {
+                        id: msg.id,
+                        success: false,
+                        error: Some(format!("invalid config JSON: {}", e)),
+                        settings_json: None,
+                    },
+                }
+            }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => LoadLocalConfigResponse {
                 id: msg.id,
                 success: true,

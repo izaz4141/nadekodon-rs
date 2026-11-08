@@ -103,6 +103,20 @@ pub struct DownloadInfo {
     pub seeding_time_override: Option<u64>,
 }
 
+/// Lightweight progress snapshot used by the periodic database tick.
+///
+/// Deliberately excludes `history`, `url`, `dest`, and other metadata so the
+/// tick never clones or serializes more than progress bytes.
+#[derive(Debug, Clone)]
+pub struct DownloadProgress {
+    pub id: Uuid,
+    pub downloaded: u64,
+    pub uploaded: u64,
+    pub state: DownloadState,
+    pub parts: Vec<PartInfo>,
+    pub updated_at: u64,
+}
+
 #[derive(Debug, Clone)]
 pub enum WorkerEvent {
     Completed(Uuid),

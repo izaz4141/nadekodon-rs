@@ -148,17 +148,18 @@ async fn main() {
     let db_path = PathBuf::from(format!("{}/config/nadekodon.db", nadeko_home()));
 
     logger::debug("Starting database manager...");
-    let context_clone = context.clone();
-    tokio::spawn(async move {
-        if let Err(e) = context_clone
-            .start_database_manager(db_path, db_done_signal)
-            .await
-        {
+    // Initialize before serving so `AppContext::db()` is always available.
+    let db = match context.init_database(db_path, db_done_signal).await {
+        Ok(db) => db,
+        Err(e) => {
             logger::error(&format!("Failed to start database manager: {:?}", e));
-        } else {
-            logger::debug("Database manager started");
+            return;
         }
+    };
+    tokio::spawn(async move {
+        db.run_loop().await;
     });
+    logger::debug("Database manager started");
 
     let port: u16 = std::env::var("NADEKO_SERVER_PORT")
         .unwrap_or_else(|_| "8080".to_string())

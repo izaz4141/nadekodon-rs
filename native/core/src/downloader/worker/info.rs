@@ -4,11 +4,53 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use crate::utils::types::DownloadInfo;
+use crate::utils::logger;
+use crate::utils::types::{DownloadInfo, DownloadProgress};
 
 use crate::downloader::worker::DownloadWorker;
 
 impl DownloadWorker {
+    fn now_ms() -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64
+    }
+
+    /// Progress-only snapshot: no history, metadata, or other allocations.
+    pub async fn progress_snapshot(&self) -> DownloadProgress {
+        let (id, state, mut parts) = {
+            let info = self.info.lock().await;
+            (info.id, info.state.clone(), info.parts.clone())
+        };
+
+        let pp = self.part_progress.read().await;
+        if parts.len() == pp.len() {
+            for (i, p) in pp.iter().enumerate() {
+                parts[i].current = p.load(Ordering::SeqCst);
+            }
+        }
+
+        DownloadProgress {
+            id,
+            downloaded: self.downloaded.load(Ordering::SeqCst),
+            uploaded: self.uploaded.load(Ordering::SeqCst),
+            state,
+            parts,
+            updated_at: Self::now_ms(),
+        }
+    }
+
+    /// Persist this worker through the app context's database manager.
+    pub async fn persist_to_db(&self) {
+        let Some(dm) = self.dm.upgrade() else {
+            logger::error("DownloadManager dropped before persistence could run");
+            return;
+        };
+        let id = self.info.lock().await.id;
+        dm.persist(id).await;
+    }
+
     pub async fn sync_to_info(&self) {
         let mut info = self.info.lock().await;
         info.downloaded = self.downloaded.load(Ordering::SeqCst);
@@ -82,19 +124,28 @@ impl DownloadWorker {
             .await
             .map_err(|e| anyhow::anyhow!("{}", e))?;
 
-        let mut info = self.info.lock().await;
-        info.category = Some(category);
+        {
+            let mut info = self.info.lock().await;
+            info.category = Some(category);
+        }
+        self.persist_to_db().await;
         Ok(())
     }
 
     pub async fn clear_category(&self) {
-        let mut info = self.info.lock().await;
-        info.category = None;
+        {
+            let mut info = self.info.lock().await;
+            info.category = None;
+        }
+        self.persist_to_db().await;
     }
 
     pub async fn set_seeding_limits(&self, ratio: Option<f32>, time: Option<u64>) {
-        let mut info = self.info.lock().await;
-        info.seeding_ratio_override = ratio;
-        info.seeding_time_override = time;
+        {
+            let mut info = self.info.lock().await;
+            info.seeding_ratio_override = ratio;
+            info.seeding_time_override = time;
+        }
+        self.persist_to_db().await;
     }
 }

@@ -26,8 +26,7 @@ class _FileAssociationNative implements FileAssociationService {
       r'Software\Classes\NadekoDon.Torrent\shell\open\command';
   static const String _torrentOpenWithPath =
       r'Software\Classes\.torrent\OpenWithProgids';
-  static const String _magnetProgIdPath =
-      r'Software\Classes\NadekoDon.Magnet';
+  static const String _magnetProgIdPath = r'Software\Classes\NadekoDon.Magnet';
   static const String _magnetCommandPath =
       r'Software\Classes\NadekoDon.Magnet\shell\open\command';
   static const String _magnetOpenWithPath =
@@ -40,8 +39,18 @@ class _FileAssociationNative implements FileAssociationService {
     if (!Platform.isWindows) return false;
     final command = _command();
     try {
-      return _isOffered(_torrentOpenWithPath, _torrentProgId, _torrentCommandPath, command) &&
-          _isOffered(_magnetOpenWithPath, _magnetProgId, _magnetCommandPath, command);
+      return _isOffered(
+            _torrentOpenWithPath,
+            _torrentProgId,
+            _torrentCommandPath,
+            command,
+          ) &&
+          _isOffered(
+            _magnetOpenWithPath,
+            _magnetProgId,
+            _magnetCommandPath,
+            command,
+          );
     } catch (e) {
       log('File association lookup failed: $e', isError: true);
       return false;
@@ -70,8 +79,14 @@ class _FileAssociationNative implements FileAssociationService {
 
   /// Whether [progId] is listed for the format *and* still runs this build, so
   /// a removed list entry or a moved executable both get written again.
-  bool _isOffered(String listPath, String progId, String commandPath, String command) {
-    return _readValue(listPath, progId) == '' && _readDefault(commandPath) == command;
+  bool _isOffered(
+    String listPath,
+    String progId,
+    String commandPath,
+    String command,
+  ) {
+    return _readValue(listPath, progId) == '' &&
+        _readDefault(commandPath) == command;
   }
 
   String? _readDefault(String path) => _readValue(path, '');
@@ -141,5 +156,4 @@ class _FileAssociationNative implements FileAssociationService {
   }
 }
 
-FileAssociationService getFileAssociationService() =>
-    _FileAssociationNative();
+FileAssociationService getFileAssociationService() => _FileAssociationNative();

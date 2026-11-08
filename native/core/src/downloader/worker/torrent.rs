@@ -196,6 +196,10 @@ impl DownloadWorker {
             self.update_total_size(Some(total)).await;
         }
 
+        // Destination, hash, parts, and total size are now finalized: commit
+        // the full metadata row once. The tick only writes bytes from here on.
+        self.persist_to_db().await;
+
         // Downloading Loop
         loop {
             // Properly pause/unpause using Session methods

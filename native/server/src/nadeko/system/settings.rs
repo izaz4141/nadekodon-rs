@@ -1,13 +1,8 @@
 use crate::response::{json_error, json_ok};
 use crate::server::{SharedState, nadeko_home};
-use axum::{
-    Json,
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-};
-use nadekodon_core::utils::logger;
+use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
 use nadekodon_core::utils::config::{PRIVATE_CONFIG_KEYS, strip_keys};
+use nadekodon_core::utils::logger;
 use nadekodon_core::utils::types::DMSettings;
 use serde::Serialize;
 use serde_json::Value;

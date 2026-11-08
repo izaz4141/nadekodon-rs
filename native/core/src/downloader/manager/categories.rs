@@ -31,12 +31,11 @@ impl DownloadManager {
         }
 
         categories.insert(name.clone(), CategoryInfo { name, save_path });
+        // Drop the categories lock before awaiting the database write.
+        drop(categories);
 
         if let Some(ctx) = self.context.upgrade() {
-            let db = ctx.db().await;
-            tokio::spawn(async move {
-                db.save_categories().await;
-            });
+            ctx.db().await.save_categories().await;
         }
 
         Ok(())
@@ -76,10 +75,7 @@ impl DownloadManager {
         }
 
         if let Some(ctx) = self.context.upgrade() {
-            let db = ctx.db().await;
-            tokio::spawn(async move {
-                db.save_categories().await;
-            });
+            ctx.db().await.save_categories().await;
         }
 
         Ok(())

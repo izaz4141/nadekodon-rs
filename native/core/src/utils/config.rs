@@ -65,10 +65,7 @@ fn decrypt_secrets(value: &mut Value, master_key: &str) {
         }
     }
 
-    if let Some(accounts) = value
-        .get_mut("accounts")
-        .and_then(|v| v.as_array_mut())
-    {
+    if let Some(accounts) = value.get_mut("accounts").and_then(|v| v.as_array_mut()) {
         for account in accounts.iter_mut() {
             if let Some(encrypted) = account.get("api_key").and_then(|v| v.as_str())
                 && valid_encryption_format(encrypted)
@@ -97,10 +94,7 @@ fn protect_secrets(value: &mut Value, master_key: &str) -> Result<()> {
         }
     }
 
-    if let Some(accounts) = value
-        .get_mut("accounts")
-        .and_then(|v| v.as_array_mut())
-    {
+    if let Some(accounts) = value.get_mut("accounts").and_then(|v| v.as_array_mut()) {
         for account in accounts.iter_mut() {
             if let Some(plain) = account.get("api_key").and_then(|v| v.as_str())
                 && !plain.is_empty()

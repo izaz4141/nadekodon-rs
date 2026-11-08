@@ -68,7 +68,9 @@ async fn handle_merge_success(
         seeding_time_override: None,
     };
 
+    let final_id = final_info.id;
     manager.load_snapshot(vec![final_info]).await;
+    manager.persist(final_id).await;
 
     if let Some(v_path) = video_dest {
         tokio::fs::remove_file(v_path).await?;

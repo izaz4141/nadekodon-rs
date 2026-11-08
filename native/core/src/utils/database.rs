@@ -1,24 +1,101 @@
 use crate::utils::logger;
-use crate::utils::types::{CategoryInfo, DownloadInfo, DownloadState, DownloadType, PartInfo};
+use crate::utils::types::{
+    CategoryInfo, DownloadInfo, DownloadProgress, DownloadState, DownloadType, PartInfo,
+};
 
 use sqlx::{Pool, Row, Sqlite, sqlite::SqlitePoolOptions};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Component, Path, PathBuf};
-use std::sync::{Arc, Weak};
-use std::time::Duration;
-use tokio::sync::{Notify, RwLock};
+use std::sync::{
+    Arc, Weak,
+    atomic::{AtomicBool, Ordering},
+};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tokio::sync::{Mutex, Notify, RwLock};
 use tokio::time::sleep;
 use uuid::Uuid;
 
 use crate::app_context::AppContext;
+use crate::downloader::manager::DownloadManager;
 
-#[derive(Debug)]
+/// A failed write that still needs to reach SQLite.
+///
+/// Only one operation is kept per download: a later `Delete` always replaces a
+/// queued `Upsert` so a retried insert can never resurrect a deleted row.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PendingOp {
+    Upsert,
+    Delete,
+}
+
+#[derive(Debug, Default)]
+struct Outbox {
+    ops: HashMap<Uuid, PendingOp>,
+    warned: HashSet<Uuid>,
+}
+
+impl Outbox {
+    fn note(&mut self, id: Uuid, op: PendingOp) {
+        match op {
+            PendingOp::Delete => {
+                self.ops.insert(id, PendingOp::Delete);
+            }
+            PendingOp::Upsert => {
+                self.ops.entry(id).or_insert(PendingOp::Upsert);
+            }
+        }
+    }
+
+    fn clear(&mut self, id: Uuid) {
+        self.ops.remove(&id);
+        self.warned.remove(&id);
+    }
+
+    fn warn_once(&mut self, id: Uuid, action: &str, err: &sqlx::Error) {
+        if self.warned.insert(id) {
+            logger::error(&format!(
+                "Database {} failed for {}; will retry: {:?}",
+                action, id, err
+            ));
+        }
+    }
+}
+
+/// The progress columns written by the periodic tick.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ProgressCheckpoint {
+    downloaded: u64,
+    uploaded: u64,
+    state: String,
+}
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
 pub struct DatabaseManager {
     pool: Pool<Sqlite>,
     context: Weak<AppContext>,
     shutdown_signal: Arc<Notify>,
     db_done_signal: Arc<Notify>,
-    last_saved: Arc<RwLock<HashMap<Uuid, (u64, u64, String)>>>,
+    write_gate: Mutex<()>,
+    last_saved: RwLock<HashMap<Uuid, ProgressCheckpoint>>,
+    outbox: Mutex<Outbox>,
+    categories_dirty: AtomicBool,
+    categories_loaded: AtomicBool,
+}
+
+impl std::fmt::Debug for DatabaseManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DatabaseManager")
+            .field("pool", &self.pool)
+            .field("categories_dirty", &self.categories_dirty)
+            .field("categories_loaded", &self.categories_loaded)
+            .finish()
+    }
 }
 
 impl DatabaseManager {
@@ -33,23 +110,29 @@ impl DatabaseManager {
             context,
             shutdown_signal,
             db_done_signal,
-            last_saved: Arc::new(RwLock::new(HashMap::new())),
+            write_gate: Mutex::new(()),
+            last_saved: RwLock::new(HashMap::new()),
+            outbox: Mutex::new(Outbox::default()),
+            categories_dirty: AtomicBool::new(false),
+            categories_loaded: AtomicBool::new(false),
         })
     }
 
+    /// Timer-only task: never owns the pool and never blocks an action.
     pub async fn run_loop(self: Arc<Self>) {
         loop {
             tokio::select! {
                 _ = sleep(Duration::from_secs(5)) => {
-                    self.save_downloads().await;
+                    self.retry_outbox().await;
+                    self.save_active_progress().await;
+                    if self.categories_dirty.load(Ordering::SeqCst) {
+                        self.save_categories().await;
+                    }
                 }
                 _ = self.shutdown_signal.notified() => {
-                    if let Some(ctx) = self.context.upgrade() {
-                        let dm = ctx.dm().await;
-                        dm.sync_active_workers().await;
-                    }
-                    self.save_downloads().await;
+                    self.save_active_progress().await;
                     self.save_categories().await;
+                    self.retry_outbox().await;
                     self.db_done_signal.notify_waiters();
                     break;
                 }
@@ -163,6 +246,9 @@ impl DatabaseManager {
             .fetch_all(&self.pool)
             .await?;
 
+        // The in-memory map is now authoritative, so reconciliation may prune.
+        self.categories_loaded.store(true, Ordering::SeqCst);
+
         let mut categories = HashMap::new();
         for row in rows {
             let name: String = row.get("name");
@@ -203,10 +289,13 @@ impl DatabaseManager {
         let db_url = format!("sqlite://{}", path.display());
 
         let pool = SqlitePoolOptions::new()
-            .max_connections(10)
+            .max_connections(4)
             .after_connect(|conn, _metadata| {
                 Box::pin(async move {
                     sqlx::query("PRAGMA journal_mode=WAL")
+                        .execute(&mut *conn)
+                        .await?;
+                    sqlx::query("PRAGMA synchronous=NORMAL")
                         .execute(&mut *conn)
                         .await?;
                     sqlx::query("PRAGMA busy_timeout=5000")
@@ -286,136 +375,422 @@ impl DatabaseManager {
         Ok(pool)
     }
 
-    pub async fn save_downloads(&self) {
-        if let Some(ctx) = self.context.upgrade() {
-            let dm = ctx.dm().await;
-            let deletions = dm.drain_pending_deletions().await;
-            let mut failed_deletions = Vec::new();
-            for id in deletions {
-                let id_str = id.to_string();
-                if let Err(e) = sqlx::query("DELETE FROM downloads WHERE id = ?")
-                    .bind(id_str)
-                    .execute(&self.pool)
-                    .await
-                {
-                    logger::error(&format!(
-                        "Failed to delete download {} from DB: {:?}",
-                        id, e
-                    ));
-                    failed_deletions.push(id);
-                }
+    /// Full-row upsert for one download, read under the write gate so a delete
+    /// or a newer action can never be overwritten by a stale snapshot.
+    pub async fn save_download(&self, id: Uuid) {
+        let _gate = self.write_gate.lock().await;
+
+        let Some(ctx) = self.context.upgrade() else {
+            logger::error(&format!(
+                "AppContext dropped while saving download {}; skipping write",
+                id
+            ));
+            return;
+        };
+        let dm = ctx.dm().await;
+        let Some(worker) = dm.get_worker(id).await else {
+            // The worker was removed (delete/merge). Never re-insert it.
+            return;
+        };
+
+        let mut info = worker.snapshot_info().await;
+        info.updated_at = now_ms();
+
+        match self.upsert_full(&info).await {
+            Ok(()) => {
+                self.outbox.lock().await.clear(id);
+                self.last_saved.write().await.insert(
+                    id,
+                    ProgressCheckpoint {
+                        downloaded: info.downloaded,
+                        uploaded: info.uploaded,
+                        state: format!("{:?}", info.state),
+                    },
+                );
             }
-
-            if !failed_deletions.is_empty() {
-                dm.requeue_pending_deletions(failed_deletions).await;
+            Err(e) => {
+                let mut outbox = self.outbox.lock().await;
+                outbox.note(id, PendingOp::Upsert);
+                outbox.warn_once(id, "save", &e);
             }
+        }
+    }
 
-            let downloads = match dm.list_all().await {
-                Ok(d) => d,
-                Err(e) => {
-                    logger::error(&format!("Failed to get downloads list: {:?}", e));
-                    return;
-                }
-            };
-            let mut last_saved = self.last_saved.write().await;
-            for download in downloads {
-                let id = download.id;
-                let state = format!("{:?}", download.state);
-                let checkpoint = (download.downloaded, download.uploaded, state.clone());
+    /// Immediate row removal. A failure is retried through the outbox and can
+    /// never be downgraded to an upsert.
+    pub async fn delete_download(&self, id: Uuid) {
+        let _gate = self.write_gate.lock().await;
 
-                if last_saved.get(&id) == Some(&checkpoint) {
+        let result = sqlx::query("DELETE FROM downloads WHERE id = ?")
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await;
+
+        match result {
+            Ok(_) => {
+                let mut outbox = self.outbox.lock().await;
+                outbox.clear(id);
+                drop(outbox);
+                self.last_saved.write().await.remove(&id);
+            }
+            Err(e) => {
+                let mut outbox = self.outbox.lock().await;
+                outbox.note(id, PendingOp::Delete);
+                outbox.warn_once(id, "delete", &e);
+            }
+        }
+    }
+
+    /// Periodic progress flush. Only `DownloadManager::ongoing` ids are read,
+    /// in chunks of 64 rows per gate acquisition + transaction.
+    pub async fn save_active_progress(&self) {
+        let Some(ctx) = self.context.upgrade() else {
+            return;
+        };
+        let dm = ctx.dm().await;
+        let ids = dm.ongoing_ids().await;
+
+        if ids.is_empty() {
+            self.last_saved.write().await.clear();
+            return;
+        }
+
+        let live: HashSet<Uuid> = ids.iter().copied().collect();
+        self.last_saved
+            .write()
+            .await
+            .retain(|id, _| live.contains(id));
+
+        for chunk in ids.chunks(64) {
+            let _gate = self.write_gate.lock().await;
+
+            let mut writes: Vec<(DownloadProgress, bool)> = Vec::new();
+            let mut vanished = Vec::new();
+
+            for id in chunk {
+                let Some(worker) = dm.get_worker(*id).await else {
+                    vanished.push(*id);
+                    continue;
+                };
+
+                let progress = worker.progress_snapshot().await;
+                let checkpoint = ProgressCheckpoint {
+                    downloaded: progress.downloaded,
+                    uploaded: progress.uploaded,
+                    state: format!("{:?}", progress.state),
+                };
+                let previous = self.last_saved.read().await.get(id).cloned();
+                if previous.as_ref() == Some(&checkpoint) {
                     continue;
                 }
 
-                let id_str = id.to_string();
-                let url = download.url;
-                let dest = download.dest.to_string_lossy().to_string();
-                let total_size = download.total_size.map(|s| s as i64);
-                let downloaded = download.downloaded as i64;
-                let uploaded = download.uploaded as i64;
-                let added_at = download.added_at as i64;
-                let updated_at = download.updated_at as i64;
-                let download_type = format!("{:?}", download.download_type);
-                let torrent_hash = download.torrent_hash;
-                let referer = download.referer;
-                let category = download.category;
-                let seeding_ratio_override = download.seeding_ratio_override;
-                let seeding_time_override = download.seeding_time_override.map(|s| s as i64);
+                // `parts` only carries per-part byte offsets; skip its JSON
+                // entirely when no bytes moved (the seeding fast path).
+                let include_parts = previous
+                    .as_ref()
+                    .map(|p| p.downloaded != progress.downloaded)
+                    .unwrap_or(true);
+                writes.push((progress, include_parts));
+            }
 
-                let parts = serde_json::to_string(&download.parts).unwrap_or_default();
+            if !vanished.is_empty() {
+                for id in &vanished {
+                    dm.ongoing_remove(*id).await;
+                }
+                let mut last_saved = self.last_saved.write().await;
+                for id in &vanished {
+                    last_saved.remove(id);
+                }
+            }
 
-                let result = sqlx::query(
-                    r#"
-                    INSERT INTO downloads (id, url, dest, total_size, downloaded, uploaded, state, parts, added_at, updated_at, download_type, torrent_hash, referer, category, seeding_ratio_override, seeding_time_override)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(id) DO UPDATE SET
-                        total_size = excluded.total_size,
-                        downloaded = excluded.downloaded,
-                        uploaded = excluded.uploaded,
-                        state = excluded.state,
-                        parts = excluded.parts,
-                        updated_at = excluded.updated_at,
-                        download_type = excluded.download_type,
-                        torrent_hash = excluded.torrent_hash,
-                        referer = excluded.referer,
-                        category = excluded.category,
-                        seeding_ratio_override = excluded.seeding_ratio_override,
-                        seeding_time_override = excluded.seeding_time_override;
-                    "#
-                )
-                .bind(id_str)
-                .bind(url)
-                .bind(dest)
-                .bind(total_size)
-                .bind(downloaded)
-                .bind(uploaded)
-                .bind(state)
-                .bind(parts)
-                .bind(added_at)
-                .bind(updated_at)
-                .bind(download_type)
-                .bind(torrent_hash)
-                .bind(referer)
-                .bind(category)
-                .bind(seeding_ratio_override)
-                .bind(seeding_time_override)
-                .execute(&self.pool)
-                .await;
+            if writes.is_empty() {
+                continue;
+            }
 
-                if let Err(e) = result {
-                    logger::error(&format!("Failed to save download to DB: {:?}", e));
-                } else {
-                    last_saved.insert(id, checkpoint);
+            match self.write_chunk(&dm, &writes).await {
+                Ok(()) => {
+                    let mut last_saved = self.last_saved.write().await;
+                    for (progress, _) in &writes {
+                        last_saved.insert(
+                            progress.id,
+                            ProgressCheckpoint {
+                                downloaded: progress.downloaded,
+                                uploaded: progress.uploaded,
+                                state: format!("{:?}", progress.state),
+                            },
+                        );
+                    }
+                }
+                Err(e) => {
+                    let mut outbox = self.outbox.lock().await;
+                    for (progress, _) in &writes {
+                        outbox.note(progress.id, PendingOp::Upsert);
+                        outbox.warn_once(progress.id, "progress", &e);
+                    }
                 }
             }
         }
     }
 
+    /// Full reconciliation of the category table in a single transaction.
+    /// Retried on the next tick if it fails.
     pub async fn save_categories(&self) {
-        if let Some(ctx) = self.context.upgrade() {
-            let dm = ctx.dm().await;
-            let categories = dm.categories.read().await.clone();
-            for (_name, info) in categories {
-                let save_path = info
-                    .save_path
-                    .as_ref()
-                    .map(|p| p.to_string_lossy().to_string());
+        let _gate = self.write_gate.lock().await;
 
-                let result = sqlx::query(
-                    r#"
-                    INSERT INTO categories (name, save_path) VALUES (?, ?)
-                    ON CONFLICT(name) DO UPDATE SET save_path = excluded.save_path;
-                    "#,
-                )
-                .bind(&info.name)
-                .bind(save_path)
-                .execute(&self.pool)
-                .await;
+        let Some(ctx) = self.context.upgrade() else {
+            return;
+        };
+        let dm = ctx.dm().await;
+        let categories: Vec<CategoryInfo> = {
+            let map = dm.categories.read().await;
+            map.values().cloned().collect()
+        };
 
-                if let Err(e) = result {
-                    logger::error(&format!("Failed to save category {}: {:?}", info.name, e));
+        // Only prune rows once the stored set has actually been loaded; otherwise
+        // an empty/partial in-memory map would erase categories still on disk.
+        let prune = self.categories_loaded.load(Ordering::SeqCst);
+        match self.reconcile_categories(&categories, prune).await {
+            Ok(()) => self.categories_dirty.store(false, Ordering::SeqCst),
+            Err(e) => {
+                self.categories_dirty.store(true, Ordering::SeqCst);
+                logger::error(&format!("Failed to save categories; will retry: {:?}", e));
+            }
+        }
+    }
+
+    async fn reconcile_categories(
+        &self,
+        categories: &[CategoryInfo],
+        prune: bool,
+    ) -> Result<(), sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        for info in categories {
+            let save_path = info
+                .save_path
+                .as_ref()
+                .map(|p| p.to_string_lossy().to_string());
+
+            sqlx::query(
+                r#"
+                INSERT INTO categories (name, save_path) VALUES (?, ?)
+                ON CONFLICT(name) DO UPDATE SET save_path = excluded.save_path;
+                "#,
+            )
+            .bind(&info.name)
+            .bind(save_path)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        if prune {
+            let existing: Vec<String> = sqlx::query_scalar("SELECT name FROM categories")
+                .fetch_all(&mut *tx)
+                .await?;
+            let keep: HashSet<&str> = categories.iter().map(|c| c.name.as_str()).collect();
+            for name in existing {
+                if !keep.contains(name.as_str()) {
+                    sqlx::query("DELETE FROM categories WHERE name = ?")
+                        .bind(name)
+                        .execute(&mut *tx)
+                        .await?;
                 }
             }
         }
+
+        tx.commit().await
+    }
+
+    async fn retry_outbox(&self) {
+        let _gate = self.write_gate.lock().await;
+
+        let entries: Vec<(Uuid, PendingOp)> = {
+            let outbox = self.outbox.lock().await;
+            outbox.ops.iter().map(|(id, op)| (*id, *op)).collect()
+        };
+        if entries.is_empty() {
+            return;
+        }
+
+        let Some(ctx) = self.context.upgrade() else {
+            return;
+        };
+        let dm = ctx.dm().await;
+
+        for (id, op) in entries {
+            match op {
+                PendingOp::Delete => {
+                    match sqlx::query("DELETE FROM downloads WHERE id = ?")
+                        .bind(id.to_string())
+                        .execute(&self.pool)
+                        .await
+                    {
+                        Ok(_) => {
+                            self.outbox.lock().await.clear(id);
+                            self.last_saved.write().await.remove(&id);
+                        }
+                        Err(e) => {
+                            self.outbox.lock().await.warn_once(id, "delete retry", &e);
+                        }
+                    }
+                }
+                PendingOp::Upsert => {
+                    let Some(worker) = dm.get_worker(id).await else {
+                        // Deleted while queued: treat the stale upsert as a delete.
+                        match sqlx::query("DELETE FROM downloads WHERE id = ?")
+                            .bind(id.to_string())
+                            .execute(&self.pool)
+                            .await
+                        {
+                            Ok(_) => {
+                                self.outbox.lock().await.clear(id);
+                                self.last_saved.write().await.remove(&id);
+                            }
+                            Err(e) => {
+                                let mut outbox = self.outbox.lock().await;
+                                outbox.note(id, PendingOp::Delete);
+                                outbox.warn_once(id, "delete retry", &e);
+                            }
+                        }
+                        continue;
+                    };
+
+                    let mut info = worker.snapshot_info().await;
+                    info.updated_at = now_ms();
+                    match self.upsert_full(&info).await {
+                        Ok(()) => {
+                            self.outbox.lock().await.clear(id);
+                            self.last_saved.write().await.insert(
+                                id,
+                                ProgressCheckpoint {
+                                    downloaded: info.downloaded,
+                                    uploaded: info.uploaded,
+                                    state: format!("{:?}", info.state),
+                                },
+                            );
+                        }
+                        Err(e) => {
+                            self.outbox.lock().await.warn_once(id, "save retry", &e);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    async fn upsert_full(&self, info: &DownloadInfo) -> Result<(), sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+        Self::upsert_conn(&mut tx, info).await?;
+        tx.commit().await
+    }
+
+    async fn write_chunk(
+        &self,
+        dm: &Arc<DownloadManager>,
+        writes: &[(DownloadProgress, bool)],
+    ) -> Result<(), sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        for (progress, include_parts) in writes {
+            let id = progress.id.to_string();
+            let state = format!("{:?}", progress.state);
+            let updated_at = progress.updated_at as i64;
+
+            let rows = if *include_parts {
+                let parts = serde_json::to_string(&progress.parts).unwrap_or_default();
+                sqlx::query(
+                    r#"
+                    UPDATE downloads
+                    SET downloaded = ?, uploaded = ?, state = ?, parts = ?, updated_at = ?
+                    WHERE id = ?
+                    "#,
+                )
+                .bind(progress.downloaded as i64)
+                .bind(progress.uploaded as i64)
+                .bind(state)
+                .bind(parts)
+                .bind(updated_at)
+                .bind(id)
+                .execute(&mut *tx)
+                .await?
+                .rows_affected()
+            } else {
+                sqlx::query(
+                    r#"
+                    UPDATE downloads
+                    SET uploaded = ?, state = ?, updated_at = ?
+                    WHERE id = ?
+                    "#,
+                )
+                .bind(progress.uploaded as i64)
+                .bind(state)
+                .bind(updated_at)
+                .bind(id)
+                .execute(&mut *tx)
+                .await?
+                .rows_affected()
+            };
+
+            // Row missing (e.g. added before its first action write landed):
+            // fall back to a full insert using the latest worker state.
+            if rows == 0
+                && let Some(worker) = dm.get_worker(progress.id).await
+            {
+                let mut info = worker.snapshot_info().await;
+                info.updated_at = now_ms();
+                Self::upsert_conn(&mut tx, &info).await?;
+            }
+        }
+
+        tx.commit().await
+    }
+
+    async fn upsert_conn(
+        conn: &mut sqlx::Transaction<'_, Sqlite>,
+        info: &DownloadInfo,
+    ) -> Result<(), sqlx::Error> {
+        let parts = serde_json::to_string(&info.parts).unwrap_or_default();
+
+        sqlx::query(
+            r#"
+            INSERT INTO downloads (id, url, dest, total_size, downloaded, uploaded, state, parts, added_at, updated_at, download_type, torrent_hash, referer, category, seeding_ratio_override, seeding_time_override)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                url = excluded.url,
+                dest = excluded.dest,
+                total_size = excluded.total_size,
+                downloaded = excluded.downloaded,
+                uploaded = excluded.uploaded,
+                state = excluded.state,
+                parts = excluded.parts,
+                updated_at = excluded.updated_at,
+                download_type = excluded.download_type,
+                torrent_hash = excluded.torrent_hash,
+                referer = excluded.referer,
+                category = excluded.category,
+                seeding_ratio_override = excluded.seeding_ratio_override,
+                seeding_time_override = excluded.seeding_time_override;
+            "#,
+        )
+        .bind(info.id.to_string())
+        .bind(&info.url)
+        .bind(info.dest.to_string_lossy().to_string())
+        .bind(info.total_size.map(|s| s as i64))
+        .bind(info.downloaded as i64)
+        .bind(info.uploaded as i64)
+        .bind(format!("{:?}", info.state))
+        .bind(parts)
+        .bind(info.added_at as i64)
+        .bind(info.updated_at as i64)
+        .bind(format!("{:?}", info.download_type))
+        .bind(info.torrent_hash.as_deref())
+        .bind(info.referer.as_deref())
+        .bind(info.category.as_deref())
+        .bind(info.seeding_ratio_override)
+        .bind(info.seeding_time_override.map(|s| s as i64))
+        .execute(&mut **conn)
+        .await?;
+
+        Ok(())
     }
 }

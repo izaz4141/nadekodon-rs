@@ -9,6 +9,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::sync::{Mutex, RwLock, broadcast, mpsc};
+use uuid::Uuid;
 
 use crate::app_context::AppContext;
 use crate::utils::logger;
@@ -146,10 +147,10 @@ impl DownloadManager {
             settings: Arc::new(RwLock::new(settings)),
             workers: Arc::new(Mutex::new(IndexMap::new())),
             active: Arc::new(Mutex::new(HashSet::new())),
+            ongoing: Arc::new(Mutex::new(HashSet::new())),
             concurrency: Arc::new(AtomicU8::new(0)),
             sender: tx.clone(),
             broadcast_tx,
-            pending_deletions: Arc::new(Mutex::new(Vec::new())),
             torrent_session,
             categories: Arc::new(RwLock::new(HashMap::new())),
             pruned_torrent_hashes: Arc::new(RwLock::new(None)),
@@ -210,10 +211,7 @@ impl DownloadManager {
         {
             Ok(Ok(s)) => s,
             Ok(Err(e)) => {
-                logger::error(&format!(
-                    "Failed to initialize torrent session: {:#}",
-                    e
-                ));
+                logger::error(&format!("Failed to initialize torrent session: {:#}", e));
                 logger::error(
                     "Torrent session unavailable; torrent operations will report \
                      'Torrent session not initialized'",
@@ -230,7 +228,10 @@ impl DownloadManager {
         };
 
         let restored_count = session.with_torrents(|torrents| torrents.count());
-        logger::debug(&format!("Restored {} torrent(s) from persistence", restored_count));
+        logger::debug(&format!(
+            "Restored {} torrent(s) from persistence",
+            restored_count
+        ));
 
         // Pause all torrents on startup
         let handles_to_pause = session.with_torrents(|torrents| {
@@ -258,9 +259,7 @@ impl DownloadManager {
             .await
             {
                 Ok(Ok(_)) => logger::debug(&format!("Paused torrent: {}", hash)),
-                Ok(Err(e)) => {
-                    logger::warn(&format!("Failed to pause torrent {}: {:#}", hash, e))
-                }
+                Ok(Err(e)) => logger::warn(&format!("Failed to pause torrent {}: {:#}", hash, e)),
                 Err(_) => logger::warn(&format!(
                     "Timed out pausing torrent {} after 30s; continuing startup",
                     hash
@@ -283,21 +282,29 @@ impl DownloadManager {
     /// Called when a worker completes / cancels / errors
     async fn handle_event(self: &Arc<Self>, event: WorkerEvent) {
         match event {
-            WorkerEvent::Completed(id)
-            | WorkerEvent::Error(id, _)
-            | WorkerEvent::Cancelled(id)
-            | WorkerEvent::SeedingStarted(id)
-            | WorkerEvent::Stalled(id) => {
-                if self.active.lock().await.remove(&id) {
-                    let conc = self.concurrency.load(Ordering::SeqCst);
-                    if conc > 0 {
-                        self.concurrency.store(conc - 1, Ordering::SeqCst);
-                    };
-                }
-
+            WorkerEvent::Completed(id) | WorkerEvent::Error(id, _) | WorkerEvent::Cancelled(id) => {
+                self.release_active(id).await;
+                self.ongoing_remove(id).await;
+                self.persist(id).await;
+                logger::debug(&format!("Worker {:?} finished event: {:?}", id, event));
+            }
+            WorkerEvent::SeedingStarted(id) => {
+                self.release_active(id).await;
+                // Seeding keeps moving bytes, so it stays in `ongoing`.
+                self.ongoing_add(id).await;
+                self.persist(id).await;
+                logger::debug(&format!("Worker {:?} finished event: {:?}", id, event));
+            }
+            WorkerEvent::Stalled(id) => {
+                self.release_active(id).await;
+                // Stalled workers are still ongoing; the tick skips unchanged
+                // progress cheaply and picks up resumed bytes immediately.
+                self.persist(id).await;
                 logger::debug(&format!("Worker {:?} finished event: {:?}", id, event));
             }
             WorkerEvent::ProgressResumed(id) => {
+                self.ongoing_add(id).await;
+                self.persist(id).await;
                 logger::debug(&format!(
                     "Worker {:?} progress resumed, re-checking queue",
                     id
@@ -306,6 +313,15 @@ impl DownloadManager {
         }
         let _ = self.broadcast_tx.send(event.clone());
         self.process_queue().await;
+    }
+
+    async fn release_active(&self, id: Uuid) {
+        if self.active.lock().await.remove(&id) {
+            let conc = self.concurrency.load(Ordering::SeqCst);
+            if conc > 0 {
+                self.concurrency.store(conc - 1, Ordering::SeqCst);
+            }
+        }
     }
 
     pub async fn process_queue(&self) {
@@ -337,6 +353,8 @@ impl DownloadManager {
                     if self.active.lock().await.remove(&id) {
                         self.concurrency.fetch_sub(1, Ordering::SeqCst);
                     }
+                    self.ongoing_remove(id).await;
+                    self.persist(id).await;
                 }
             }
             return;
@@ -365,6 +383,8 @@ impl DownloadManager {
                         self.active.lock().await.insert(id);
                         self.concurrency.fetch_add(1, Ordering::SeqCst);
                         let _ = worker.resume().await;
+                        self.ongoing_add(id).await;
+                        self.persist(id).await;
                     }
                 }
                 _ => continue,
