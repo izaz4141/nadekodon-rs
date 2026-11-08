@@ -23,11 +23,14 @@ pub struct DownloadManager {
     pub client: reqwest::Client,
     pub settings: Arc<RwLock<DMSettings>>,
     workers: Arc<Mutex<IndexMap<Uuid, Arc<DownloadWorker>>>>,
+    /// Workers holding a download concurrency slot.
     active: Arc<Mutex<HashSet<Uuid>>>,
+    /// Workers whose byte counters may still move (`Running`, `Seeding`,
+    /// `StalledDL`, `StalledUP`). Only these are flushed by the periodic tick.
+    ongoing: Arc<Mutex<HashSet<Uuid>>>,
     concurrency: Arc<AtomicU8>,
     sender: mpsc::Sender<WorkerEvent>,
     pub broadcast_tx: broadcast::Sender<WorkerEvent>,
-    pending_deletions: Arc<Mutex<Vec<Uuid>>>,
     pub torrent_session: Arc<tokio::sync::RwLock<Option<Arc<Session>>>>,
     pub categories: Arc<RwLock<HashMap<String, CategoryInfo>>>,
     /// Hashes pruned from persistence at startup (`None` until the pre-clean);

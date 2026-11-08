@@ -21,21 +21,25 @@ pub async fn start_database_manager(context: Arc<AppContext>, db_done_signal: Ar
             }
         }
 
-        let context_clone = context.clone();
-        let db_signal = db_done_signal.clone();
-
-        tokio::spawn(async move {
-            if let Err(e) = context_clone
-                .start_database_manager(db_path, db_signal)
-                .await
-            {
-                logger::error(&format!("Failed to start database manager: {:?}", e));
+        // Initialize before reporting success so Dart cannot act while the
+        // database is missing.
+        let success = match context.init_database(db_path, db_done_signal.clone()).await {
+            Ok(db) => {
+                spawn(async move {
+                    db.run_loop().await;
+                });
+                logger::debug("Database manager started");
+                true
             }
-        });
+            Err(e) => {
+                logger::error(&format!("Failed to start database manager: {:?}", e));
+                false
+            }
+        };
 
         InitDatabaseResponse {
             id: message.id,
-            success: true,
+            success,
         }
         .send_signal_to_dart();
     }

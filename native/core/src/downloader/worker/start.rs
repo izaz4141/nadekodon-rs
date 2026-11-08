@@ -75,6 +75,11 @@ impl DownloadWorker {
 
         self.spawn_sampler_and_monitor().await?;
 
+        // Type, total size, and parts are now known: commit metadata once.
+        // (Torrents persist inside `download_torrent_task` once their metadata
+        // and destination are finalized.)
+        self.persist_to_db().await;
+
         Ok(())
     }
 

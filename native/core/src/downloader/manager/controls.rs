@@ -33,6 +33,8 @@ impl DownloadManager {
                 {
                     self.concurrency.fetch_sub(1, Ordering::SeqCst);
                 }
+                self.ongoing_remove(id).await;
+                self.persist(id).await;
                 self.process_queue().await;
                 Ok(())
             }
@@ -52,6 +54,8 @@ impl DownloadManager {
                                 info.state = DownloadState::Seeding;
                                 drop(info);
                                 worker.resume().await?;
+                                self.ongoing_add(id).await;
+                                self.persist(id).await;
                                 return Ok(());
                             }
                             info.state = DownloadState::Queued;
@@ -61,6 +65,8 @@ impl DownloadManager {
                         }
                     }
                 }
+                self.ongoing_remove(id).await;
+                self.persist(id).await;
                 self.process_queue().await;
                 Ok(())
             }
@@ -79,6 +85,8 @@ impl DownloadManager {
                 }
 
                 worker.cancel().await?;
+                self.ongoing_remove(id).await;
+                self.persist(id).await;
                 self.process_queue().await;
                 Ok(())
             }
@@ -110,6 +118,8 @@ impl DownloadManager {
                 drop(info_lock);
                 self.process_queue().await;
             }
+
+            self.persist(id).await;
         }
         Ok(())
     }

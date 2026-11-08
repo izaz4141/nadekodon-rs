@@ -80,9 +80,8 @@ pub fn resolve_username(raw: &str) -> String {
 /// Resolves a configured password (plaintext or argon2 hash); falls back to
 /// [`DEFAULT_PASSWORD`] when missing or a hash of the empty string.
 pub fn resolve_password(raw: &str) -> String {
-    let hashes_empty =
-        utils::security::is_valid_hash(raw) && utils::security::validate_password(raw, "")
-            .unwrap_or(false);
+    let hashes_empty = utils::security::is_valid_hash(raw)
+        && utils::security::validate_password(raw, "").unwrap_or(false);
     if raw.is_empty() || hashes_empty {
         DEFAULT_PASSWORD.to_string()
     } else {
@@ -93,10 +92,7 @@ pub fn resolve_password(raw: &str) -> String {
 /// Resolves the configured API key; empty, sample, or still-encrypted
 /// (`NDK:`) values are treated as unset.
 pub fn resolve_api_key(raw: &str) -> Option<String> {
-    if raw.is_empty()
-        || raw == ncore::utils::config::SAMPLE_API_KEY
-        || raw.starts_with("NDK:")
-    {
+    if raw.is_empty() || raw == ncore::utils::config::SAMPLE_API_KEY || raw.starts_with("NDK:") {
         None
     } else {
         Some(raw.to_string())
@@ -188,10 +184,7 @@ pub async fn run_server(
                 }
             }
         }
-        Err(e) => utils::logger::error(&format!(
-            "Failed to bind HTTP server on {}: {}",
-            addr, e
-        )),
+        Err(e) => utils::logger::error(&format!("Failed to bind HTTP server on {}: {}", addr, e)),
     }
 }
 
@@ -230,7 +223,10 @@ pub async fn run_server_loop(state: SharedState) {
         let shutdown_signal = state.shutdown_signal.clone();
 
         let router = create_router(state.clone(), governor_conf);
-        utils::logger::debug(&format!("Routes registered, attempting to bind port {}", port));
+        utils::logger::debug(&format!(
+            "Routes registered, attempting to bind port {}",
+            port
+        ));
         run_server(router, port, restart_signal, shutdown_signal).await;
 
         cleanup_handle.abort();

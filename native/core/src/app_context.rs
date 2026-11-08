@@ -146,13 +146,20 @@ impl AppContext {
 
         config::save_config(&path, settings, &self.master_key().await).await?;
 
-        let new_config = config::load_config(path.to_string_lossy().into_owned(), self.master_key().await)
-            .await?;
+        let new_config =
+            config::load_config(path.to_string_lossy().into_owned(), self.master_key().await)
+                .await?;
         *self.config.write().await = Some(new_config);
         Ok(())
     }
 
-    pub async fn start_database_manager(
+    /// Creates the pool, publishes it through [`Self::db`], waits for the
+    /// torrent pre-clean, and restores categories/downloads.
+    ///
+    /// Callers must await this before serving requests, then spawn
+    /// [`DatabaseManager::run_loop`] on the returned manager. This removes any
+    /// window in which [`Self::db`] is missing.
+    pub async fn init_database(
         self: &Arc<Self>,
         db_path: PathBuf,
         db_done_signal: Arc<Notify>,
@@ -218,9 +225,6 @@ impl AppContext {
                 logger::error(&format!("Failed to load downloads from DB: {:?}", e));
             }
         }
-
-        // This will keep running until shutdown
-        db.clone().run_loop().await;
 
         Ok(db)
     }

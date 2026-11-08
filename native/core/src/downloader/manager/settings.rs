@@ -1,5 +1,4 @@
 use anyhow::Result;
-use uuid::Uuid;
 
 use crate::utils::types::DMSettings;
 
@@ -34,17 +33,5 @@ impl DownloadManager {
         if let Some(session) = session_guard.as_ref() {
             let _ = session.stop().await;
         }
-    }
-
-    pub async fn drain_pending_deletions(&self) -> Vec<Uuid> {
-        let mut pending = self.pending_deletions.lock().await;
-        let drained = pending.clone();
-        pending.clear();
-        drained
-    }
-
-    pub async fn requeue_pending_deletions(&self, ids: Vec<Uuid>) {
-        let mut pending = self.pending_deletions.lock().await;
-        pending.extend(ids);
     }
 }

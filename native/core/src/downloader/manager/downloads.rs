@@ -6,7 +6,7 @@ use std::{
 use uuid::Uuid;
 
 use crate::utils::logger;
-use crate::utils::types::{DownloadInfo, DownloadType};
+use crate::utils::types::{DownloadInfo, DownloadState, DownloadType};
 
 use crate::downloader::manager::DownloadManager;
 use crate::downloader::worker::DownloadWorker;
@@ -22,6 +22,7 @@ impl DownloadManager {
         {
             self.active.lock().await.insert(id);
         }
+        self.ongoing_add(id).await;
 
         let w = Arc::clone(&worker);
 
@@ -66,13 +67,12 @@ impl DownloadManager {
         .await
         .map_err(|e| anyhow::anyhow!("{}", e))?;
         self.workers.lock().await.insert(id, worker);
+        self.persist(id).await;
         self.process_queue().await;
         Ok(id)
     }
 
     pub async fn load_snapshot(self: &Arc<Self>, downloads: Vec<DownloadInfo>) {
-        let mut workers = self.workers.lock().await;
-
         // Drop downloads for pruned torrents — they can never resume.
         let pruned = self
             .pruned_torrent_hashes
@@ -99,6 +99,12 @@ impl DownloadManager {
             matched
         };
 
+        // Never hold the workers lock across worker creation: `from_info` can
+        // create categories (and therefore await the database write gate).
+        let mut created = Vec::new();
+        let mut orphans = Vec::new();
+        let mut reset_ids = Vec::new();
+
         for info in downloads {
             let id = info.id;
             if info
@@ -120,9 +126,20 @@ impl DownloadManager {
                     id,
                     matched_hashes.join(", ")
                 ));
-                self.pending_deletions.lock().await.push(id);
+                orphans.push(id);
                 continue;
             }
+
+            // `from_info` resets active states back to `Paused`; those rows
+            // need one reconciliation write so the DB matches memory.
+            let reset = matches!(
+                info.state,
+                DownloadState::Running
+                    | DownloadState::Queued
+                    | DownloadState::Seeding
+                    | DownloadState::StalledDL
+                    | DownloadState::StalledUP
+            );
 
             let result = DownloadWorker::from_info(
                 info,
@@ -136,12 +153,29 @@ impl DownloadManager {
 
             match result {
                 Ok(worker) => {
-                    workers.insert(id, worker);
+                    if reset {
+                        reset_ids.push(id);
+                    }
+                    created.push((id, worker));
                 }
                 Err(e) => {
                     logger::error(&format!("Failed to create worker for {}: {}", id, e));
                 }
             }
+        }
+
+        {
+            let mut workers = self.workers.lock().await;
+            for (id, worker) in created {
+                workers.insert(id, worker);
+            }
+        }
+
+        for id in orphans {
+            self.delete_persisted(id).await;
+        }
+        for id in reset_ids {
+            self.persist(id).await;
         }
     }
 
@@ -159,11 +193,11 @@ impl DownloadManager {
             }
         };
 
-        // Then remove from workers map
+        // Then remove from workers map before deleting the row so an in-flight
+        // save cannot re-insert it.
         self.workers.lock().await.swap_remove(&id);
-
-        // Add to pending deletions for DB
-        self.pending_deletions.lock().await.push(id);
+        self.ongoing_remove(id).await;
+        self.delete_persisted(id).await;
 
         if let Some(info) = info_opt {
             if matches!(info.download_type, DownloadType::Torrent) {

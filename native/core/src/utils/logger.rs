@@ -12,17 +12,15 @@ enum Level {
 static LEVEL: OnceLock<Level> = OnceLock::new();
 
 fn threshold() -> Level {
-    *LEVEL.get_or_init(|| {
-        match std::env::var("NADEKO_LOG_LEVEL") {
-            Ok(value) => match value.trim().to_ascii_lowercase().as_str() {
-                "debug" => Level::Debug,
-                "info" => Level::Info,
-                "warn" => Level::Warn,
-                "error" => Level::Error,
-                _ => Level::Warn,
-            },
-            Err(_) => Level::Warn,
-        }
+    *LEVEL.get_or_init(|| match std::env::var("NADEKO_LOG_LEVEL") {
+        Ok(value) => match value.trim().to_ascii_lowercase().as_str() {
+            "debug" => Level::Debug,
+            "info" => Level::Info,
+            "warn" => Level::Warn,
+            "error" => Level::Error,
+            _ => Level::Warn,
+        },
+        Err(_) => Level::Warn,
     })
 }
 
