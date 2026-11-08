@@ -81,13 +81,11 @@ pub struct DatabaseManager {
     context: Weak<AppContext>,
     shutdown_signal: Arc<Notify>,
     db_done_signal: Arc<Notify>,
-    /// Serializes read-worker-then-write sequences. Never acquire this while
-    /// holding the workers map or the categories lock.
     write_gate: Mutex<()>,
     last_saved: RwLock<HashMap<Uuid, ProgressCheckpoint>>,
-    /// Mutated only while `write_gate` is held.
     outbox: Mutex<Outbox>,
     categories_dirty: AtomicBool,
+    categories_loaded: AtomicBool,
 }
 
 impl std::fmt::Debug for DatabaseManager {
@@ -95,6 +93,7 @@ impl std::fmt::Debug for DatabaseManager {
         f.debug_struct("DatabaseManager")
             .field("pool", &self.pool)
             .field("categories_dirty", &self.categories_dirty)
+            .field("categories_loaded", &self.categories_loaded)
             .finish()
     }
 }
@@ -115,6 +114,7 @@ impl DatabaseManager {
             last_saved: RwLock::new(HashMap::new()),
             outbox: Mutex::new(Outbox::default()),
             categories_dirty: AtomicBool::new(false),
+            categories_loaded: AtomicBool::new(false),
         })
     }
 
@@ -130,8 +130,6 @@ impl DatabaseManager {
                     }
                 }
                 _ = self.shutdown_signal.notified() => {
-                    // Only ongoing progress + outbox + categories need flushing;
-                    // every other change was committed when it happened.
                     self.save_active_progress().await;
                     self.save_categories().await;
                     self.retry_outbox().await;
@@ -247,6 +245,9 @@ impl DatabaseManager {
         let rows = sqlx::query("SELECT name, save_path FROM categories")
             .fetch_all(&self.pool)
             .await?;
+
+        // The in-memory map is now authoritative, so reconciliation may prune.
+        self.categories_loaded.store(true, Ordering::SeqCst);
 
         let mut categories = HashMap::new();
         for row in rows {
@@ -545,7 +546,10 @@ impl DatabaseManager {
             map.values().cloned().collect()
         };
 
-        match self.reconcile_categories(&categories).await {
+        // Only prune rows once the stored set has actually been loaded; otherwise
+        // an empty/partial in-memory map would erase categories still on disk.
+        let prune = self.categories_loaded.load(Ordering::SeqCst);
+        match self.reconcile_categories(&categories, prune).await {
             Ok(()) => self.categories_dirty.store(false, Ordering::SeqCst),
             Err(e) => {
                 self.categories_dirty.store(true, Ordering::SeqCst);
@@ -554,7 +558,11 @@ impl DatabaseManager {
         }
     }
 
-    async fn reconcile_categories(&self, categories: &[CategoryInfo]) -> Result<(), sqlx::Error> {
+    async fn reconcile_categories(
+        &self,
+        categories: &[CategoryInfo],
+        prune: bool,
+    ) -> Result<(), sqlx::Error> {
         let mut tx = self.pool.begin().await?;
 
         for info in categories {
@@ -575,16 +583,18 @@ impl DatabaseManager {
             .await?;
         }
 
-        let existing: Vec<String> = sqlx::query_scalar("SELECT name FROM categories")
-            .fetch_all(&mut *tx)
-            .await?;
-        let keep: HashSet<&str> = categories.iter().map(|c| c.name.as_str()).collect();
-        for name in existing {
-            if !keep.contains(name.as_str()) {
-                sqlx::query("DELETE FROM categories WHERE name = ?")
-                    .bind(name)
-                    .execute(&mut *tx)
-                    .await?;
+        if prune {
+            let existing: Vec<String> = sqlx::query_scalar("SELECT name FROM categories")
+                .fetch_all(&mut *tx)
+                .await?;
+            let keep: HashSet<&str> = categories.iter().map(|c| c.name.as_str()).collect();
+            for name in existing {
+                if !keep.contains(name.as_str()) {
+                    sqlx::query("DELETE FROM categories WHERE name = ?")
+                        .bind(name)
+                        .execute(&mut *tx)
+                        .await?;
+                }
             }
         }
 
