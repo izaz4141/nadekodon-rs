@@ -7,6 +7,7 @@ import 'package:nadekodon/ui/widgets/dialog/delete_download.dart';
 import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/utils/helper.dart';
 import 'package:nadekodon/utils/bridge_service.dart';
+import 'package:nadekodon/utils/settings.dart';
 import 'package:nadekodon/ui/widgets/dialog/add_download.dart';
 import 'package:nadekodon/ui/widgets/dialog/download_context_menu.dart';
 
@@ -46,6 +47,7 @@ class _DownloadListState {
   int? requestedStart;
   int? requestedEnd;
   bool connecting = false;
+  bool authBlocked = false;
 
   bool get isSelectionMode => selectedIds.isNotEmpty;
 }
@@ -73,6 +75,8 @@ class _DownloadPageState extends State<DownloadPage>
     _activeState.scrollController.addListener(_onActiveScroll);
     _completedState.scrollController.addListener(_onCompletedScroll);
 
+    SettingsManager.authChanges.addListener(_onAuthChanged);
+
     // Start the long-lived list streams once the first frame is laid out.
     Future.delayed(Duration.zero, _startAllStreams);
   }
@@ -80,6 +84,7 @@ class _DownloadPageState extends State<DownloadPage>
   @override
   void dispose() {
     _rangeDebounce?.cancel();
+    SettingsManager.authChanges.removeListener(_onAuthChanged);
     _activeState.streamSubscription?.cancel();
     _completedState.streamSubscription?.cancel();
     _activeState.scrollController.removeListener(_onActiveScroll);
@@ -163,12 +168,20 @@ class _DownloadPageState extends State<DownloadPage>
   }
 
   void _ensureStreamsCoverVisibleRange() {
-    if (!_rangeCoversVisibleRange(_activeState)) {
+    if (!_activeState.authBlocked && !_rangeCoversVisibleRange(_activeState)) {
       _startListStream(_activeState, DownloadPage.activeStatuses, 0);
     }
-    if (!_rangeCoversVisibleRange(_completedState)) {
+    if (!_completedState.authBlocked &&
+        !_rangeCoversVisibleRange(_completedState)) {
       _startListStream(_completedState, DownloadPage.completedStatuses, 1);
     }
+  }
+
+  void _onAuthChanged() {
+    if (!mounted) return;
+    _activeState.authBlocked = false;
+    _completedState.authBlocked = false;
+    _startAllStreams();
   }
 
   void _startAllStreams() {
@@ -228,6 +241,8 @@ class _DownloadPageState extends State<DownloadPage>
     int tag,
   ) {
     if (!mounted) return;
+    // Authorization failures wait for an auth change before reconnecting.
+    if (state.authBlocked) return;
 
     state.streamSubscription?.cancel();
     state.streamSubscription = null;
@@ -265,8 +280,17 @@ class _DownloadPageState extends State<DownloadPage>
           _onDownloadListReceived,
           onError: (Object error, StackTrace stackTrace) {
             if (!mounted) return;
+            // Only authorization failures terminate the stream; block
+            // reconnects until the credentials change.
             state.connecting = false;
+            state.streamSubscription = null;
+            state.authBlocked = true;
             debugPrint('Download list stream error: $error');
+          },
+          onDone: () {
+            if (!mounted) return;
+            state.streamSubscription = null;
+            state.connecting = false;
           },
         );
   }

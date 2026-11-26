@@ -58,6 +58,16 @@ class SettingsManager {
   static final requireLogin = ValueNotifier<bool>(kIsWeb);
   static final isLoggedIn = ValueNotifier<bool>(false);
 
+  /// Fires when the credentials or endpoint used for authenticated requests
+  /// change. Long-lived streams listen to this to reconnect with the new
+  /// authorization instead of retrying with rejected credentials.
+  static final Listenable authChanges = Listenable.merge([
+    serverApiKey,
+    isLoggedIn,
+    serverHost,
+    serverPort,
+  ]);
+
   static Future<void> _loadDefaults() async {
     try {
       final String response = await rootBundle.loadString(
