@@ -43,6 +43,8 @@ class _DownloadListState {
   String? streamId;
   int? loadedStart;
   int? loadedEnd;
+  int? requestedStart;
+  int? requestedEnd;
   bool connecting = false;
 
   bool get isSelectionMode => selectedIds.isNotEmpty;
@@ -196,12 +198,6 @@ class _DownloadPageState extends State<DownloadPage>
   }
 
   bool _rangeCoversVisibleRange(_DownloadListState state) {
-    if (state.connecting) return true;
-
-    final loadedStart = state.loadedStart;
-    final loadedEnd = state.loadedEnd;
-    if (loadedStart == null || loadedEnd == null) return false;
-
     final window = _visibleWindow(state);
     final desiredStart = (window.offsetIndex - window.before).clamp(
       0,
@@ -211,6 +207,18 @@ class _DownloadPageState extends State<DownloadPage>
       0,
       state.totalCount,
     );
+
+    if (state.connecting) {
+      final requestedStart = state.requestedStart;
+      final requestedEnd = state.requestedEnd;
+      if (requestedStart == null || requestedEnd == null) return false;
+      return desiredStart >= requestedStart && desiredEnd <= requestedEnd;
+    }
+
+    final loadedStart = state.loadedStart;
+    final loadedEnd = state.loadedEnd;
+    if (loadedStart == null || loadedEnd == null) return false;
+
     return desiredStart >= loadedStart && desiredEnd <= loadedEnd;
   }
 
@@ -228,6 +236,14 @@ class _DownloadPageState extends State<DownloadPage>
     state.connecting = true;
 
     final window = _visibleWindow(state);
+    state.requestedStart = (window.offsetIndex - window.before).clamp(
+      0,
+      state.totalCount,
+    );
+    state.requestedEnd = (window.offsetIndex + window.after + 1).clamp(
+      0,
+      state.totalCount,
+    );
     final streamId =
         '${DateTime.now().microsecondsSinceEpoch}-$tag-$_sortBy-$_ascending';
     state.streamId = streamId;
@@ -362,12 +378,16 @@ class _DownloadPageState extends State<DownloadPage>
       _activeState.isLoading = true;
       _activeState.loadedStart = null;
       _activeState.loadedEnd = null;
+      _activeState.requestedStart = null;
+      _activeState.requestedEnd = null;
       _activeState.connecting = false;
       _completedState.items = [];
       _completedState.totalCount = 0;
       _completedState.isLoading = true;
       _completedState.loadedStart = null;
       _completedState.loadedEnd = null;
+      _completedState.requestedStart = null;
+      _completedState.requestedEnd = null;
       _completedState.connecting = false;
     });
     _startAllStreams();
