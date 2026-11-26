@@ -38,7 +38,9 @@ mixin DownloadRinfApi {
   /// Native subscriptions keep using the rinf request/response signal pair.
   ///
   /// There is no HTTP rate limit on this path, so a periodic request is enough
-  /// to expose the same streaming API to the UI.
+  /// to expose the same streaming API to the UI. Each poll uses a fresh request
+  /// ID so a late reply from a timed-out poll cannot be mistaken for the
+  /// current one; the caller-supplied [id] remains the stable stream identity.
   Stream<DownloadList> streamDownloadList({
     String? id,
     int offsetIndex = 0,
@@ -52,9 +54,10 @@ mixin DownloadRinfApi {
     List<String> categories = const [],
     Duration interval = const Duration(milliseconds: 500),
   }) async* {
+    final streamId = id ?? newSignalId();
     while (true) {
       final list = await getDownloadList(
-        id: id,
+        id: newSignalId(),
         offsetIndex: offsetIndex,
         before: before,
         after: after,
@@ -65,7 +68,7 @@ mixin DownloadRinfApi {
         ascending: ascending,
         categories: categories,
       );
-      if (list != null) yield list;
+      if (list != null) yield list.copyWith(id: streamId);
       await Future.delayed(interval);
     }
   }
