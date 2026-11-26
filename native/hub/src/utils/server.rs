@@ -343,6 +343,7 @@ pub async fn start_server_listener(context: Arc<AppContext>, state_slot: ServerS
             password: Arc::new(RwLock::new(password)),
             restart_signal: restart_signal.clone(),
             shutdown_signal: shutdown_signal.clone(),
+            restart_requested: Arc::new(AtomicBool::new(false)),
             shutdown_requested: shutdown_requested.clone(),
             version: Arc::new(RwLock::new(None)),
         });

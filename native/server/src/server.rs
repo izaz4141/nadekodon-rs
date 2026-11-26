@@ -42,6 +42,7 @@ pub struct AppState {
     pub password: Arc<RwLock<String>>,
     pub restart_signal: Arc<Notify>,
     pub shutdown_signal: Arc<Notify>,
+    pub restart_requested: Arc<AtomicBool>,
     pub shutdown_requested: Arc<AtomicBool>,
     pub version: Arc<RwLock<Option<String>>>,
 }
@@ -237,6 +238,7 @@ pub async fn run_server_loop(state: SharedState) {
             break;
         }
 
+        state.restart_requested.store(false, Ordering::SeqCst);
         utils::logger::debug("Restarting HTTP server...");
         tokio::time::sleep(Duration::from_secs(1)).await;
     }

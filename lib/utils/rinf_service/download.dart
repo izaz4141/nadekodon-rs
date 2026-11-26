@@ -35,6 +35,41 @@ mixin DownloadRinfApi {
     );
   }
 
+  /// Native subscriptions keep using the rinf request/response signal pair.
+  ///
+  /// There is no HTTP rate limit on this path, so a periodic request is enough
+  /// to expose the same streaming API to the UI.
+  Stream<DownloadList> streamDownloadList({
+    String? id,
+    int offsetIndex = 0,
+    int before = 0,
+    int after = 0,
+    List<String> statuses = const [],
+    int? tag,
+    String? searchQuery,
+    int? sortBy,
+    bool? ascending,
+    List<String> categories = const [],
+    Duration interval = const Duration(milliseconds: 500),
+  }) async* {
+    while (true) {
+      final list = await getDownloadList(
+        id: id,
+        offsetIndex: offsetIndex,
+        before: before,
+        after: after,
+        statuses: statuses,
+        tag: tag,
+        searchQuery: searchQuery,
+        sortBy: sortBy,
+        ascending: ascending,
+        categories: categories,
+      );
+      if (list != null) yield list;
+      await Future.delayed(interval);
+    }
+  }
+
   Future<DownloadDetails?> getDownloadDetails(String id) async {
     return awaitRustPush<DownloadDetails>(
       DownloadDetails.rustSignalStream,

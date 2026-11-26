@@ -94,8 +94,7 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   bool _isInitialized = false;
-  Timer? _pollTimer;
-  StreamSubscription? _signalSubscription;
+  StreamSubscription<DownloadList>? _listSubscription;
   ReceivePort? _port;
 
   final Map<String, String> _runningDownloads = {};
@@ -177,40 +176,41 @@ class NotificationService {
   }
 
   void startListening() {
-    if (_pollTimer != null) return;
+    if (_listSubscription != null) return;
 
     init();
 
-    // Poll every second ONLY for Running downloads
-    _pollTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      BridgeService.getDownloadList(
-        offsetIndex: 0,
-        before: 0,
-        after: 100,
-        statuses: ["Running", "Seeding"],
-        tag: 2, // Notification tag
-        searchQuery: null,
-        sortBy: 0,
-        ascending: false,
-        categories: [],
-      );
-    });
-
-    _signalSubscription = BridgeService.downloadListStream.listen((message) {
-      if (message.tag == 2) {
-        _updateNotifications(message.list);
-      }
-    });
+    // One long-lived subscription for running/seeding downloads.
+    _listSubscription =
+        BridgeService.streamDownloadList(
+          offsetIndex: 0,
+          before: 0,
+          after: 100,
+          statuses: ["Running", "Seeding"],
+          tag: 2, // Notification tag
+          searchQuery: null,
+          sortBy: 0,
+          ascending: false,
+          categories: const [],
+          interval: const Duration(seconds: 1),
+        ).listen(
+          (message) {
+            if (message.tag == 2) {
+              _updateNotifications(message.list);
+            }
+          },
+          onError: (Object error, StackTrace stackTrace) {
+            debugPrint('Notification download list stream error: $error');
+          },
+        );
   }
 
   void stopListening() {
     IsolateNameServer.removePortNameMapping(notificationPortName);
     _port?.close();
     _port = null;
-    _pollTimer?.cancel();
-    _pollTimer = null;
-    _signalSubscription?.cancel();
-    _signalSubscription = null;
+    _listSubscription?.cancel();
+    _listSubscription = null;
     cancelAll();
   }
 

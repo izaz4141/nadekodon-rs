@@ -1,11 +1,72 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:http/http.dart' as http;
 import 'package:nadekodon/utils/logger.dart';
 import 'package:nadekodon/utils/rinf_service/rinf_service.dart';
 
 import 'http_client.dart';
 
 mixin DownloadHttpApi {
+  Map<String, dynamic> _downloadListPayload({
+    required String id,
+    required int offsetIndex,
+    required int before,
+    required int after,
+    required List<String> statuses,
+    required int? tag,
+    required String? searchQuery,
+    required int? sortBy,
+    required bool? ascending,
+    required List<String> categories,
+  }) {
+    return {
+      'id': id,
+      'offset_index': offsetIndex,
+      'before': before,
+      'after': after,
+      'statuses': statuses,
+      'tag': ?tag,
+      'search_query': ?searchQuery,
+      'sort_by': ?sortBy,
+      'ascending': ?ascending,
+      'categories': categories,
+    };
+  }
+
+  DownloadList _downloadListFromJson(
+    Map<String, dynamic> data, {
+    required String fallbackId,
+  }) {
+    final rawList = data['list'] as List? ?? const [];
+    final list = rawList.map((item) {
+      final i = item as Map<String, dynamic>;
+      return DownloadGlance(
+        id: i['id'],
+        downloadType: i['download_type'],
+        name: i['name'],
+        dest: i['dest'],
+        totalSize: i['total_size'] != null
+            ? Uint64.fromBigInt(BigInt.from(i['total_size']))
+            : null,
+        downloaded: Uint64.fromBigInt(BigInt.from(i['downloaded'])),
+        uploaded: Uint64.fromBigInt(BigInt.from(i['uploaded'])),
+        dspeed: (i['dspeed'] as num).toDouble(),
+        uspeed: (i['uspeed'] as num?)?.toDouble(),
+        state: i['state'],
+        referer: i['referer'],
+      );
+    }).toList();
+
+    return DownloadList(
+      id: data['id'] as String? ?? fallbackId,
+      list: list,
+      totalCount: Uint64.fromBigInt(BigInt.from(data['total_count'] ?? 0)),
+      startIndex: Uint64.fromBigInt(BigInt.from(data['start_index'] ?? 0)),
+      tag: data['tag'] as int?,
+    );
+  }
+
   Future<DownloadList?> getDownloadList({
     String? id,
     int offsetIndex = 0,
@@ -20,18 +81,18 @@ mixin DownloadHttpApi {
   }) async {
     try {
       final requestId = id ?? newSignalId();
-      final payload = {
-        'id': requestId,
-        'offset_index': offsetIndex,
-        'before': before,
-        'after': after,
-        'statuses': statuses,
-        'tag': ?tag,
-        'search_query': ?searchQuery,
-        'sort_by': ?sortBy,
-        'ascending': ?ascending,
-        'categories': categories,
-      };
+      final payload = _downloadListPayload(
+        id: requestId,
+        offsetIndex: offsetIndex,
+        before: before,
+        after: after,
+        statuses: statuses,
+        tag: tag,
+        searchQuery: searchQuery,
+        sortBy: sortBy,
+        ascending: ascending,
+        categories: categories,
+      );
 
       final response = await HttpTransport.post(
         '/api/nadeko/download/list',
@@ -39,38 +100,156 @@ mixin DownloadHttpApi {
       );
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-
-        return DownloadList(
-          id: data['id'] ?? requestId,
-          list: (data['list'] as List)
-              .map(
-                (i) => DownloadGlance(
-                  id: i['id'],
-                  downloadType: i['download_type'],
-                  name: i['name'],
-                  dest: i['dest'],
-                  totalSize: i['total_size'] != null
-                      ? Uint64.fromBigInt(BigInt.from(i['total_size']))
-                      : null,
-                  downloaded: Uint64.fromBigInt(BigInt.from(i['downloaded'])),
-                  uploaded: Uint64.fromBigInt(BigInt.from(i['uploaded'])),
-                  dspeed: i['dspeed'].toDouble(),
-                  uspeed: i['uspeed']?.toDouble(),
-                  state: i['state'],
-                  referer: i['referer'],
-                ),
-              )
-              .toList(),
-          totalCount: Uint64.fromBigInt(BigInt.from(data['total_count'])),
-          startIndex: Uint64.fromBigInt(BigInt.from(data['start_index'])),
-          tag: data['tag'],
-        );
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return _downloadListFromJson(data, fallbackId: requestId);
       }
     } catch (e) {
       log("Error fetching list: $e", isError: true);
     }
     return null;
+  }
+
+  /// Long-lived download list subscription.
+  ///
+  /// The server pushes the requested window as NDJSON frames instead of the
+  /// client polling. Falls back to periodic one-shot requests against servers
+  /// that do not expose the streaming endpoint yet.
+  Stream<DownloadList> streamDownloadList({
+    String? id,
+    int offsetIndex = 0,
+    int before = 0,
+    int after = 0,
+    List<String> statuses = const [],
+    int? tag,
+    String? searchQuery,
+    int? sortBy,
+    bool? ascending,
+    List<String> categories = const [],
+    Duration interval = const Duration(milliseconds: 500),
+  }) async* {
+    final requestId = id ?? newSignalId();
+    final payload = _downloadListPayload(
+      id: requestId,
+      offsetIndex: offsetIndex,
+      before: before,
+      after: after,
+      statuses: statuses,
+      tag: tag,
+      searchQuery: searchQuery,
+      sortBy: sortBy,
+      ascending: ascending,
+      categories: categories,
+    );
+
+    var attempt = 0;
+
+    while (true) {
+      var receivedFrame = false;
+      try {
+        final stream = HttpTransport.postNdjson(
+          '/api/nadeko/download/list/stream'
+          '?interval_ms=${interval.inMilliseconds.clamp(100, 10000)}',
+          body: payload,
+          headers: const {'Accept': 'application/x-ndjson'},
+        );
+
+        await for (final line in stream) {
+          final decoded = jsonDecode(line);
+          if (decoded is! Map<String, dynamic>) continue;
+
+          final frameId = decoded['id'];
+          if (frameId != null && frameId != requestId) continue;
+
+          final error = decoded['error'];
+          if (error != null) {
+            log("Download list stream error: $error", isError: true);
+            continue;
+          }
+
+          receivedFrame = true;
+          attempt = 0;
+          yield _downloadListFromJson(decoded, fallbackId: requestId);
+        }
+
+        // A normal close (for example the 10-minute server lifetime cap)
+        // reconnects immediately unless we never got a frame.
+        if (!receivedFrame) attempt++;
+      } on HttpStreamException catch (e) {
+        if (e.statusCode == 404 || e.statusCode == 405) {
+          log(
+            "Download list stream unsupported; falling back to polling",
+            isError: true,
+          );
+          yield* _pollDownloadList(
+            id: requestId,
+            offsetIndex: offsetIndex,
+            before: before,
+            after: after,
+            statuses: statuses,
+            tag: tag,
+            searchQuery: searchQuery,
+            sortBy: sortBy,
+            ascending: ascending,
+            categories: categories,
+            interval: interval,
+          );
+          return;
+        }
+
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          log(
+            "Download list stream unauthorized (${e.statusCode})",
+            isError: true,
+          );
+          rethrow;
+        }
+
+        attempt++;
+      } catch (e) {
+        if (e is http.RequestAbortedException) return;
+        log("Download list stream disconnected: $e", isError: true);
+        attempt++;
+      }
+
+      await Future.delayed(_streamRetryDelay(attempt));
+    }
+  }
+
+  Stream<DownloadList> _pollDownloadList({
+    required String id,
+    required int offsetIndex,
+    required int before,
+    required int after,
+    required List<String> statuses,
+    required int? tag,
+    required String? searchQuery,
+    required int? sortBy,
+    required bool? ascending,
+    required List<String> categories,
+    required Duration interval,
+  }) async* {
+    while (true) {
+      final list = await getDownloadList(
+        id: id,
+        offsetIndex: offsetIndex,
+        before: before,
+        after: after,
+        statuses: statuses,
+        tag: tag,
+        searchQuery: searchQuery,
+        sortBy: sortBy,
+        ascending: ascending,
+        categories: categories,
+      );
+      if (list != null) yield list;
+      await Future.delayed(interval);
+    }
+  }
+
+  Duration _streamRetryDelay(int attempt) {
+    final exponent = attempt.clamp(0, 6);
+    final milliseconds = (500 * (1 << exponent)).clamp(500, 30000);
+    return Duration(milliseconds: milliseconds);
   }
 
   String getDownloadUrl(String id) {

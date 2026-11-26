@@ -206,6 +206,32 @@ class BridgeService {
     categories: categories,
   );
 
+  static Stream<DownloadList> streamDownloadList({
+    String? id,
+    int offsetIndex = 0,
+    int before = 0,
+    int after = 0,
+    List<String> statuses = const [],
+    int? tag,
+    String? searchQuery,
+    int? sortBy,
+    bool? ascending,
+    List<String> categories = const [],
+    Duration interval = const Duration(milliseconds: 500),
+  }) => impl.streamDownloadList(
+    id: id,
+    offsetIndex: offsetIndex,
+    before: before,
+    after: after,
+    statuses: statuses,
+    tag: tag,
+    searchQuery: searchQuery,
+    sortBy: sortBy,
+    ascending: ascending,
+    categories: categories,
+    interval: interval,
+  );
+
   static Future<DownloadDetails?> getDownloadDetails(String id) =>
       impl.getDownloadDetails(id);
 

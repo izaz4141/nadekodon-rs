@@ -198,6 +198,7 @@ async fn main() {
         context,
         restart_signal: Arc::new(tokio::sync::Notify::new()),
         shutdown_signal: Arc::new(tokio::sync::Notify::new()),
+        restart_requested: Arc::new(AtomicBool::new(false)),
         shutdown_requested: Arc::new(AtomicBool::new(false)),
         version: Arc::new(RwLock::new(None)),
     });

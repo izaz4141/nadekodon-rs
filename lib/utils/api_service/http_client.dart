@@ -6,6 +6,16 @@ import 'package:http/http.dart' as http;
 import 'package:nadekodon/utils/logger.dart';
 import 'package:nadekodon/utils/settings.dart';
 
+/// Thrown when a streaming HTTP request returns a non-200 response.
+class HttpStreamException implements Exception {
+  final int statusCode;
+
+  const HttpStreamException(this.statusCode);
+
+  @override
+  String toString() => 'HTTP stream failed with status $statusCode';
+}
+
 /// Shared HTTP transport for the `api_service` implementation.
 ///
 /// Keeps the URL/status state that the HTTP implementation needs and that the
@@ -72,6 +82,87 @@ class HttpTransport {
       ),
       body: body != null ? jsonEncode(body) : null,
     );
+  }
+
+  /// Opens a long-lived POST request and yields response lines.
+  ///
+  /// Cancelling the returned stream aborts the in-flight request so the server
+  /// can drop its side of the stream immediately.
+  static Stream<String> postNdjson(
+    String path, {
+    dynamic body,
+    Map<String, String>? headers,
+  }) {
+    final abort = Completer<void>();
+    http.Client? client;
+    StreamSubscription<String>? lineSubscription;
+    var cancelled = false;
+    late final StreamController<String> controller;
+
+    Future<void> pump() async {
+      client = http.Client();
+      try {
+        final request = http.AbortableRequest(
+          'POST',
+          Uri.parse('$baseUrl$path'),
+          abortTrigger: abort.future,
+        );
+        request.headers.addAll(
+          _headers(
+            extra: headers,
+            contentType: body != null ? 'application/json' : null,
+          ),
+        );
+        if (body != null) request.body = jsonEncode(body);
+
+        final response = await client!.send(request);
+        if (response.statusCode != 200) {
+          throw HttpStreamException(response.statusCode);
+        }
+
+        final lines = response.stream
+            .transform(utf8.decoder)
+            .transform(const LineSplitter());
+
+        lineSubscription = lines.listen(
+          (line) {
+            final trimmed = line.trim();
+            if (!cancelled && trimmed.isNotEmpty) {
+              controller.add(trimmed);
+            }
+          },
+          onError: (Object error, StackTrace stackTrace) {
+            if (!cancelled) controller.addError(error, stackTrace);
+          },
+          onDone: () {
+            if (!cancelled) controller.close();
+          },
+          cancelOnError: false,
+        );
+      } catch (e, stackTrace) {
+        if (!cancelled && e is! http.RequestAbortedException) {
+          controller.addError(e, stackTrace);
+        }
+        if (!cancelled) await controller.close();
+      } finally {
+        client?.close();
+        client = null;
+      }
+    }
+
+    controller = StreamController<String>(
+      onListen: () => unawaited(pump()),
+      onCancel: () async {
+        cancelled = true;
+        if (!abort.isCompleted) abort.complete();
+        await lineSubscription?.cancel();
+        lineSubscription = null;
+        client?.close();
+        client = null;
+      },
+    );
+
+    return controller.stream;
   }
 
   static Future<void> init() {
