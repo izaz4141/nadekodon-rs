@@ -99,6 +99,11 @@ class HttpTransport {
     var cancelled = false;
     late final StreamController<String> controller;
 
+    void closeClient() {
+      client?.close();
+      client = null;
+    }
+
     Future<void> pump() async {
       client = http.Client();
       try {
@@ -135,18 +140,17 @@ class HttpTransport {
             if (!cancelled) controller.addError(error, stackTrace);
           },
           onDone: () {
+            closeClient();
             if (!cancelled) controller.close();
           },
           cancelOnError: false,
         );
       } catch (e, stackTrace) {
+        closeClient();
         if (!cancelled && e is! http.RequestAbortedException) {
           controller.addError(e, stackTrace);
         }
         if (!cancelled) await controller.close();
-      } finally {
-        client?.close();
-        client = null;
       }
     }
 
@@ -157,8 +161,7 @@ class HttpTransport {
         if (!abort.isCompleted) abort.complete();
         await lineSubscription?.cancel();
         lineSubscription = null;
-        client?.close();
-        client = null;
+        closeClient();
       },
     );
 
