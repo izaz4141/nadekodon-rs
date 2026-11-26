@@ -227,23 +227,52 @@ mixin DownloadHttpApi {
     required bool? ascending,
     required List<String> categories,
     required Duration interval,
-  }) async* {
-    while (true) {
-      final list = await getDownloadList(
-        id: id,
-        offsetIndex: offsetIndex,
-        before: before,
-        after: after,
-        statuses: statuses,
-        tag: tag,
-        searchQuery: searchQuery,
-        sortBy: sortBy,
-        ascending: ascending,
-        categories: categories,
-      );
-      if (list != null) yield list;
-      await Future.delayed(interval);
+  }) {
+    final cancelSignal = Completer<void>();
+    var cancelled = false;
+    late final StreamController<DownloadList> controller;
+
+    Future<void> cancellableDelay() {
+      final done = Completer<void>();
+      final timer = Timer(interval, () {
+        if (!done.isCompleted) done.complete();
+      });
+      cancelSignal.future.then((_) {
+        timer.cancel();
+        if (!done.isCompleted) done.complete();
+      });
+      return done.future;
     }
+
+    Future<void> poll() async {
+      while (!cancelled) {
+        final list = await getDownloadList(
+          id: id,
+          offsetIndex: offsetIndex,
+          before: before,
+          after: after,
+          statuses: statuses,
+          tag: tag,
+          searchQuery: searchQuery,
+          sortBy: sortBy,
+          ascending: ascending,
+          categories: categories,
+        );
+        if (cancelled) return;
+        if (list != null) controller.add(list);
+        await cancellableDelay();
+      }
+    }
+
+    controller = StreamController<DownloadList>(
+      onListen: () => unawaited(poll()),
+      onCancel: () {
+        cancelled = true;
+        if (!cancelSignal.isCompleted) cancelSignal.complete();
+      },
+    );
+
+    return controller.stream;
   }
 
   Duration _streamRetryDelay(int attempt) {
