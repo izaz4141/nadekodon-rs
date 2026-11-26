@@ -30,7 +30,7 @@ use axum::{
 };
 use rinf::{DartSignal, RustSignal};
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::{
     spawn,
@@ -265,7 +265,11 @@ async fn handle_add_download(
 }
 
 pub async fn start_server_listener(context: Arc<AppContext>, state_slot: ServerStateSlot) {
-    let mut current_server: Option<(tokio::task::JoinHandle<()>, Arc<tokio::sync::Notify>)> = None;
+    let mut current_server: Option<(
+        tokio::task::JoinHandle<()>,
+        Arc<tokio::sync::Notify>,
+        Arc<AppState>,
+    )> = None;
     let mut cleanup_handle: Option<tokio::task::JoinHandle<()>> = None;
     let receiver = StartServerRequest::get_dart_signal_receiver();
 
@@ -277,7 +281,8 @@ pub async fn start_server_listener(context: Arc<AppContext>, state_slot: ServerS
             handle.abort();
         }
 
-        if let Some((old_handle, old_notify)) = current_server.take() {
+        if let Some((old_handle, old_notify, old_state)) = current_server.take() {
+            old_state.restart_requested.store(true, Ordering::SeqCst);
             old_notify.notify_one();
             let _ = old_handle.await;
         }
@@ -379,14 +384,14 @@ pub async fn start_server_listener(context: Arc<AppContext>, state_slot: ServerS
             .merge(docs_router)
             .layer(GovernorLayer::new(governor_conf))
             .route("/api/nadeko/system/status", get(handle_status))
-            .with_state(state);
+            .with_state(state.clone());
 
         let rs_clone = restart_signal.clone();
         let ss_clone = shutdown_signal.clone();
         let new_handle = spawn(async move {
             run_server(router, msg.port, rs_clone, ss_clone).await;
         });
-        current_server = Some((new_handle, restart_signal));
+        current_server = Some((new_handle, restart_signal, state));
 
         StartServerResponse {
             id: msg.id,
