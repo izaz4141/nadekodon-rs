@@ -228,18 +228,28 @@ mixin DownloadHttpApi {
     required List<String> categories,
     required Duration interval,
   }) {
-    final cancelSignal = Completer<void>();
     var cancelled = false;
+    Timer? delayTimer;
+    Completer<void>? delayCompleter;
     late final StreamController<DownloadList> controller;
+
+    void cancelDelay() {
+      delayTimer?.cancel();
+      delayTimer = null;
+      final done = delayCompleter;
+      delayCompleter = null;
+      if (done != null && !done.isCompleted) done.complete();
+    }
 
     Future<void> cancellableDelay() {
       final done = Completer<void>();
-      final timer = Timer(interval, () {
+      delayCompleter = done;
+      delayTimer = Timer(interval, () {
         if (!done.isCompleted) done.complete();
-      });
-      cancelSignal.future.then((_) {
-        timer.cancel();
-        if (!done.isCompleted) done.complete();
+        if (identical(delayCompleter, done)) {
+          delayCompleter = null;
+          delayTimer = null;
+        }
       });
       return done.future;
     }
@@ -268,7 +278,7 @@ mixin DownloadHttpApi {
       onListen: () => unawaited(poll()),
       onCancel: () {
         cancelled = true;
-        if (!cancelSignal.isCompleted) cancelSignal.complete();
+        cancelDelay();
       },
     );
 
