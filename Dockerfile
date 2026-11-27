@@ -3,6 +3,8 @@ FROM dart:stable AS flutter-build
 
 WORKDIR /app
 
+COPY .fvmrc ./.fvmrc
+
 # Install FVM and allow it to run as root
 ENV FVM_ALLOW_ROOT=true
 RUN dart pub global activate fvm
@@ -25,7 +27,7 @@ COPY assets ./assets
 COPY analysis_options.yaml ./
 
 RUN cargo install rinf_cli --version 8.7.2 && rinf gen
-RUN flutter build web --wasm
+RUN fvm flutter build web --wasm
 
 # Stage 2: Build Rust server
 FROM rust:alpine AS rust-build

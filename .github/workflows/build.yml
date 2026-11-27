@@ -230,7 +230,7 @@ jobs:
         run: fvm flutter pub get
 
       - name: Generate launcher icons
-        run: dart run flutter_launcher_icons
+        run: fvm dart run flutter_launcher_icons
 
       - name: Configure Android Signing
         if: startsWith(matrix.target, 'android')
