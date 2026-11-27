@@ -85,20 +85,30 @@ mixin DownloadRinfApi {
 
     Future<void> poll() async {
       while (!cancelled) {
-        final list = await getDownloadList(
-          id: newSignalId(),
-          offsetIndex: offsetIndex,
-          before: before,
-          after: after,
-          statuses: statuses,
-          tag: tag,
-          searchQuery: searchQuery,
-          sortBy: sortBy,
-          ascending: ascending,
-          categories: categories,
-        );
-        if (cancelled) return;
-        if (list != null) controller.add(list.copyWith(id: streamId));
+        try {
+          final list = await getDownloadList(
+            id: newSignalId(),
+            offsetIndex: offsetIndex,
+            before: before,
+            after: after,
+            statuses: statuses,
+            tag: tag,
+            searchQuery: searchQuery,
+            sortBy: sortBy,
+            ascending: ascending,
+            categories: categories,
+          );
+          if (cancelled) return;
+          if (list != null) controller.add(list.copyWith(id: streamId));
+        } catch (error, stackTrace) {
+          if (cancelled) return;
+          cancelled = true;
+          if (!controller.isClosed) {
+            controller.addError(error, stackTrace);
+            await controller.close();
+          }
+          return;
+        }
         await cancellableDelay();
       }
     }
