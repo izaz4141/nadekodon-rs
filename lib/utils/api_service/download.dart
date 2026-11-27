@@ -126,7 +126,7 @@ mixin DownloadHttpApi {
     bool? ascending,
     List<String> categories = const [],
     Duration interval = const Duration(milliseconds: 500),
-  }) async* {
+  }) {
     final requestId = id ?? newSignalId();
     final payload = _downloadListPayload(
       id: requestId,
@@ -141,46 +141,38 @@ mixin DownloadHttpApi {
       categories: categories,
     );
 
-    var attempt = 0;
+    var cancelled = false;
+    Timer? retryTimer;
+    Completer<void>? retryCompleter;
+    Completer<void>? transportDone;
+    StreamSubscription<String>? transportSubscription;
+    StreamSubscription<DownloadList>? fallbackSubscription;
+    late final StreamController<DownloadList> controller;
 
-    while (true) {
-      var receivedFrame = false;
-      try {
-        final stream = HttpTransport.postNdjson(
-          '/api/nadeko/download/list/stream'
-          '?interval_ms=${interval.inMilliseconds.clamp(100, 10000)}',
-          body: payload,
-          headers: const {'Accept': 'application/x-ndjson'},
-        );
+    void cancelRetryDelay() {
+      retryTimer?.cancel();
+      retryTimer = null;
+      final done = retryCompleter;
+      retryCompleter = null;
+      if (done != null && !done.isCompleted) done.complete();
+    }
 
-        await for (final line in stream) {
-          final decoded = jsonDecode(line);
-          if (decoded is! Map<String, dynamic>) continue;
-
-          final frameId = decoded['id'];
-          if (frameId != null && frameId != requestId) continue;
-
-          final error = decoded['error'];
-          if (error != null) {
-            log("Download list stream error: $error", isError: true);
-            continue;
-          }
-
-          receivedFrame = true;
-          attempt = 0;
-          yield _downloadListFromJson(decoded, fallbackId: requestId);
+    Future<void> retryDelay(Duration duration) {
+      final done = Completer<void>();
+      retryCompleter = done;
+      retryTimer = Timer(duration, () {
+        if (!done.isCompleted) done.complete();
+        if (identical(retryCompleter, done)) {
+          retryCompleter = null;
+          retryTimer = null;
         }
+      });
+      return done.future;
+    }
 
-        // A normal close (for example the 10-minute server lifetime cap)
-        // reconnects immediately unless we never got a frame.
-        if (!receivedFrame) attempt++;
-      } on HttpStreamException catch (e) {
-        if (e.statusCode == 404 || e.statusCode == 405) {
-          log(
-            "Download list stream unsupported; falling back to polling",
-            isError: true,
-          );
-          yield* _pollDownloadList(
+    void forwardFallback() {
+      fallbackSubscription =
+          _pollDownloadList(
             id: requestId,
             offsetIndex: offsetIndex,
             before: before,
@@ -192,27 +184,141 @@ mixin DownloadHttpApi {
             ascending: ascending,
             categories: categories,
             interval: interval,
+          ).listen(
+            (list) {
+              if (!cancelled) controller.add(list);
+            },
+            onError: (Object error, StackTrace stackTrace) {
+              if (!cancelled) controller.addError(error, stackTrace);
+            },
+            onDone: () {
+              if (!cancelled) controller.close();
+            },
           );
-          return;
-        }
-
-        if (e.statusCode == 401 || e.statusCode == 403) {
-          log(
-            "Download list stream unauthorized (${e.statusCode})",
-            isError: true,
-          );
-          rethrow;
-        }
-
-        attempt++;
-      } catch (e) {
-        if (e is http.RequestAbortedException) return;
-        log("Download list stream disconnected: $e", isError: true);
-        attempt++;
-      }
-
-      await Future.delayed(_streamRetryDelay(attempt));
     }
+
+    Future<void> run() async {
+      var attempt = 0;
+
+      while (!cancelled) {
+        var receivedFrame = false;
+        try {
+          final stream = HttpTransport.postNdjson(
+            '/api/nadeko/download/list/stream'
+            '?interval_ms=${interval.inMilliseconds.clamp(100, 10000)}',
+            body: payload,
+            headers: const {'Accept': 'application/x-ndjson'},
+          );
+
+          final done = Completer<void>();
+          transportDone = done;
+          StreamSubscription<String>? subscription;
+          subscription = stream.listen(
+            (line) {
+              if (cancelled) return;
+              try {
+                final decoded = jsonDecode(line);
+                if (decoded is! Map<String, dynamic>) return;
+
+                final frameId = decoded['id'];
+                if (frameId != null && frameId != requestId) return;
+
+                final error = decoded['error'];
+                if (error != null) {
+                  log("Download list stream error: $error", isError: true);
+                  return;
+                }
+
+                receivedFrame = true;
+                attempt = 0;
+                controller.add(
+                  _downloadListFromJson(decoded, fallbackId: requestId),
+                );
+              } catch (e, stackTrace) {
+                if (!done.isCompleted) done.completeError(e, stackTrace);
+                unawaited(subscription?.cancel());
+              }
+            },
+            onError: (Object error, StackTrace stackTrace) {
+              if (!done.isCompleted) done.completeError(error, stackTrace);
+            },
+            onDone: () {
+              if (!done.isCompleted) done.complete();
+            },
+            cancelOnError: true,
+          );
+          transportSubscription = subscription;
+
+          try {
+            await done.future;
+          } finally {
+            if (identical(transportDone, done)) transportDone = null;
+            if (identical(transportSubscription, subscription)) {
+              transportSubscription = null;
+            }
+          }
+
+          if (cancelled) break;
+
+          // A normal close (for example the 10-minute server lifetime cap)
+          // reconnects immediately unless we never got a frame.
+          if (!receivedFrame) attempt++;
+        } on HttpStreamException catch (e, stackTrace) {
+          if (cancelled) break;
+
+          if (e.statusCode == 404 || e.statusCode == 405) {
+            log(
+              "Download list stream unsupported; falling back to polling",
+              isError: true,
+            );
+            forwardFallback();
+            return;
+          }
+
+          if (e.statusCode == 401 || e.statusCode == 403) {
+            log(
+              "Download list stream unauthorized (${e.statusCode})",
+              isError: true,
+            );
+            controller.addError(e, stackTrace);
+            await controller.close();
+            return;
+          }
+
+          attempt++;
+        } catch (e) {
+          if (cancelled) break;
+          if (e is http.RequestAbortedException) {
+            await controller.close();
+            return;
+          }
+          log("Download list stream disconnected: $e", isError: true);
+          attempt++;
+        }
+
+        if (cancelled) break;
+        await retryDelay(_streamRetryDelay(attempt));
+      }
+    }
+
+    controller = StreamController<DownloadList>(
+      onListen: () => unawaited(run()),
+      onCancel: () {
+        cancelled = true;
+        cancelRetryDelay();
+        final pending = transportDone;
+        transportDone = null;
+        if (pending != null && !pending.isCompleted) pending.complete();
+        final transport = transportSubscription;
+        transportSubscription = null;
+        if (transport != null) unawaited(transport.cancel());
+        final fallback = fallbackSubscription;
+        fallbackSubscription = null;
+        if (fallback != null) unawaited(fallback.cancel());
+      },
+    );
+
+    return controller.stream;
   }
 
   Stream<DownloadList> _pollDownloadList({
