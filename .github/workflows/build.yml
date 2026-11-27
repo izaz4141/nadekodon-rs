@@ -112,17 +112,17 @@ jobs:
           - name: Linux
             os: ubuntu-latest
             target: linux-x64
-            build_cmd: flutter build linux --release --target-platform linux-x64
+            build_cmd: fvm flutter build linux --release --target-platform linux-x64
             artifact_path: nadekodon-linux-x64.AppImage
           - name: Windows
             os: windows-latest
             target: windows
-            build_cmd: flutter build windows --release
+            build_cmd: fvm flutter build windows --release
             artifact_path: nadekodon-windows-x64.zip
           - name: Android
             os: ubuntu-latest
             target: android-arm64
-            build_cmd: flutter build apk --release --target-platform android-arm64
+            build_cmd: fvm flutter build apk --release --target-platform android-arm64
             artifact_path: nadekodon-android-arm64.apk
 
     steps:
@@ -189,14 +189,25 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install Flutter
-        uses: subosito/flutter-action@v2
+      - name: Setup Dart SDK
+        uses: dart-lang/setup-dart@v1
         with:
-          flutter-version: ${{ needs.setup.outputs.flutter_version }}
-          channel: stable
-          cache: true
-          cache-key: "flutter-:os:-:channel:-:version:-:arch:-:hash:"
-          cache-path: "${{ runner.tool_cache }}/flutter/:channel:-:version:-:arch:"
+          sdk: stable
+
+      - name: Cache FVM SDK
+        uses: actions/cache@v4
+        with:
+          path: ~/fvm
+          key: fvm-${{ runner.os }}-${{ hashFiles('.fvmrc') }}
+          restore-keys: fvm-${{ runner.os }}-
+
+      - name: Install Flutter
+        shell: bash
+        run: |
+          dart pub global activate fvm
+          echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
+          fvm install
+          fvm flutter --version
 
       - name: Generate rinf bindings
         shell: bash
@@ -216,7 +227,7 @@ jobs:
           cargo license --json > assets/licenses/cargo_licenses.json
 
       - name: Get Flutter packages
-        run: flutter pub get
+        run: fvm flutter pub get
 
       - name: Generate launcher icons
         run: dart run flutter_launcher_icons

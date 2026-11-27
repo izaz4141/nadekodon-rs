@@ -1,14 +1,22 @@
 # Stage 1: Build Flutter web
-FROM ghcr.io/cirruslabs/flutter:latest AS flutter-build
+FROM dart:stable AS flutter-build
 
 WORKDIR /app
+
+# Install FVM and allow it to run as root
+ENV FVM_ALLOW_ROOT=true
+RUN dart pub global activate fvm
+
+# Configure PATH to access FVM and the Flutter SDK it manages
+ENV PATH="/root/.pub-cache/bin:/root/fvm/default/bin:${PATH}"
+RUN fvm flutter install
 
 # Install Rust for rinf gen
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 COPY pubspec*.yaml ./
-RUN flutter pub get
+RUN fvm flutter pub get
 
 COPY lib ./lib
 COPY native ./native
