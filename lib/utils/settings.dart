@@ -58,15 +58,20 @@ class SettingsManager {
   static final requireLogin = ValueNotifier<bool>(kIsWeb);
   static final isLoggedIn = ValueNotifier<bool>(false);
 
-  /// Fires when the credentials or endpoint used for authenticated requests
-  /// change. Long-lived streams listen to this to reconnect with the new
-  /// authorization instead of retrying with rejected credentials.
-  static final Listenable authChanges = Listenable.merge([
+  static final _AuthChangeNotifier _authChanges = _AuthChangeNotifier([
     serverApiKey,
     isLoggedIn,
     serverHost,
     serverPort,
   ]);
+
+  /// Fires when the credentials or endpoint used for authenticated requests
+  /// change. Long-lived streams listen to this to reconnect with the new
+  /// authorization instead of retrying with rejected credentials.
+  ///
+  /// Account switches suspend this while host, port and API key are installed
+  /// so listeners never observe a half-updated endpoint/credential pair.
+  static Listenable get authChanges => _authChanges;
 
   static Future<void> _loadDefaults() async {
     try {
@@ -535,53 +540,91 @@ class SettingsManager {
   }
 
   static Future<void> switchAccount(Account account) async {
-    isLoggedIn.value = false;
-    detachAutoSave();
-    serverHost.value = account.host;
-    serverPort.value = account.port;
-    username.value = account.username;
+    _authChanges.suspend();
+    try {
+      isLoggedIn.value = false;
+      detachAutoSave();
+      serverHost.value = account.host;
+      serverPort.value = account.port;
+      username.value = account.username;
 
-    final masterKey = await getMasterKey();
-    if (masterKey != null && account.apiKey.startsWith('NDK:')) {
-      final decrypted = await decryptKey(account.apiKey, masterKey);
-      serverApiKey.value = decrypted ?? account.apiKey;
-    } else {
-      serverApiKey.value = account.apiKey;
+      var apiKey = account.apiKey;
+      try {
+        final masterKey = await getMasterKey();
+        if (masterKey != null && account.apiKey.startsWith('NDK:')) {
+          apiKey = await decryptKey(account.apiKey, masterKey) ?? apiKey;
+        }
+      } catch (e) {
+        log('Failed to decrypt account API key: $e', isError: true);
+      }
+      serverApiKey.value = apiKey;
+      encryptedServerApiKey.value = account.encryptedApiKey;
+
+      BridgeService.isOnline.value = false;
+      BridgeService.serverVersion.value = null;
+      SystemService().refreshVersions();
+      await loadFromBackend();
+      attachAutoSave();
+      BridgeService.restartPolling();
+    } finally {
+      _authChanges.resume();
     }
-    encryptedServerApiKey.value = account.encryptedApiKey;
-
-    BridgeService.isOnline.value = false;
-    BridgeService.serverVersion.value = null;
-    SystemService().refreshVersions();
-    await loadFromBackend();
-    attachAutoSave();
-    BridgeService.restartPolling();
   }
 
   static Future<void> switchToLocal() async {
     if (kIsWeb) return;
-    if (PlatformService().isRemote) {
-      isLoggedIn.value = false;
-    }
-    detachAutoSave();
-    final result = await BridgeService.readLocalConfig(configPath);
-    final data = result.settings;
-    if (data != null) {
-      serverHost.value =
-          data['server_host'] ?? (defaults['server_host'] ?? '127.0.0.1');
-      serverPort.value =
-          data['server_port'] ?? (defaults['server_port'] ?? 8080);
-      await _applyFromJson(data);
-    } else {
-      if (!result.success) {
-        log('Failed to read config.json: ${result.error}', isError: true);
+    _authChanges.suspend();
+    try {
+      if (PlatformService().isRemote) {
+        isLoggedIn.value = false;
       }
-      await applyDefaultSettings();
+      detachAutoSave();
+      final result = await BridgeService.readLocalConfig(configPath);
+      final data = result.settings;
+      if (data != null) {
+        serverHost.value =
+            data['server_host'] ?? (defaults['server_host'] ?? '127.0.0.1');
+        serverPort.value =
+            data['server_port'] ?? (defaults['server_port'] ?? 8080);
+        await _applyFromJson(data);
+      } else {
+        if (!result.success) {
+          log('Failed to read config.json: ${result.error}', isError: true);
+        }
+        await applyDefaultSettings();
+      }
+      BridgeService.isOnline.value = false;
+      BridgeService.serverVersion.value = null;
+      SystemService().refreshVersions();
+      attachAutoSave();
+      BridgeService.restartPolling();
+    } finally {
+      _authChanges.resume();
     }
-    BridgeService.isOnline.value = false;
-    BridgeService.serverVersion.value = null;
-    SystemService().refreshVersions();
-    attachAutoSave();
-    BridgeService.restartPolling();
+  }
+}
+
+class _AuthChangeNotifier extends ChangeNotifier {
+  _AuthChangeNotifier(List<Listenable> sources) {
+    for (final source in sources) {
+      source.addListener(_handleSourceChange);
+    }
+  }
+
+  int _suspendDepth = 0;
+
+  void _handleSourceChange() {
+    if (_suspendDepth > 0) return;
+    notifyListeners();
+  }
+
+  void suspend() {
+    _suspendDepth++;
+  }
+
+  void resume() {
+    if (_suspendDepth == 0) return;
+    _suspendDepth--;
+    if (_suspendDepth == 0) notifyListeners();
   }
 }

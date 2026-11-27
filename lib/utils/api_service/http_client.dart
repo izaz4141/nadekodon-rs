@@ -170,17 +170,13 @@ class HttpTransport {
 
   static Future<void> init() {
     _startPolling();
-    SettingsManager.serverHost.addListener(restartPolling);
-    SettingsManager.serverPort.addListener(restartPolling);
-    SettingsManager.serverApiKey.addListener(restartPolling);
+    SettingsManager.authChanges.addListener(restartPolling);
     return Future.value();
   }
 
   static void dispose() {
     _timer?.cancel();
-    SettingsManager.serverHost.removeListener(restartPolling);
-    SettingsManager.serverPort.removeListener(restartPolling);
-    SettingsManager.serverApiKey.removeListener(restartPolling);
+    SettingsManager.authChanges.removeListener(restartPolling);
   }
 
   static void _startPolling() {
