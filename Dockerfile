@@ -4,6 +4,16 @@ FROM dart:stable AS flutter-build
 WORKDIR /app
 
 COPY .fvmrc ./.fvmrc
+COPY pubspec*.yaml ./
+COPY lib ./lib
+COPY native ./native
+COPY web ./web
+COPY assets ./assets
+COPY analysis_options.yaml ./
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends build-essential && \
+    rm -rf /var/lib/apt/lists/*
 
 # Install FVM and allow it to run as root
 ENV FVM_ALLOW_ROOT=true
@@ -17,15 +27,8 @@ RUN fvm flutter install
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-COPY pubspec*.yaml ./
+
 RUN fvm flutter pub get
-
-COPY lib ./lib
-COPY native ./native
-COPY web ./web
-COPY assets ./assets
-COPY analysis_options.yaml ./
-
 RUN cargo install rinf_cli --version 8.7.2 && rinf gen
 RUN fvm flutter build web --wasm
 
