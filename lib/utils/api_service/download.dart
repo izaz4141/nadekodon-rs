@@ -1,11 +1,72 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:http/http.dart' as http;
 import 'package:nadekodon/utils/logger.dart';
 import 'package:nadekodon/utils/rinf_service/rinf_service.dart';
 
 import 'http_client.dart';
 
 mixin DownloadHttpApi {
+  Map<String, dynamic> _downloadListPayload({
+    required String id,
+    required int offsetIndex,
+    required int before,
+    required int after,
+    required List<String> statuses,
+    required int? tag,
+    required String? searchQuery,
+    required int? sortBy,
+    required bool? ascending,
+    required List<String> categories,
+  }) {
+    return {
+      'id': id,
+      'offset_index': offsetIndex,
+      'before': before,
+      'after': after,
+      'statuses': statuses,
+      'tag': ?tag,
+      'search_query': ?searchQuery,
+      'sort_by': ?sortBy,
+      'ascending': ?ascending,
+      'categories': categories,
+    };
+  }
+
+  DownloadList _downloadListFromJson(
+    Map<String, dynamic> data, {
+    required String fallbackId,
+  }) {
+    final rawList = data['list'] as List? ?? const [];
+    final list = rawList.map((item) {
+      final i = item as Map<String, dynamic>;
+      return DownloadGlance(
+        id: i['id'],
+        downloadType: i['download_type'],
+        name: i['name'],
+        dest: i['dest'],
+        totalSize: i['total_size'] != null
+            ? Uint64.fromBigInt(BigInt.from(i['total_size']))
+            : null,
+        downloaded: Uint64.fromBigInt(BigInt.from(i['downloaded'])),
+        uploaded: Uint64.fromBigInt(BigInt.from(i['uploaded'])),
+        dspeed: (i['dspeed'] as num).toDouble(),
+        uspeed: (i['uspeed'] as num?)?.toDouble(),
+        state: i['state'],
+        referer: i['referer'],
+      );
+    }).toList();
+
+    return DownloadList(
+      id: data['id'] as String? ?? fallbackId,
+      list: list,
+      totalCount: Uint64.fromBigInt(BigInt.from(data['total_count'] ?? 0)),
+      startIndex: Uint64.fromBigInt(BigInt.from(data['start_index'] ?? 0)),
+      tag: data['tag'] as int?,
+    );
+  }
+
   Future<DownloadList?> getDownloadList({
     String? id,
     int offsetIndex = 0,
@@ -20,18 +81,18 @@ mixin DownloadHttpApi {
   }) async {
     try {
       final requestId = id ?? newSignalId();
-      final payload = {
-        'id': requestId,
-        'offset_index': offsetIndex,
-        'before': before,
-        'after': after,
-        'statuses': statuses,
-        'tag': ?tag,
-        'search_query': ?searchQuery,
-        'sort_by': ?sortBy,
-        'ascending': ?ascending,
-        'categories': categories,
-      };
+      final payload = _downloadListPayload(
+        id: requestId,
+        offsetIndex: offsetIndex,
+        before: before,
+        after: after,
+        statuses: statuses,
+        tag: tag,
+        searchQuery: searchQuery,
+        sortBy: sortBy,
+        ascending: ascending,
+        categories: categories,
+      );
 
       final response = await HttpTransport.post(
         '/api/nadeko/download/list',
@@ -39,38 +100,316 @@ mixin DownloadHttpApi {
       );
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-
-        return DownloadList(
-          id: data['id'] ?? requestId,
-          list: (data['list'] as List)
-              .map(
-                (i) => DownloadGlance(
-                  id: i['id'],
-                  downloadType: i['download_type'],
-                  name: i['name'],
-                  dest: i['dest'],
-                  totalSize: i['total_size'] != null
-                      ? Uint64.fromBigInt(BigInt.from(i['total_size']))
-                      : null,
-                  downloaded: Uint64.fromBigInt(BigInt.from(i['downloaded'])),
-                  uploaded: Uint64.fromBigInt(BigInt.from(i['uploaded'])),
-                  dspeed: i['dspeed'].toDouble(),
-                  uspeed: i['uspeed']?.toDouble(),
-                  state: i['state'],
-                  referer: i['referer'],
-                ),
-              )
-              .toList(),
-          totalCount: Uint64.fromBigInt(BigInt.from(data['total_count'])),
-          startIndex: Uint64.fromBigInt(BigInt.from(data['start_index'])),
-          tag: data['tag'],
-        );
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return _downloadListFromJson(data, fallbackId: requestId);
       }
     } catch (e) {
       log("Error fetching list: $e", isError: true);
     }
     return null;
+  }
+
+  /// Long-lived download list subscription.
+  ///
+  /// The server pushes the requested window as NDJSON frames instead of the
+  /// client polling. Falls back to periodic one-shot requests against servers
+  /// that do not expose the streaming endpoint yet.
+  Stream<DownloadList> streamDownloadList({
+    String? id,
+    int offsetIndex = 0,
+    int before = 0,
+    int after = 0,
+    List<String> statuses = const [],
+    int? tag,
+    String? searchQuery,
+    int? sortBy,
+    bool? ascending,
+    List<String> categories = const [],
+    Duration interval = const Duration(milliseconds: 500),
+  }) {
+    final requestId = id ?? newSignalId();
+    final payload = _downloadListPayload(
+      id: requestId,
+      offsetIndex: offsetIndex,
+      before: before,
+      after: after,
+      statuses: statuses,
+      tag: tag,
+      searchQuery: searchQuery,
+      sortBy: sortBy,
+      ascending: ascending,
+      categories: categories,
+    );
+
+    var cancelled = false;
+    Timer? retryTimer;
+    Completer<void>? retryCompleter;
+    Completer<void>? transportDone;
+    StreamSubscription<String>? transportSubscription;
+    StreamSubscription<DownloadList>? fallbackSubscription;
+    late final StreamController<DownloadList> controller;
+
+    void cancelRetryDelay() {
+      retryTimer?.cancel();
+      retryTimer = null;
+      final done = retryCompleter;
+      retryCompleter = null;
+      if (done != null && !done.isCompleted) done.complete();
+    }
+
+    Future<void> retryDelay(Duration duration) {
+      final done = Completer<void>();
+      retryCompleter = done;
+      retryTimer = Timer(duration, () {
+        if (!done.isCompleted) done.complete();
+        if (identical(retryCompleter, done)) {
+          retryCompleter = null;
+          retryTimer = null;
+        }
+      });
+      return done.future;
+    }
+
+    void forwardFallback() {
+      fallbackSubscription =
+          _pollDownloadList(
+            id: requestId,
+            offsetIndex: offsetIndex,
+            before: before,
+            after: after,
+            statuses: statuses,
+            tag: tag,
+            searchQuery: searchQuery,
+            sortBy: sortBy,
+            ascending: ascending,
+            categories: categories,
+            interval: interval,
+          ).listen(
+            (list) {
+              if (!cancelled) controller.add(list);
+            },
+            onError: (Object error, StackTrace stackTrace) {
+              if (!cancelled) controller.addError(error, stackTrace);
+            },
+            onDone: () {
+              if (!cancelled) controller.close();
+            },
+          );
+    }
+
+    Future<void> run() async {
+      var attempt = 0;
+
+      while (!cancelled) {
+        var receivedFrame = false;
+        try {
+          final stream = HttpTransport.postNdjson(
+            '/api/nadeko/download/list/stream'
+            '?interval_ms=${interval.inMilliseconds.clamp(100, 10000)}',
+            body: payload,
+            headers: const {'Accept': 'application/x-ndjson'},
+          );
+
+          final done = Completer<void>();
+          transportDone = done;
+          StreamSubscription<String>? subscription;
+          subscription = stream.listen(
+            (line) {
+              if (cancelled) return;
+              try {
+                final decoded = jsonDecode(line);
+                if (decoded is! Map<String, dynamic>) return;
+
+                final frameId = decoded['id'];
+                if (frameId != null && frameId != requestId) return;
+
+                final error = decoded['error'];
+                if (error != null) {
+                  log("Download list stream error: $error", isError: true);
+                  return;
+                }
+
+                receivedFrame = true;
+                attempt = 0;
+                controller.add(
+                  _downloadListFromJson(decoded, fallbackId: requestId),
+                );
+              } catch (e, stackTrace) {
+                if (!done.isCompleted) done.completeError(e, stackTrace);
+                unawaited(subscription?.cancel());
+              }
+            },
+            onError: (Object error, StackTrace stackTrace) {
+              if (!done.isCompleted) done.completeError(error, stackTrace);
+            },
+            onDone: () {
+              if (!done.isCompleted) done.complete();
+            },
+            cancelOnError: true,
+          );
+          transportSubscription = subscription;
+
+          try {
+            await done.future;
+          } finally {
+            if (identical(transportDone, done)) transportDone = null;
+            if (identical(transportSubscription, subscription)) {
+              transportSubscription = null;
+            }
+          }
+
+          if (cancelled) break;
+
+          // A normal close (for example the 10-minute server lifetime cap)
+          // reconnects immediately unless we never got a frame.
+          if (!receivedFrame) attempt++;
+        } on HttpStreamException catch (e, stackTrace) {
+          if (cancelled) break;
+
+          if (e.statusCode == 404 || e.statusCode == 405) {
+            log(
+              "Download list stream unsupported; falling back to polling",
+              isError: true,
+            );
+            forwardFallback();
+            return;
+          }
+
+          if (e.statusCode == 401 || e.statusCode == 403) {
+            log(
+              "Download list stream unauthorized (${e.statusCode})",
+              isError: true,
+            );
+            controller.addError(e, stackTrace);
+            await controller.close();
+            return;
+          }
+
+          // Permanent client errors (for example a negative offset) cannot be
+          // fixed by retrying, so surface them instead of looping forever.
+          if (e.statusCode >= 400 &&
+              e.statusCode < 500 &&
+              e.statusCode != 408 &&
+              e.statusCode != 429) {
+            log(
+              "Download list stream rejected (${e.statusCode})",
+              isError: true,
+            );
+            controller.addError(e, stackTrace);
+            await controller.close();
+            return;
+          }
+
+          attempt++;
+        } catch (e) {
+          if (cancelled) break;
+          if (e is http.RequestAbortedException) {
+            await controller.close();
+            return;
+          }
+          log("Download list stream disconnected: $e", isError: true);
+          attempt++;
+        }
+
+        if (cancelled) break;
+        await retryDelay(_streamRetryDelay(attempt));
+      }
+    }
+
+    controller = StreamController<DownloadList>(
+      onListen: () => unawaited(run()),
+      onCancel: () {
+        cancelled = true;
+        cancelRetryDelay();
+        final pending = transportDone;
+        transportDone = null;
+        if (pending != null && !pending.isCompleted) pending.complete();
+        final transport = transportSubscription;
+        transportSubscription = null;
+        if (transport != null) unawaited(transport.cancel());
+        final fallback = fallbackSubscription;
+        fallbackSubscription = null;
+        if (fallback != null) unawaited(fallback.cancel());
+      },
+    );
+
+    return controller.stream;
+  }
+
+  Stream<DownloadList> _pollDownloadList({
+    required String id,
+    required int offsetIndex,
+    required int before,
+    required int after,
+    required List<String> statuses,
+    required int? tag,
+    required String? searchQuery,
+    required int? sortBy,
+    required bool? ascending,
+    required List<String> categories,
+    required Duration interval,
+  }) {
+    var cancelled = false;
+    Timer? delayTimer;
+    Completer<void>? delayCompleter;
+    late final StreamController<DownloadList> controller;
+
+    void cancelDelay() {
+      delayTimer?.cancel();
+      delayTimer = null;
+      final done = delayCompleter;
+      delayCompleter = null;
+      if (done != null && !done.isCompleted) done.complete();
+    }
+
+    Future<void> cancellableDelay() {
+      final done = Completer<void>();
+      delayCompleter = done;
+      delayTimer = Timer(interval, () {
+        if (!done.isCompleted) done.complete();
+        if (identical(delayCompleter, done)) {
+          delayCompleter = null;
+          delayTimer = null;
+        }
+      });
+      return done.future;
+    }
+
+    Future<void> poll() async {
+      while (!cancelled) {
+        final list = await getDownloadList(
+          id: id,
+          offsetIndex: offsetIndex,
+          before: before,
+          after: after,
+          statuses: statuses,
+          tag: tag,
+          searchQuery: searchQuery,
+          sortBy: sortBy,
+          ascending: ascending,
+          categories: categories,
+        );
+        if (cancelled) return;
+        if (list != null) controller.add(list);
+        await cancellableDelay();
+      }
+    }
+
+    controller = StreamController<DownloadList>(
+      onListen: () => unawaited(poll()),
+      onCancel: () {
+        cancelled = true;
+        cancelDelay();
+      },
+    );
+
+    return controller.stream;
+  }
+
+  Duration _streamRetryDelay(int attempt) {
+    final exponent = attempt.clamp(0, 6);
+    final milliseconds = (500 * (1 << exponent)).clamp(500, 30000);
+    return Duration(milliseconds: milliseconds);
   }
 
   String getDownloadUrl(String id) {

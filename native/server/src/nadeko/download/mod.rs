@@ -31,6 +31,7 @@ use axum::{
 pub fn create_download_router(state: SharedState) -> Router<SharedState> {
     Router::new()
         .route("/list", post(handle_get_download_list))
+        .route("/list/stream", post(handle_get_download_list_stream))
         .route("/details/{id}", get(handle_get_download_details))
         .route("/create", post(handle_create_download))
         .route("/pause", post(handle_pause_download))

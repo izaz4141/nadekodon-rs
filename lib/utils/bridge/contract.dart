@@ -76,6 +76,19 @@ abstract class ApiServiceContract {
     bool? ascending,
     List<String> categories,
   });
+  Stream<DownloadList> streamDownloadList({
+    String? id,
+    int offsetIndex,
+    int before,
+    int after,
+    List<String> statuses,
+    int? tag,
+    String? searchQuery,
+    int? sortBy,
+    bool? ascending,
+    List<String> categories,
+    Duration interval,
+  });
   Future<DownloadDetails?> getDownloadDetails(String id);
   String getDownloadUrl(String id);
   Future<List<String>?> addDownload({

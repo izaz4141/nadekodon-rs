@@ -7,6 +7,7 @@ import 'package:nadekodon/ui/widgets/dialog/delete_download.dart';
 import 'package:nadekodon/ui/theme/app_theme.dart';
 import 'package:nadekodon/utils/helper.dart';
 import 'package:nadekodon/utils/bridge_service.dart';
+import 'package:nadekodon/utils/settings.dart';
 import 'package:nadekodon/ui/widgets/dialog/add_download.dart';
 import 'package:nadekodon/ui/widgets/dialog/download_context_menu.dart';
 
@@ -39,13 +40,22 @@ class _DownloadListState {
   final ScrollController scrollController = ScrollController();
   final Set<String> selectedIds = {};
 
+  StreamSubscription<DownloadList>? streamSubscription;
+  String? streamId;
+  int? loadedStart;
+  int? loadedEnd;
+  int? requestedStart;
+  int? requestedEnd;
+  bool connecting = false;
+  bool authBlocked = false;
+
   bool get isSelectionMode => selectedIds.isNotEmpty;
 }
 
 class _DownloadPageState extends State<DownloadPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  Timer? _pollTimer;
+  Timer? _rangeDebounce;
 
   final _activeState = _DownloadListState();
   final _completedState = _DownloadListState();
@@ -62,18 +72,23 @@ class _DownloadPageState extends State<DownloadPage>
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
 
-    // Start polling
-    _pollTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
-      _pollDownloads();
-    });
+    _activeState.scrollController.addListener(_onActiveScroll);
+    _completedState.scrollController.addListener(_onCompletedScroll);
 
-    // Initial poll
-    Future.delayed(Duration.zero, _pollDownloads);
+    SettingsManager.authChanges.addListener(_onAuthChanged);
+
+    // Start the long-lived list streams once the first frame is laid out.
+    Future.delayed(Duration.zero, _startAllStreams);
   }
 
   @override
   void dispose() {
-    _pollTimer?.cancel();
+    _rangeDebounce?.cancel();
+    SettingsManager.authChanges.removeListener(_onAuthChanged);
+    _activeState.streamSubscription?.cancel();
+    _completedState.streamSubscription?.cancel();
+    _activeState.scrollController.removeListener(_onActiveScroll);
+    _completedState.scrollController.removeListener(_onCompletedScroll);
     _tabController.dispose();
     _activeState.scrollController.dispose();
     _completedState.scrollController.dispose();
@@ -89,9 +104,13 @@ class _DownloadPageState extends State<DownloadPage>
     if (!mounted) return;
 
     final state = tag == 0 ? _activeState : _completedState;
+    if (state.streamId != null && message.id != state.streamId) return;
 
     final startIndex = message.startIndex.toInt();
     final totalCount = message.totalCount.toInt();
+    state.loadedStart = startIndex;
+    state.loadedEnd = startIndex + message.list.length;
+    state.connecting = false;
     final newItems = message.list.map((d) {
       final status = parseDownloadStatus(d.state);
       return DownloadItem(
@@ -128,21 +147,52 @@ class _DownloadPageState extends State<DownloadPage>
         }
       }
     });
+
+    // The viewport may have moved before this first frame arrived (for
+    // example while a filter reset was connecting). Re-check coverage.
+    if (!_rangeCoversVisibleRange(state) &&
+        !(_rangeDebounce?.isActive ?? false)) {
+      _scheduleRangeCheck();
+    }
   }
 
-  void _pollDownloads() {
+  void _onActiveScroll() => _scheduleRangeCheck();
+  void _onCompletedScroll() => _scheduleRangeCheck();
+
+  void _scheduleRangeCheck() {
+    _rangeDebounce?.cancel();
+    _rangeDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      _ensureStreamsCoverVisibleRange();
+    });
+  }
+
+  void _ensureStreamsCoverVisibleRange() {
+    if (!_activeState.authBlocked && !_rangeCoversVisibleRange(_activeState)) {
+      _startListStream(_activeState, DownloadPage.activeStatuses, 0);
+    }
+    if (!_completedState.authBlocked &&
+        !_rangeCoversVisibleRange(_completedState)) {
+      _startListStream(_completedState, DownloadPage.completedStatuses, 1);
+    }
+  }
+
+  void _onAuthChanged() {
     if (!mounted) return;
-
-    _pollForState(_activeState, DownloadPage.activeStatuses, 0);
-    _pollForState(_completedState, DownloadPage.completedStatuses, 1);
+    _activeState.authBlocked = false;
+    _completedState.authBlocked = false;
+    _startAllStreams();
   }
 
-  void _pollForState(
+  void _startAllStreams() {
+    if (!mounted) return;
+    _startListStream(_activeState, DownloadPage.activeStatuses, 0);
+    _startListStream(_completedState, DownloadPage.completedStatuses, 1);
+  }
+
+  ({int offsetIndex, int before, int after}) _visibleWindow(
     _DownloadListState state,
-    Set<DownloadStatus> statuses,
-    int tag,
   ) {
-    // Determine visible range
     const itemHeight = 80.0;
     final double offset = state.scrollController.hasClients
         ? state.scrollController.offset
@@ -151,15 +201,102 @@ class _DownloadPageState extends State<DownloadPage>
         ? state.scrollController.position.viewportDimension
         : MediaQuery.of(context).size.height;
 
-    final int firstVisibleIndex = (offset / itemHeight).floor().clamp(
+    final int offsetIndex = (offset / itemHeight).floor().clamp(
+      0,
+      state.totalCount,
+    );
+    final int after = (viewportHeight / itemHeight).ceil() + 5;
+    const int before = 5;
+    return (offsetIndex: offsetIndex, before: before, after: after);
+  }
+
+  bool _rangeCoversVisibleRange(_DownloadListState state) {
+    final window = _visibleWindow(state);
+    final desiredStart = (window.offsetIndex - window.before).clamp(
+      0,
+      state.totalCount,
+    );
+    final desiredEnd = (window.offsetIndex + window.after + 1).clamp(
       0,
       state.totalCount,
     );
 
-    final int afterCount = (viewportHeight / itemHeight).ceil() + 5;
-    const int beforeCount = 5;
+    if (state.connecting) {
+      final requestedStart = state.requestedStart;
+      final requestedEnd = state.requestedEnd;
+      if (requestedStart == null || requestedEnd == null) return false;
+      return desiredStart >= requestedStart && desiredEnd <= requestedEnd;
+    }
 
-    final statusStrings = statuses.map((s) {
+    final loadedStart = state.loadedStart;
+    final loadedEnd = state.loadedEnd;
+    if (loadedStart == null || loadedEnd == null) return false;
+
+    return desiredStart >= loadedStart && desiredEnd <= loadedEnd;
+  }
+
+  void _startListStream(
+    _DownloadListState state,
+    Set<DownloadStatus> statuses,
+    int tag,
+  ) {
+    if (!mounted) return;
+    // Authorization failures wait for an auth change before reconnecting.
+    if (state.authBlocked) return;
+
+    state.streamSubscription?.cancel();
+    state.streamSubscription = null;
+    state.loadedStart = null;
+    state.loadedEnd = null;
+    state.connecting = true;
+
+    final window = _visibleWindow(state);
+    state.requestedStart = (window.offsetIndex - window.before).clamp(
+      0,
+      state.totalCount,
+    );
+    state.requestedEnd = (window.offsetIndex + window.after + 1).clamp(
+      0,
+      state.totalCount,
+    );
+    final streamId =
+        '${DateTime.now().microsecondsSinceEpoch}-$tag-$_sortBy-$_ascending';
+    state.streamId = streamId;
+
+    state.streamSubscription =
+        BridgeService.streamDownloadList(
+          id: streamId,
+          offsetIndex: window.offsetIndex,
+          before: window.before,
+          after: window.after,
+          statuses: _statusStrings(statuses),
+          tag: tag,
+          searchQuery: _searchQuery.isNotEmpty ? _searchQuery : null,
+          sortBy: _sortBy,
+          ascending: _ascending,
+          categories: const [],
+          interval: const Duration(milliseconds: 500),
+        ).listen(
+          _onDownloadListReceived,
+          onError: (Object error, StackTrace stackTrace) {
+            if (!mounted) return;
+            // Only authorization failures terminate the stream; block
+            // reconnects until the credentials change.
+            state.connecting = false;
+            state.streamSubscription = null;
+            state.authBlocked = true;
+            debugPrint('Download list stream error: $error');
+          },
+          onDone: () {
+            if (!mounted) return;
+            state.streamSubscription = null;
+            state.connecting = false;
+          },
+        );
+  }
+
+  List<String> _statusStrings(Set<DownloadStatus> statuses) {
+    return statuses.map((s) {
       switch (s) {
         case DownloadStatus.queued:
           return "Queued";
@@ -181,20 +318,6 @@ class _DownloadPageState extends State<DownloadPage>
           return "Error";
       }
     }).toList();
-
-    BridgeService.getDownloadList(
-      id: null,
-      offsetIndex: firstVisibleIndex,
-      before: beforeCount,
-      after: afterCount,
-      statuses: statusStrings,
-      tag: tag,
-      searchQuery: _searchQuery.isNotEmpty ? _searchQuery : null,
-      sortBy: _sortBy,
-      ascending: _ascending,
-    ).then((list) {
-      if (list != null) _onDownloadListReceived(list);
-    });
   }
 
   void _toggleSelection(_DownloadListState state, String id) {
@@ -277,11 +400,21 @@ class _DownloadPageState extends State<DownloadPage>
       _activeState.items = [];
       _activeState.totalCount = 0;
       _activeState.isLoading = true;
+      _activeState.loadedStart = null;
+      _activeState.loadedEnd = null;
+      _activeState.requestedStart = null;
+      _activeState.requestedEnd = null;
+      _activeState.connecting = false;
       _completedState.items = [];
       _completedState.totalCount = 0;
       _completedState.isLoading = true;
+      _completedState.loadedStart = null;
+      _completedState.loadedEnd = null;
+      _completedState.requestedStart = null;
+      _completedState.requestedEnd = null;
+      _completedState.connecting = false;
     });
-    _pollDownloads();
+    _startAllStreams();
   }
 
   @override

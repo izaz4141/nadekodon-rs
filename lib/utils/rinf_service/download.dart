@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:nadekodon/src/bindings/bindings.dart';
 
 import 'signal_helper.dart';
@@ -33,6 +35,93 @@ mixin DownloadRinfApi {
         categories: categories,
       ).sendSignalToRust(),
     );
+  }
+
+  /// Native subscriptions keep using the rinf request/response signal pair.
+  ///
+  /// There is no HTTP rate limit on this path, so a periodic request is enough
+  /// to expose the same streaming API to the UI. Each poll uses a fresh request
+  /// ID so a late reply from a timed-out poll cannot be mistaken for the
+  /// current one; the caller-supplied [id] remains the stable stream identity.
+  Stream<DownloadList> streamDownloadList({
+    String? id,
+    int offsetIndex = 0,
+    int before = 0,
+    int after = 0,
+    List<String> statuses = const [],
+    int? tag,
+    String? searchQuery,
+    int? sortBy,
+    bool? ascending,
+    List<String> categories = const [],
+    Duration interval = const Duration(milliseconds: 500),
+  }) {
+    final streamId = id ?? newSignalId();
+    var cancelled = false;
+    Timer? delayTimer;
+    Completer<void>? delayCompleter;
+    late final StreamController<DownloadList> controller;
+
+    void cancelDelay() {
+      delayTimer?.cancel();
+      delayTimer = null;
+      final done = delayCompleter;
+      delayCompleter = null;
+      if (done != null && !done.isCompleted) done.complete();
+    }
+
+    Future<void> cancellableDelay() {
+      final done = Completer<void>();
+      delayCompleter = done;
+      delayTimer = Timer(interval, () {
+        if (!done.isCompleted) done.complete();
+        if (identical(delayCompleter, done)) {
+          delayCompleter = null;
+          delayTimer = null;
+        }
+      });
+      return done.future;
+    }
+
+    Future<void> poll() async {
+      while (!cancelled) {
+        try {
+          final list = await getDownloadList(
+            id: newSignalId(),
+            offsetIndex: offsetIndex,
+            before: before,
+            after: after,
+            statuses: statuses,
+            tag: tag,
+            searchQuery: searchQuery,
+            sortBy: sortBy,
+            ascending: ascending,
+            categories: categories,
+          );
+          if (cancelled) return;
+          if (list != null) controller.add(list.copyWith(id: streamId));
+        } catch (error, stackTrace) {
+          if (cancelled) return;
+          cancelled = true;
+          if (!controller.isClosed) {
+            controller.addError(error, stackTrace);
+            await controller.close();
+          }
+          return;
+        }
+        await cancellableDelay();
+      }
+    }
+
+    controller = StreamController<DownloadList>(
+      onListen: () => unawaited(poll()),
+      onCancel: () {
+        cancelled = true;
+        cancelDelay();
+      },
+    );
+
+    return controller.stream;
   }
 
   Future<DownloadDetails?> getDownloadDetails(String id) async {

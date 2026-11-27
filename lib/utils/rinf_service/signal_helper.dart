@@ -33,7 +33,12 @@ Future<T?> awaitRustPush<T>(
   ) {
     if (!completer.isCompleted) completer.complete(pack);
   }, onError: completer.completeError);
-  send?.call();
+  try {
+    send?.call();
+  } catch (_) {
+    await sub.cancel();
+    rethrow;
+  }
   try {
     final pack = await completer.future.timeout(timeout);
     return pack.message;
