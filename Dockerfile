@@ -21,7 +21,7 @@ RUN dart pub global activate fvm
 
 # Configure PATH to access FVM and the Flutter SDK it manages
 ENV PATH="/root/.pub-cache/bin:/root/fvm/default/bin:${PATH}"
-RUN fvm flutter install
+RUN fvm install
 
 # Install Rust for rinf gen
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
