@@ -285,6 +285,21 @@ mixin DownloadHttpApi {
             return;
           }
 
+          // Permanent client errors (for example a negative offset) cannot be
+          // fixed by retrying, so surface them instead of looping forever.
+          if (e.statusCode >= 400 &&
+              e.statusCode < 500 &&
+              e.statusCode != 408 &&
+              e.statusCode != 429) {
+            log(
+              "Download list stream rejected (${e.statusCode})",
+              isError: true,
+            );
+            controller.addError(e, stackTrace);
+            await controller.close();
+            return;
+          }
+
           attempt++;
         } catch (e) {
           if (cancelled) break;
