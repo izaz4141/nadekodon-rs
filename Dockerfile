@@ -33,6 +33,7 @@ COPY web ./web
 COPY assets ./assets
 COPY analysis_options.yaml ./
 RUN fvm flutter build web --wasm
+COPY pubspec.yaml ./assets/docs/pubspec.yaml
 
 # Stage 2: Build Rust server
 FROM rust:alpine AS rust-build
