@@ -112,17 +112,17 @@ jobs:
           - name: Linux
             os: ubuntu-latest
             target: linux-x64
-            build_cmd: dart pub global run fvm flutter build linux --release --target-platform linux-x64
+            build_cmd: dart pub global run fvm:main flutter build linux --release --target-platform linux-x64
             artifact_path: nadekodon-linux-x64.AppImage
           - name: Windows
             os: windows-latest
             target: windows
-            build_cmd: dart pub global run fvm flutter build windows --release
+            build_cmd: dart pub global run fvm:main flutter build windows --release
             artifact_path: nadekodon-windows-x64.zip
           - name: Android
             os: ubuntu-latest
             target: android-arm64
-            build_cmd: dart pub global run fvm flutter build apk --release --target-platform android-arm64
+            build_cmd: dart pub global run fvm:main flutter build apk --release --target-platform android-arm64
             artifact_path: nadekodon-android-arm64.apk
 
     steps:
@@ -205,8 +205,8 @@ jobs:
         shell: bash
         run: |
           dart pub global activate fvm
-          dart pub global run fvm install
-          dart pub global run fvm flutter --version
+          dart pub global run fvm:main install
+          dart pub global run fvm:main flutter --version
 
       - name: Generate rinf bindings
         shell: bash
@@ -226,10 +226,10 @@ jobs:
           cargo license --json > assets/licenses/cargo_licenses.json
 
       - name: Get Flutter packages
-        run: dart pub global run fvm flutter pub get
+        run: dart pub global run fvm:main flutter pub get
 
       - name: Generate launcher icons
-        run: dart pub global run fvm dart run flutter_launcher_icons
+        run: dart pub global run fvm:main dart run flutter_launcher_icons
 
       - name: Configure Android Signing
         if: startsWith(matrix.target, 'android')
